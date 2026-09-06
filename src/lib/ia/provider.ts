@@ -46,6 +46,19 @@ type Intento = { ok: true; res: IaResultado } | { ok: false; error: string }
 // no es una opción: más vale respuesta del respaldo que la buena que no llega.
 const TIMEOUT_MS = PRUEBA_LENTA_MS
 
+// Sala para pensar. En el dialecto OpenAI, `max_tokens` es el techo de TODO lo que
+// el modelo genera, y un modelo de razonamiento gasta ahí dentro antes de escribir
+// una sola palabra visible: con el tope justo se le acaba pensando y la respuesta
+// sale cortada a media frase (`finish_reason: length`). Le pasó a la IA interna
+// entera —Gemini quemaba ~1.100 tokens pensando contra un tope de 800 y devolvía
+// medio JSON, que al no poder leerse se contaba como «la IA no ha contestado»—.
+//
+// `maxTokens` de quien llama sigue significando lo de siempre, CUÁNTO TEXTO QUIERO
+// DE VUELTA; el margen para pensar se añade aquí y no en cada consumidor, que ni
+// sabe ni tiene por qué saber si el modelo del día razona. No cuesta dinero: es un
+// techo, no un encargo — solo se paga lo que de verdad se gasta.
+const RESERVA_RAZONAMIENTO = 3000
+
 // Un intento contra UN modelo concreto (con su base/key). Reintenta una vez ante
 // 5xx o error de red; los 4xx se cortan al instante. Una respuesta vacía cuenta
 // como fallo (los modelos de razonamiento a veces devuelven `content` vacío).
@@ -54,15 +67,22 @@ async function intentarModelo(cfg: ModeloResuelto & { apiKey: string }, opts: Ch
     model: cfg.model,
     messages: opts.mensajes,
     temperature: opts.temperature ?? 0.3,
-    // Holgado por defecto: los modelos de razonamiento consumen tokens antes de
-    // emitir la respuesta visible; con poco margen `content` sale vacío.
-    max_tokens: opts.maxTokens ?? 1400,
+    max_tokens: (opts.maxTokens ?? 1400) + RESERVA_RAZONAMIENTO,
   }
   if (opts.json) body.response_format = { type: 'json_object' }
+
+  // La IA interna piensa poco A PROPÓSITO (decisión del propietario). Nuestras
+  // catorce funciones no razonan: leen lo que ya han decidido el código y las
+  // consultas —los avisos, las cifras, las filas rechazadas— y lo ponen en JSON.
+  // Medido con el parte: de 4,4 s a 1,5 s y unos mil tokens menos por llamada, que
+  // en una bolsa de 300 conversaciones al mes es la diferencia entre llegar a fin
+  // de mes o no. Al cliente no se le toca: su asistente sí conversa.
+  if (opts.interno) body.reasoning_effort = 'low'
 
   const url = `${cfg.base}/chat/completions`
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.apiKey}` }
   let ultimoError = ''
+  let rescatado = false
 
   for (let intento = 0; intento < 2; intento++) {
     let res: Response
@@ -83,15 +103,33 @@ async function intentarModelo(cfg: ModeloResuelto & { apiKey: string }, opts: Ch
 
     if (res.ok) {
       const data = await res.json()
-      const texto: string = (data?.choices?.[0]?.message?.content ?? '').trim()
+      const eleccion = data?.choices?.[0]
+      const texto: string = (eleccion?.message?.content ?? '').trim()
       if (!texto) { ultimoError = 'respuesta vacía'; break } // otro modelo lo hará mejor
+
+      // Cortada por el techo. Un texto a medias todavía sirve —se lee y se entiende—,
+      // pero un JSON a medias no se puede leer siquiera, así que ahí es un fallo.
+      //
+      // Solo hay dos motivos para que se corte: que se le fuera el techo pensando, o
+      // que la respuesta en sí no quepa. El rescate ataca los dos a la vez —piensa
+      // menos y toma más sitio— porque desde fuera no se distinguen y probar uno,
+      // ver, y probar el otro son dos viajes al proveedor en lugar de uno.
+      if (eleccion?.finish_reason === 'length' && opts.json) {
+        ultimoError = 'la respuesta salió cortada'
+        if (rescatado) break
+        rescatado = true
+        body.reasoning_effort = 'low'
+        body.max_tokens = (opts.maxTokens ?? 1400) + RESERVA_RAZONAMIENTO * 2
+        continue
+      }
+
       return {
         ok: true,
         res: {
           texto,
           usage: {
             tokensIn:  Number(data?.usage?.prompt_tokens) || 0,
-            tokensOut: Number(data?.usage?.completion_tokens) || 0,
+            tokensOut: tokensDeSalida(data?.usage),
           },
         },
       }
@@ -132,4 +170,19 @@ export async function chat(opts: ChatOpts): Promise<IaResultado> {
   }
 
   throw new Error(`IA ${cfg.model}: ${primero.error}`)
+}
+
+/**
+ * Lo que de verdad se generó. `completion_tokens` NO cuenta lo pensado en el
+ * dialecto OpenAI de Google (378 de entrada + 29 de salida y un total de 1.171: los
+ * 764 que faltan son razonamiento), y eso se factura igual que lo visible. Con la
+ * resta contra el total, el consumo del panel deja de estar un orden de magnitud por
+ * debajo de la factura; el máximo es por si un proveedor sí los suma.
+ */
+function tokensDeSalida(usage: unknown): number {
+  const u = (usage ?? {}) as Record<string, unknown>
+  const visible = Number(u.completion_tokens) || 0
+  const entrada = Number(u.prompt_tokens) || 0
+  const total   = Number(u.total_tokens) || 0
+  return Math.max(visible, total - entrada, 0)
 }

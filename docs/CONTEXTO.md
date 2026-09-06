@@ -282,6 +282,8 @@ Plan completo en `docs/planes/modulo-servicios.md`.
 
 Detectar sigue siendo determinista donde importa: los avisos del parte los genera el catálogo de `lib/notificaciones/admin/`, y la IA decide qué contar primero, no qué es un problema.
 
+**Razonamiento y techo de tokens** (`provider.ts`, arreglo del 2026-09-07): en el dialecto OpenAI `max_tokens` es el techo de TODO lo que genera el modelo, y lo que **piensa** se descuenta de ahí. Con Gemini 3.x eso cortaba a media frase la respuesta JSON de las catorce funciones (~1.100 tokens pensando contra un tope de 800), el `JSON.parse` reventaba y la pantalla decía «la IA no ha contestado esta vez» — en el admin entero y sin dejar rastro. El adaptador añade ahora una **reserva de 3.000** sobre lo que pide cada llamada (`maxTokens` sigue significando cuánto texto se quiere de vuelta), trata la **respuesta cortada de un JSON como fallo** (reintento pensando menos y con más sitio; si tampoco, al modelo de respaldo) y manda **`reasoning_effort: 'low'` en toda llamada interna** —decisión del dueño: nuestras funciones extraen y ordenan, no razonan; el asistente del cliente sí conversa y no se toca—. El consumo se mide con `total − prompt`: `completion_tokens` **no** incluye lo pensado, y lo pensado se factura igual.
+
 Consumo y reparto del mes en `/admin/ia` (pestaña **Consumo**, tarjeta «IA interna»); el modelo del equipo y el tope, en la misma pantalla, en la pestaña de configuración.
 
 ### Catálogo digital QR
