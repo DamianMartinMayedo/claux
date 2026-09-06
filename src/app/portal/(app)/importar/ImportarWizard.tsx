@@ -3,19 +3,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { toastError, toastSuccess, toastWarning, toastLoading } from '@/app/contexts/ToastContext'
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, AlertTriangle, Download, FileSpreadsheet, Save, Sparkles, Undo2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, AlertTriangle, Download, FileSpreadsheet, Save, Undo2, X } from 'lucide-react'
+import IaSparkle from '@/components/ia/IaSparkle'
+import PanelPropuestaIa from '@/components/ia/PanelPropuestaIa'
+import PanelDiagnosticoIa, { type LineaDiagnostico } from '@/components/ia/PanelDiagnosticoIa'
+import type { LineaPropuesta, PropuestaIa } from '@/lib/ia/propuesta'
+import type { FnIa } from '@/lib/ia/funciones'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { formatearImporte, fusionarTotales } from '@/lib/importador/util'
 import { aBase64 } from '@/lib/subir-archivo'
 import type {
   ClavesVistas, DecisionRepetidas, FilaRepetida, Pendiente, Resolucion,
 } from '@/lib/importador/tipos'
+import type { ReglaColumna } from '@/lib/importador/reglas'
 import {
   obtenerCamposEntidad, crearLoteImport, validarLoteImport, aplicarLoteImport,
   deshacerLoteImport, listarPlantillasImport, guardarPlantillaImport, cargarPlantillaImport,
   plantillaImport, crearMigracionLiangApp, ajustarMigracionLiangApp,
   deshacerMigracionLiangApp, plantillaFacturasLiangApp, estadoLoteImport,
-  sugerirMapeoIa,
+  sugerirMapeoIa, resolverPendientesIa, sugerirReglasIa, explicarErroresIa,
 } from '@/app/actions/portal/importar'
 import {
   AyudaLiangApp, CuadreLiangApp, FacturasLiangApp, FichasLiangApp, GruposLiangApp,
@@ -96,6 +102,24 @@ function agruparPorMotivo(filas: FilaMala[]): { motivo: string; filas: number[] 
     else    mapa.set(motivo, [f.fila])
   }
   return [...mapa.entries()].map(([motivo, filas]) => ({ motivo, filas }))
+}
+
+/**
+ * Los mismos grupos, pero juntando los motivos que solo se diferencian en un
+ * NÚMERO: «es la misma que la fila 12» y «…que la fila 340» son un problema, no
+ * doscientos. Se hace solo para la IA —la tabla sigue enseñando cada motivo con
+ * sus filas—, porque mandar doscientas variantes de la misma frase gasta la
+ * llamada en repetir y deja fuera los grupos que sí son distintos.
+ */
+function agruparParaIa(grupos: { motivo: string; filas: number[] }[]): { clave: string; motivo: string; filas: number }[] {
+  const mapa = new Map<string, { clave: string; motivo: string; filas: number }>()
+  for (const g of grupos) {
+    const clave = g.motivo.replace(/\d+/g, '#')
+    const ya = mapa.get(clave)
+    if (ya) ya.filas += g.filas.length
+    else    mapa.set(clave, { clave, motivo: g.motivo, filas: g.filas.length })
+  }
+  return [...mapa.values()]
 }
 
 /** «1, 2, 3 y 12 más» en vez de una lista que puede tener cientos de números. */
@@ -329,13 +353,15 @@ function FilaPendiente({
  * tarjeta era la mitad de la confusión de este paso. Van a «Qué va a pasar».
  */
 function PanelPendientes({
-  pendientes, resoluciones, sinAplicar, cargando, onDecidir,
+  pendientes, resoluciones, sinAplicar, cargando, onDecidir, ia,
 }: {
   pendientes:   Pendiente[]
   resoluciones: Record<string, Resolucion>
   sinAplicar:   string[]
   cargando:     boolean
   onDecidir:    (clave: string, valor: string) => void
+  /** El botón y el panel de la IA, si está encendida. Lo monta el asistente. */
+  ia?:          React.ReactNode
 }) {
   const sinRespuesta = pendientes.filter(p => !resoluciones[p.clave]).length
 
@@ -353,6 +379,8 @@ function PanelPendientes({
           ? 'Se parece a algo que ya tienes, pero no es igual. Dinos qué es.'
           : 'Se parecen a algo que ya tienes, pero no son iguales. Dinos qué son.'}
       </p>
+
+      {ia}
 
       <div className="imprt-pend-lista">
         {pendientes.map(p => (
@@ -519,6 +547,9 @@ type Guardado = {
   campos: Campo[]; defs: Default[]
   encoding: string; loteId: string; cabeceras: string[]; total: number; avisos: string[]
   columnas: Record<string, string>; globales: Record<string, string>; politica: Politica
+  /** Los arreglos de columna. Se guardan porque cambian lo que se importa: al
+   *  volver a la pestaña, un lote sin sus reglas importaría OTRA cosa. */
+  reglas: ReglaUi[]
   resultado: Resultado | null; resoluciones: Record<string, Resolucion>; sinAplicar: string[]
   repetidas: DecisionRepetidas; repetidasAplicadas: DecisionRepetidas
   resumen: Resumen | null; auxiliares: { etiqueta: string; cantidad: number }[]
@@ -531,13 +562,40 @@ type Guardado = {
   interrumpido: string
 }
 
-export default function ImportarWizard({ entidadesPermitidas }: { entidadesPermitidas?: string[] }) {
+type ResolucionIa = { accion: 'USAR' | 'CREAR' | 'OMITIR' | 'RECHAZAR'; destino?: string }
+
+/** Una regla de columna con su etiqueta ya escrita, para pintarla sin recalcularla. */
+type ReglaUi = ReglaColumna & { etiqueta: string }
+
+export default function ImportarWizard({ entidadesPermitidas, iaOn }: {
+  entidadesPermitidas?: string[]
+  /** Qué funciones de IA están encendidas en /admin/ia. Sin ellas, ni botón. */
+  iaOn?: Partial<Record<FnIa, boolean>>
+}) {
   const [paso, setPaso]         = useState<Paso>('entidad')
   const [cargando, setCargando] = useState(false)
   const [progreso, setProgreso] = useState<{ hechas: number; total: number } | null>(null)
   // La IA del emparejado va aparte de `cargando`: mientras piensa, el resto del
   // paso sigue usable (se puede mapear a mano, o cambiar la política).
   const [iaPensando, setIaPensando] = useState(false)
+  // La cola de pendientes resuelta por IA: la propuesta vive aquí hasta que una
+  // persona la aplica o la descarta. Aplicarla no escribe en la base: escribe en
+  // `resoluciones`, que es lo que el motor ya sabía leer.
+  const [propPend, setPropPend]     = useState<PropuestaIa<ResolucionIa> | null>(null)
+  const [pendPensando, setPendPensando] = useState(false)
+  const [pendError, setPendError]   = useState<string | null>(null)
+  const [pendReintento, setPendReintento] = useState(false)
+  // Los arreglos de columna y su propuesta. Las reglas ACEPTADAS viven en
+  // `reglas` y viajan en el mapeo; la propuesta es efímera.
+  const [propReglas, setPropReglas] = useState<PropuestaIa<ReglaUi> | null>(null)
+  const [reglasPensando, setReglasPensando] = useState(false)
+  const [reglasError, setReglasError] = useState<string | null>(null)
+  const [reglasReintento, setReglasReintento] = useState(false)
+  // La explicación del muro rojo. No escribe nada: se lee y se cierra.
+  const [diag, setDiag] = useState<LineaDiagnostico[] | null>(null)
+  const [diagPensando, setDiagPensando] = useState(false)
+  const [diagError, setDiagError] = useState<string | null>(null)
+  const [diagReintento, setDiagReintento] = useState(false)
 
   // ── Migración desde LiangApp ──
   // Los cinco pasos son los mismos (plan, D6). `mig` es lo único que decide si
@@ -577,6 +635,7 @@ export default function ImportarWizard({ entidadesPermitidas }: { entidadesPermi
   const estadoRef = useRef<HTMLInputElement>(null)
 
   const [columnas, setColumnas]   = useState<Record<string, string>>({})
+  const [reglas, setReglas]       = useState<ReglaUi[]>([])
   const [globales, setGlobales]   = useState<Record<string, string>>({})
   const [politica, setPolitica]   = useState<Politica>('SALTAR')
   /** Campos que siguen sin columna. Es lo que la IA puede rellenar. */
@@ -622,6 +681,7 @@ export default function ImportarWizard({ entidadesPermitidas }: { entidadesPermi
     setEncoding(g.encoding); setLoteId(g.loteId); setCabeceras(g.cabeceras)
     setTotal(g.total); setAvisos(g.avisos)
     setColumnas(g.columnas); setGlobales(g.globales); setPolitica(g.politica)
+    setReglas(g.reglas ?? [])
     setResultado(g.resultado); setResoluciones(g.resoluciones); setSinAplicar(g.sinAplicar)
     setRepetidas(g.repetidas); setRepetidasAplicadas(g.repetidasAplicadas)
     setResumen(g.resumen); setAuxiliares(g.auxiliares)
@@ -704,7 +764,7 @@ export default function ImportarWizard({ entidadesPermitidas }: { entidadesPermi
     if (paso === 'entidad') { olvidarGuardado(); return }
     const g: Guardado = {
       paso, entidad, etiquetaEnt, destino, campos, defs, encoding, loteId, cabeceras, total,
-      avisos, columnas, globales, politica, resultado, resoluciones, sinAplicar, repetidas,
+      avisos, columnas, globales, politica, reglas, resultado, resoluciones, sinAplicar, repetidas,
       repetidasAplicadas, resumen, auxiliares, plantillas, nombrePlantilla, deshecho,
       mig, excluidas, elegido, cola, migAplicados,
       enCurso: cargando, interrumpido,
@@ -723,7 +783,7 @@ export default function ImportarWizard({ entidadesPermitidas }: { entidadesPermi
       }
     }
   }, [listo, paso, entidad, etiquetaEnt, destino, campos, defs, encoding, loteId, cabeceras,
-      total, avisos, columnas, globales, politica, resultado, resoluciones, sinAplicar, repetidas,
+      total, avisos, columnas, globales, politica, reglas, resultado, resoluciones, sinAplicar, repetidas,
       repetidasAplicadas, resumen, auxiliares, plantillas, nombrePlantilla, deshecho, mig,
       excluidas, elegido, cola, migAplicados, cargando, interrumpido])
 
@@ -1063,6 +1123,42 @@ export default function ImportarWizard({ entidadesPermitidas }: { entidadesPermi
     }
   }
 
+  /**
+   * Pide a la IA los arreglos de columna. Solo mira las columnas MAPEADAS y las
+   * que aún no tienen regla: proponer sobre una columna que no se importa es
+   * mandar datos de más y dar trabajo de repasar a cambio de nada.
+   */
+  async function sugerirReglasConIa() {
+    if (!loteId) return
+    setReglasPensando(true); setReglasError(null); setReglasReintento(false); setPropReglas(null)
+    try {
+      const res = await sugerirReglasIa(loteId, columnas, reglas.map(r => r.columna))
+      if (!res.ok) { setReglasError(res.error); setReglasReintento(!!res.reintentar); return }
+      setPropReglas(res.propuesta)
+    } catch {
+      setReglasError('No se ha podido revisar las columnas.'); setReglasReintento(true)
+    } finally {
+      setReglasPensando(false)
+    }
+  }
+
+  /**
+   * Acepta las reglas marcadas. No transforma ni un dato aquí: las guarda en el
+   * mapeo y quien las ejecuta —igual al validar que al importar— es el motor.
+   */
+  function aplicarReglasIa(lineas: LineaPropuesta<ReglaUi>[]) {
+    setReglas(prev => {
+      const fuera = new Set(lineas.map(l => l.valor.columna))
+      return [...prev.filter(r => !fuera.has(r.columna)), ...lineas.map(l => l.valor)]
+    })
+    setPropReglas(null)
+    toastSuccess(`${lineas.length} arreglo(s) de columna. Se aplican al validar.`)
+  }
+
+  function quitarRegla(columna: string) {
+    setReglas(prev => prev.filter(r => r.columna !== columna))
+  }
+
   async function guardarPlantilla() {
     const ld = toastLoading('Guardando…')
     try {
@@ -1260,6 +1356,9 @@ export default function ImportarWizard({ entidadesPermitidas }: { entidadesPermi
       politica: pol,
       resoluciones: resol,
       repetidas:    rep,
+      // La etiqueta es cosa de la pantalla: al lote va solo la regla, que es lo
+      // que el motor ejecuta y lo que hay que poder volver a leer dentro de un año.
+      reglas: reglas.map(({ columna, transformacion, parametros }) => ({ columna, transformacion, parametros })),
     }
     setCargando(true); setInterrumpido('')
     const ld = toastLoading('Validando…')
@@ -1318,6 +1417,107 @@ export default function ImportarWizard({ entidadesPermitidas }: { entidadesPermi
       else   delete siguiente[clave]
       return siguiente
     })
+  }
+
+  /**
+   * Resuelve la cola de pendientes con IA. Una llamada por lote de 40, no una por
+   * nombre: es lo que convierte «cien clics» en «revisar una lista».
+   *
+   * No decide nada por su cuenta. Devuelve una propuesta que se pinta arriba con
+   * el cambio a la vista, lo dudoso desmarcado, y un botón para aplicarla.
+   */
+  async function resolverPendConIa(pendientes: Pendiente[]) {
+    if (!loteId || !pendientes.length) return
+    setPendPensando(true); setPendError(null); setPendReintento(false); setPropPend(null)
+    try {
+      const res = await resolverPendientesIa(loteId, pendientes.map(p => ({
+        clave: p.clave, texto: p.texto, etiquetaTipo: p.etiqueta_tipo,
+        ambito: p.ambito_etiqueta, causa: p.causa, filas: p.filas,
+        opciones: p.opciones, creable: p.creable, omitible: p.omitible,
+      })))
+      if (!res.ok) { setPendError(res.error); setPendReintento(!!res.reintentar); return }
+      setPropPend(res.propuesta)
+    } catch {
+      setPendError('No se ha podido resolver.'); setPendReintento(true)
+    } finally {
+      setPendPensando(false)
+    }
+  }
+
+  /**
+   * Aplica las líneas marcadas. Escribe en `resoluciones` y revalida por el camino
+   * de siempre: la IA no mete un estado que el motor no sepa leer, y el recuento
+   * de después dice si acertó.
+   */
+  function aplicarPendIa(lineas: LineaPropuesta<ResolucionIa>[]) {
+    const siguiente = { ...resoluciones }
+    for (const l of lineas) siguiente[l.clave] = l.valor
+    setResoluciones(siguiente)
+    setPropPend(null)
+    setSinAplicar([])
+    toastSuccess(`${lineas.length} resuelto(s) por IA. Repásalos abajo antes de importar.`)
+    validar(siguiente)
+  }
+
+  /**
+   * El bloque de IA de la cola de pendientes: botón, panel y estados.
+   *
+   * Es una FUNCIÓN que se llama —`{bloqueIaPendientes(x)}`—, no un componente
+   * `<Bloque/>`: declarado dentro del asistente, cada render crearía un tipo
+   * nuevo y React desmontaría el panel, perdiendo lo que llevas marcado.
+   */
+  function bloqueIaPendientes(pendientes: Pendiente[]) {
+    if (!iaOn?.importador_pendientes) return null
+    const activo = pendPensando || propPend !== null || pendError !== null
+    return (
+      <>
+        {!activo && (
+          <button type="button" className="btn btn-ia btn-sm" disabled={cargando}
+            onClick={() => resolverPendConIa(pendientes)}>
+            <IaSparkle size={14} /> Resolver con IA
+          </button>
+        )}
+        {activo && (
+          <PanelPropuestaIa
+            titulo="Nombres resueltos"
+            propuesta={propPend}
+            cargando={pendPensando}
+            error={pendError}
+            aplicando={cargando}
+            verbo="Aplicar"
+            onAplicar={aplicarPendIa}
+            onReintentar={pendReintento ? () => resolverPendConIa(pendientes) : undefined}
+            onCerrar={() => { setPropPend(null); setPendError(null) }}
+          />
+        )}
+      </>
+    )
+  }
+
+  /**
+   * Explica el muro de filas rechazadas. Los grupos van ya contados desde aquí
+   * (§`agruparParaIa`): el modelo traduce, no cuenta.
+   */
+  async function explicarConIa(grupos: { clave: string; motivo: string; filas: number }[]) {
+    if (!loteId || !grupos.length) return
+    setDiagPensando(true); setDiagError(null); setDiagReintento(false); setDiag(null)
+    try {
+      const res = await explicarErroresIa(loteId, grupos)
+      if (!res.ok) { setDiagError(res.error); setDiagReintento(!!res.reintentar); return }
+      // El panel es genérico (lo comparte con el revisor de presupuestos): aquí el
+      // chip de la izquierda es la cuenta de filas, que es lo que se busca al leerlo.
+      setDiag(res.explicacion.lineas.map(l => ({
+        clave:   l.clave,
+        marca:   `${l.filas} ${l.filas === 1 ? 'fila' : 'filas'}`,
+        titulo:  l.causa,
+        detalle: l.arreglo,
+        apoyo:   l.motivo,
+      })))
+    } catch {
+      setDiagError('No se ha podido explicar.'); setDiagReintento(true)
+    } finally {
+      setDiagPensando(false)
+    }
   }
 
   async function aplicar() {
@@ -1790,12 +1990,16 @@ export default function ImportarWizard({ entidadesPermitidas }: { entidadesPermi
               siendo un desplegable que se puede corregir. */}
           <div className="imprt-map-head">
             <span className="text-xs-muted">{sinMapear} campo(s) sin columna</span>
-            <button type="button" className="btn btn-secondary btn-sm"
-              onClick={emparejarConIa} disabled={cargando || iaPensando || sinMapear === 0}>
-              {iaPensando
-                ? <><span className="spinner spinner-sm" /> Emparejando…</>
-                : <><Sparkles size={15} strokeWidth={2} /> Emparejar con IA</>}
-            </button>
+            {/* Mismo botón de IA que en el portal (`.btn-ia` + la estrellita de
+                marca): quien lo ha visto en su panel lo reconoce aquí. */}
+            {iaOn?.importador_mapeo && (
+              <button type="button" className="btn btn-ia btn-sm"
+                onClick={emparejarConIa} disabled={cargando || iaPensando || sinMapear === 0}>
+                {iaPensando
+                  ? <><span className="spinner spinner-sm" /> Emparejando…</>
+                  : <><IaSparkle size={14} /> Emparejar con IA</>}
+              </button>
+            )}
           </div>
 
           <div className="imprt-mapa">
@@ -1814,6 +2018,56 @@ export default function ImportarWizard({ entidadesPermitidas }: { entidadesPermi
               </div>
             ))}
           </div>
+
+          {/* Arreglos de columna. Debajo del mapa porque solo tienen sentido sobre
+              columnas ya emparejadas, y antes de validar porque es ahí donde
+              cambian el resultado. La IA escribe la REGLA; los datos los
+              transforma el motor, igual al validar que al importar. */}
+          {(iaOn?.importador_reglas || reglas.length > 0) && (
+            <div className="imprt-reglas">
+              <div className="imprt-map-head">
+                <span className="text-xs-muted">
+                  {reglas.length === 0
+                    ? 'Columnas que vienen mal siempre igual (fecha con el mes en letra, importe con el separador cambiado, un prefijo que sobra).'
+                    : `${reglas.length} arreglo(s) de columna. Se aplican al validar y quedan guardados con el lote.`}
+                </span>
+                {iaOn?.importador_reglas && !propReglas && !reglasPensando && !reglasError && (
+                  <button type="button" className="btn btn-ia btn-sm"
+                    onClick={sugerirReglasConIa} disabled={cargando || sinMapear === campos.length}>
+                    <IaSparkle size={14} /> Revisar columnas con IA
+                  </button>
+                )}
+              </div>
+
+              {reglas.length > 0 && (
+                <ul className="chips-lista">
+                  {reglas.map(r => (
+                    <li key={r.columna} className="chips-chip" title={`${r.columna}: ${r.etiqueta}`}>
+                      <span className="chips-chip-texto"><strong>{r.columna}</strong> · {r.etiqueta}</span>
+                      <button type="button" className="chips-quitar" disabled={cargando}
+                        onClick={() => quitarRegla(r.columna)} aria-label={`Quitar el arreglo de ${r.columna}`}>
+                        <X size={13} strokeWidth={2.5} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {(propReglas || reglasPensando || reglasError) && (
+                <PanelPropuestaIa
+                  titulo="Arreglos de columna"
+                  propuesta={propReglas}
+                  cargando={reglasPensando}
+                  error={reglasError}
+                  aplicando={cargando}
+                  verbo="Aplicar"
+                  onAplicar={aplicarReglasIa}
+                  onReintentar={reglasReintento ? sugerirReglasConIa : undefined}
+                  onCerrar={() => { setPropReglas(null); setReglasError(null) }}
+                />
+              )}
+            </div>
+          )}
 
           <div className="imprt-acciones">
             <button type="button" className="btn btn-ghost" disabled={cargando} onClick={() => setPaso('subir')}>
@@ -1865,11 +2119,17 @@ export default function ImportarWizard({ entidadesPermitidas }: { entidadesPermi
                 <h2 className="card-title card-title-sm">Nombres que no acabamos de reconocer</h2>
                 <span className="text-xs-muted">{urgentes.length} nombres</span>
               </div>
+              {/* Con la IA encendida esto deja de ser un muro: son demasiados para
+                  hacerlos a mano, no para revisarlos ya resueltos. Sin ella, el
+                  consejo sigue siendo el de siempre. */}
               <div className="alert alert-warning alert-intro">
                 <AlertTriangle size={16} strokeWidth={2} />
-                Son demasiados para vincularlos aquí uno a uno. Corrige el archivo de origen (o
-                divídelo en partes más pequeñas) y vuelve a subirlo.
+                {iaOn?.importador_pendientes
+                  ? 'Son demasiados para vincularlos uno a uno. Deja que la IA los resuelva y repasa la lista, o corrige el archivo de origen y vuelve a subirlo.'
+                  : 'Son demasiados para vincularlos aquí uno a uno. Corrige el archivo de origen (o divídelo en partes más pequeñas) y vuelve a subirlo.'}
               </div>
+
+              {bloqueIaPendientes(urgentes)}
               <div className="table-wrapper">
                 <table className="table">
                   <thead><tr><th className="col-num">Filas</th><th>Qué no cuadra</th></tr></thead>
@@ -1894,6 +2154,7 @@ export default function ImportarWizard({ entidadesPermitidas }: { entidadesPermi
               sinAplicar={sinAplicar}
               cargando={cargando}
               onDecidir={decidir}
+              ia={bloqueIaPendientes(urgentes)}
             />
           )}
 
@@ -1933,14 +2194,38 @@ export default function ImportarWizard({ entidadesPermitidas }: { entidadesPermi
             <div className="card">
               <div className="card-header">
                 <h2 className="card-title card-title-sm">Filas con problemas</h2>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={descargarErrores}>
-                  <Download size={14} strokeWidth={2} /> Descargar errores
-                </button>
+                <span className="imprt-head-acciones">
+                  {/* Trescientas filas con su motivo técnico se leen en media hora;
+                      agrupadas y dichas en una frase, en diez segundos. No cambia
+                      nada: solo lee. */}
+                  {iaOn?.importador_errores && !diag && !diagPensando && !diagError && (
+                    <button type="button" className="btn btn-ia btn-sm"
+                      onClick={() => explicarConIa(agruparParaIa(erroresAgrupados))} disabled={cargando}>
+                      <IaSparkle size={14} /> Explicar con IA
+                    </button>
+                  )}
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={descargarErrores}>
+                    <Download size={14} strokeWidth={2} /> Descargar errores
+                  </button>
+                </span>
               </div>
               <div className="alert alert-warning alert-intro">
                 <AlertTriangle size={16} strokeWidth={2} /> Se importarán solo las correctas; corrige
                 estas {resultado.errores} y vuelve a subirlas.
               </div>
+
+              {(diag || diagPensando || diagError) && (
+                <PanelDiagnosticoIa
+                  titulo="Qué está fallando"
+                  lineas={diag}
+                  cargando={diagPensando}
+                  error={diagError}
+                  cargandoTexto="Leyendo los errores…"
+                  descargo="Generado por IA a partir de tus datos · compruébalo en el archivo."
+                  onReintentar={diagReintento ? () => explicarConIa(agruparParaIa(erroresAgrupados)) : undefined}
+                  onCerrar={() => { setDiag(null); setDiagError(null) }}
+                />
+              )}
               <div className="table-wrapper">
                 <table className="table">
                   <thead><tr><th className="col-num">Filas</th><th>Motivo</th></tr></thead>

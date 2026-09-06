@@ -9,6 +9,7 @@
 // presupuesto y devuelve por dónde seguir.
 
 import { norm } from './util'
+import { aplicarReglas, indiceReglas } from './reglas'
 import type {
   Adaptador, ClavesVistas, CtxImport, MapeoImport, FilaRepetida, FilaResultado,
   ResultadoValidacion, ResumenAplicacion, TrozoValidacion, TrozoAplicacion,
@@ -31,15 +32,21 @@ function seAcabaElTiempo(t0: number, hechas: number): boolean {
  * `deColumna` marca lo que trae el ARCHIVO, frente a lo que puso un default del
  * asistente: al actualizar solo cuenta lo primero (un default global no puede
  * cambiarle la unidad o la moneda a algo que ya existía).
+ *
+ * Es también el ÚNICO sitio donde se aplican las reglas de columna
+ * (§`reglas.ts`). Aquí pasan el dry-run y el commit, así que lo que se revisa y
+ * lo que se escribe salen de la misma cuenta; y como la celda ya llega arreglada,
+ * ningún adaptador tiene que saber que las reglas existen.
  */
 export function construirValores(
   fila: Record<string, string>, mapeo: MapeoImport,
 ): { valores: Record<string, string>; deColumna: Set<string> } {
   const valores: Record<string, string> = {}
   const deColumna = new Set<string>()
+  const reglas = indiceReglas(mapeo.reglas)
   for (const [campo, columna] of Object.entries(mapeo.columnas)) {
     if (!columna) continue
-    valores[campo] = (fila[columna] ?? '').toString().trim()
+    valores[campo] = aplicarReglas((fila[columna] ?? '').toString().trim(), reglas.get(columna))
     if (valores[campo]) deColumna.add(campo)
   }
   // Los defaults rellenan lo que no vino mapeado o vino vacío (empresa, moneda…).
@@ -89,10 +96,14 @@ function compararFilas(
   mapeo: MapeoImport, adaptador: Adaptador,
 ): FilaRepetida['difieren'] {
   const out: FilaRepetida['difieren'] = []
+  const reglas = indiceReglas(mapeo.reglas)
   for (const [campo, columna] of Object.entries(mapeo.columnas)) {
     if (!columna) continue
-    const a = (aqui[columna] ?? '').toString().trim()
-    const b = (alli[columna] ?? '').toString().trim()
+    // Con las reglas ya aplicadas: si una regla las iguala, no se diferencian en
+    // nada y decir lo contrario mandaría al operador a buscar una diferencia que
+    // el importador ya no ve.
+    const a = aplicarReglas((aqui[columna] ?? '').toString().trim(), reglas.get(columna))
+    const b = aplicarReglas((alli[columna] ?? '').toString().trim(), reglas.get(columna))
     if (norm(a) === norm(b)) continue
     out.push({
       etiqueta: adaptador.campos.find(c => c.campo === campo)?.etiqueta ?? campo,

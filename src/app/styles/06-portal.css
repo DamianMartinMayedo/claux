@@ -4417,6 +4417,19 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .imprt-map-campo { font-size: var(--text-sm); }
 .imprt-map-ayuda { display: block; color: var(--color-text-muted); font-size: var(--text-xs); }
 
+/* Dos botones en la cabecera de una tarjeta del asistente (explicar con IA +
+   descargar errores). No van sueltos: sin agrupar, el `space-between` del
+   `.card-header` los reparte a los dos lados del título. */
+.imprt-head-acciones { display: inline-flex; align-items: center; gap: var(--space-2); flex-shrink: 0; flex-wrap: wrap; }
+
+/* ── Arreglos de columna (reglas del importador) ── */
+/* Separado del mapa por una línea: es OTRA decisión sobre las mismas columnas
+   —qué columna es cada campo, primero; cómo hay que leerla, después— y sin el
+   corte se leía como una fila más del mapa. */
+.imprt-reglas { margin-top: var(--space-5); padding-top: var(--space-4); border-top: 1px solid var(--color-divider); }
+.imprt-reglas .imprt-map-head { margin-top: 0; }
+.imprt-reglas .chips-chip strong { color: var(--color-text); }
+
 /* ── Importador · migración desde LiangApp ── */
 /* La PUERTA del origen, encima de la rejilla de entidades: quien viene de
    LiangApp tiene que ver que esto es para él, y no deducirlo. Es una fila y no

@@ -15,8 +15,13 @@ import { ADAPTADORES, DESHACEDORES, ETIQUETAS_AUXILIARES } from '@/lib/importado
 import { validarLoteFilas, aplicarLoteFilas, deshacerLoteFilas, type ResumenDeshacer } from '@/lib/importador/motor'
 import { leerArchivo, ArchivoIlegible, type FormatoArchivo } from '@/lib/importador/archivo'
 import { requisitosFaltantes, mensajeRequisitos } from '@/lib/importador/requisitos'
-import { sugerirMapeoColumnas } from '@/lib/ia/equipo'
-import { IaBolsaAgotada } from '@/lib/ia/interna'
+import {
+  sugerirMapeoColumnas, resolverPendientes, proponerReglasColumna, explicarErrores,
+  type ResolucionIa, type ReglaPropuesta, type ExplicacionErrores,
+} from '@/lib/ia/equipo'
+import { muestraFilas } from '@/lib/ia/muestra'
+import type { PropuestaIa } from '@/lib/ia/propuesta'
+import { IaApagada, IaBolsaAgotada } from '@/lib/ia/interna'
 import { leerMigracion, resumenCuadre, ORDEN as ORDEN_MIGRACION } from '@/lib/importador/origenes/liangapp/migracion'
 import { COL_CUENTA, COL_GRUPO, COL_ORDEN, categoriaDeClave } from '@/lib/importador/origenes/liangapp/rutas'
 import { construirXlsxBase64, texto, numero, fecha, anchoPara, MARCA, type CeldaEstilo, type HojaExcel } from '@/lib/exportar/excel'
@@ -125,7 +130,7 @@ export async function obtenerCamposEntidad(
  */
 export async function sugerirMapeoIa(
   loteId: string,
-): Promise<{ ok: boolean; error?: string; columnas?: Record<string, string> }> {
+): Promise<{ ok: boolean; error?: string; reintentar?: boolean; columnas?: Record<string, string> }> {
   const r = await resolverCtx()
   if (!r) return { ok: false, error: 'Solo disponible en modo configuración.' }
 
@@ -143,10 +148,12 @@ export async function sugerirMapeoIa(
   const extra = adaptador.camposExtra ? await adaptador.camposExtra(r.ctx) : []
   const campos = [...adaptador.campos, ...extra]
   const cabeceras = (lote.cabeceras ?? []) as string[]
-  // Tres filas bastan para desempatar por contenido, y son las que caben sin
-  // mandarle al proveedor los datos del cliente entero.
-  const filas = ((lote.datos ?? []) as Record<string, string>[]).slice(0, 3)
-  const muestras = filas.map(f => cabeceras.map(c => String(f[c] ?? '')))
+  // El recorte y los campos que nunca salen los decide `lib/ia/muestra`, no esta
+  // pantalla: escrita aquí, la regla se re-decide en cada sitio que llame a la IA.
+  const muestras = muestraFilas(
+    ((lote.datos ?? []) as Record<string, string>[]).map(f => cabeceras.map(c => String(f[c] ?? ''))),
+    cabeceras,
+  )
 
   try {
     const columnas = await sugerirMapeoColumnas({
@@ -154,10 +161,162 @@ export async function sugerirMapeoIa(
       campos: campos.map(c => ({ campo: c.campo, etiqueta: c.etiqueta, obligatorio: c.obligatorio, ayuda: c.ayuda })),
       cabeceras, muestras,
     })
-    if (!columnas) return { ok: false, error: 'La IA no supo emparejar ninguna columna. Hazlo a mano.' }
+    if (!columnas) return { ok: false, error: 'La IA no supo emparejar ninguna columna.', reintentar: true }
     return { ok: true, columnas }
   } catch (e) {
-    if (e instanceof IaBolsaAgotada) return { ok: false, error: e.message }
+    // Bolsa agotada e interruptor apagado se dicen tal cual: no son averías y el
+    // mensaje explica qué hacer. Lo demás sube y sale como error de verdad.
+    if (e instanceof IaBolsaAgotada || e instanceof IaApagada) return { ok: false, error: e.message }
+    throw e
+  }
+}
+
+/**
+ * Resuelve con IA la cola de pendientes: los nombres del archivo que no casan con
+ * ninguna ficha («Cárnicos SA» contra «Carnicos S.A.»). En una migración real son
+ * decenas o cientos y hoy se despachan de uno en uno.
+ *
+ * Va POR LOTE, no por fila. Los pendientes los manda el asistente porque ya los
+ * tiene del dry-run: recalcularlos aquí sería procesar el archivo entero otra vez
+ * para llegar exactamente a la misma lista.
+ *
+ * PROPONE, Y ESCRIBE UNA PERSONA. Devuelve la propuesta; quien la aplica es quien
+ * está delante, desde el panel, y lo aplicado entra en `mapeo.resoluciones` por el
+ * mismo camino de siempre — el que revalidan y aplican el motor.
+ */
+export async function resolverPendientesIa(
+  loteId: string,
+  pendientes: {
+    clave: string; texto: string; etiquetaTipo: string; ambito?: string
+    causa: 'VARIAS' | 'NINGUNA'; filas: number
+    opciones: { valor: string; etiqueta: string }[]
+    creable: boolean; omitible: boolean
+  }[],
+): Promise<{ ok: true; propuesta: PropuestaIa<ResolucionIa> } | { ok: false; error: string; reintentar?: boolean }> {
+  const r = await resolverCtx()
+  if (!r) return { ok: false, error: 'Solo disponible en modo configuración.' }
+  if (!pendientes?.length) return { ok: false, error: 'No hay nombres pendientes que resolver.' }
+
+  const { data: lote } = await r.ctx.db.from('import_lotes')
+    .select('entidad').eq('lote_id', loteId).eq('client_id', r.ctx.client_id).maybeSingle()
+  if (!lote) return { ok: false, error: 'Lote no encontrado.' }
+
+  const adaptador = ADAPTADORES[lote.entidad as string]
+  if (!adaptador) return { ok: false, error: 'Entidad no soportada.' }
+  if (!(await puedeEditarAlgunModulo(adaptador.modulos))) {
+    return { ok: false, error: 'El cliente no tiene contratado el módulo necesario.' }
+  }
+
+  try {
+    const propuesta = await resolverPendientes({ entidad: adaptador.etiqueta, pendientes })
+    if (!propuesta) return { ok: false, error: 'La IA no supo resolver ninguno.', reintentar: true }
+    return { ok: true, propuesta }
+  } catch (e) {
+    if (e instanceof IaBolsaAgotada || e instanceof IaApagada) return { ok: false, error: e.message }
+    throw e
+  }
+}
+
+/**
+ * Propone con IA cómo arreglar las columnas que vienen sucias de forma
+ * sistemática (fecha con el mes en letra, importe con el separador cambiado,
+ * prefijo que sobra en un código).
+ *
+ * Lo que vuelve es una REGLA declarativa por columna, del catálogo cerrado de
+ * `lib/importador/reglas`, con su efecto ya calculado sobre tres filas. La IA no
+ * transforma ni una celda: la regla la ejecuta el motor, igual en el dry-run que
+ * en el commit, y queda guardada con el lote — que es lo que permite volver a
+ * explicar la migración dentro de un año.
+ */
+export async function sugerirReglasIa(
+  loteId: string,
+  /** El mapeo que hay en pantalla ahora mismo (campo interno → columna). */
+  columnas: Record<string, string>,
+  /** Columnas que ya tienen regla: no se vuelven a proponer. */
+  excluir: string[] = [],
+): Promise<{ ok: true; propuesta: PropuestaIa<ReglaPropuesta> } | { ok: false; error: string; reintentar?: boolean }> {
+  const r = await resolverCtx()
+  if (!r) return { ok: false, error: 'Solo disponible en modo configuración.' }
+
+  const { data: lote } = await r.ctx.db.from('import_lotes')
+    .select('entidad, cabeceras, datos')
+    .eq('lote_id', loteId).eq('client_id', r.ctx.client_id).maybeSingle()
+  if (!lote) return { ok: false, error: 'Lote no encontrado.' }
+
+  const adaptador = ADAPTADORES[lote.entidad as string]
+  if (!adaptador) return { ok: false, error: 'Entidad no soportada.' }
+  if (!(await puedeEditarAlgunModulo(adaptador.modulos))) {
+    return { ok: false, error: 'El cliente no tiene contratado el módulo necesario.' }
+  }
+
+  const extra = adaptador.camposExtra ? await adaptador.camposExtra(r.ctx) : []
+  const campos = [...adaptador.campos, ...extra]
+  const cabeceras = (lote.cabeceras ?? []) as string[]
+  // Mismo recorte y mismos campos prohibidos que el resto: la política de qué sale
+  // de CLAUX es una, no una por pantalla.
+  const muestras = muestraFilas(
+    ((lote.datos ?? []) as Record<string, string>[]).map(f => cabeceras.map(c => String(f[c] ?? ''))),
+    cabeceras,
+  )
+
+  // Solo las columnas MAPEADAS: arreglar uno que no se importa no sirve de nada,
+  // y encima manda datos de más al proveedor.
+  const fuera = new Set(excluir)
+  const cols = campos
+    .map(c => ({ campo: c.etiqueta, columna: (columnas[c.campo] ?? '').trim() }))
+    .filter(c => c.columna && cabeceras.includes(c.columna) && !fuera.has(c.columna))
+    .map(c => ({
+      ...c,
+      muestras: muestras.map(f => f[cabeceras.indexOf(c.columna)] ?? '').filter(Boolean),
+    }))
+  if (!cols.length) return { ok: false, error: 'No hay columnas mapeadas que revisar.' }
+
+  try {
+    const propuesta = await proponerReglasColumna({ entidad: adaptador.etiqueta, columnas: cols })
+    if (!propuesta) return { ok: false, error: 'La IA no ve nada que arreglar en estas columnas.', reintentar: true }
+    return { ok: true, propuesta }
+  } catch (e) {
+    if (e instanceof IaBolsaAgotada || e instanceof IaApagada) return { ok: false, error: e.message }
+    throw e
+  }
+}
+
+/**
+ * Explica el muro de filas rechazadas: los motivos ya agrupados por el asistente
+ * se traducen a «qué pasa» y «qué hay que arreglar en el archivo».
+ *
+ * NO ESCRIBE NADA: es lectura pura, la única función de IA del importador que no
+ * propone aplicar nada. Los grupos vienen contados desde el asistente porque los
+ * tiene del dry-run; el modelo no cuenta filas.
+ */
+export async function explicarErroresIa(
+  loteId: string,
+  grupos: { clave: string; motivo: string; filas: number }[],
+): Promise<{ ok: true; explicacion: ExplicacionErrores } | { ok: false; error: string; reintentar?: boolean }> {
+  const r = await resolverCtx()
+  if (!r) return { ok: false, error: 'Solo disponible en modo configuración.' }
+  if (!grupos?.length) return { ok: false, error: 'No hay errores que explicar.' }
+
+  const { data: lote } = await r.ctx.db.from('import_lotes')
+    .select('entidad, datos').eq('lote_id', loteId).eq('client_id', r.ctx.client_id).maybeSingle()
+  if (!lote) return { ok: false, error: 'Lote no encontrado.' }
+
+  const adaptador = ADAPTADORES[lote.entidad as string]
+  if (!adaptador) return { ok: false, error: 'Entidad no soportada.' }
+  if (!(await puedeEditarAlgunModulo(adaptador.modulos))) {
+    return { ok: false, error: 'El cliente no tiene contratado el módulo necesario.' }
+  }
+
+  try {
+    const explicacion = await explicarErrores({
+      entidad: adaptador.etiqueta,
+      grupos,
+      total: ((lote.datos ?? []) as unknown[]).length,
+    })
+    if (!explicacion) return { ok: false, error: 'La IA no supo explicar estos errores.', reintentar: true }
+    return { ok: true, explicacion }
+  } catch (e) {
+    if (e instanceof IaBolsaAgotada || e instanceof IaApagada) return { ok: false, error: e.message }
     throw e
   }
 }

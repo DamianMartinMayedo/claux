@@ -3,6 +3,7 @@
 // filas. Todo server-side (lo llaman las acciones de `actions/portal/importar.ts`).
 
 import type { Dimension } from '@/lib/limites'
+import type { ReglaColumna } from './reglas'
 
 export type ClienteDb = ReturnType<typeof import('@/lib/supabase/admin').createAdminClient>
 
@@ -109,6 +110,15 @@ export interface MapeoImport {
   resoluciones?: Record<string, Resolucion>
   /** Qué hacer con las filas que dicen lo mismo que otra (§`DecisionRepetidas`). */
   repetidas?: DecisionRepetidas
+  /**
+   * Arreglos declarativos por columna del archivo (§`reglas.ts`): la fecha que
+   * viene con el mes en letra, el importe con el separador cambiado, el prefijo
+   * que sobra en un código. Viajan en el mapeo —y por tanto se guardan con el
+   * lote— porque el dry-run y el commit tienen que leer EXACTAMENTE lo mismo:
+   * una regla que solo se aplicara al validar enseñaría unos datos e importaría
+   * otros.
+   */
+  reglas?: ReglaColumna[]
 }
 
 /**
