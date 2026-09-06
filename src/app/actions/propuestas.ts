@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { TOPE_VER_MAS } from '@/lib/listados'
 import { requirePermiso } from '@/lib/admin-guard'
 import { logActividad } from '@/lib/audit'
 import { leerSetting } from '@/lib/settings'
@@ -12,6 +13,9 @@ import { nuevoToken } from '@/lib/publico/token'
 import { COLUMNAS_PRECIO, normalizarNivel, type ModuloPrecios } from '@/lib/niveles'
 import { normalizarMonedaClaux, type MonedaClaux } from '@/lib/moneda-claux'
 import { CLAVES_TEXTO } from '@/lib/propuesta/secciones'
+import { cargarLead } from '@/lib/propuesta/cargar'
+import { redactarPropuesta, type BorradorPropuesta } from '@/lib/ia/equipo'
+import { IaBolsaAgotada } from '@/lib/ia/interna'
 
 // ── Propuestas comerciales (panel interno) ───────────────────────────────────
 //
@@ -154,7 +158,11 @@ async function acuses(db: Db, ids: number[]) {
 export async function listarPropuestas(): Promise<PropuestaRow[]> {
   await requirePermiso('propuestas')
   const db = createAdminClient()
-  const { data } = await db.from('propuestas').select(CAMPOS).order('created_at', { ascending: false })
+  // TECHO EXPLÍCITO: sin `.limit()` lo pone PostgREST por su cuenta y recorta sin
+  // decir nada. Escrito aquí, el día que la cifra se acerque se ve en el código y no
+  // en una lista a la que le faltan filas.
+  const { data } = await db.from('propuestas').select(CAMPOS)
+    .order('created_at', { ascending: false }).limit(TOPE_VER_MAS)
   const filas = data ?? []
   const { aperturas, selecciones } = await acuses(db, filas.map((f: any) => f.id))
   return filas.map((f: any) => componer(f, aperturas, selecciones))
@@ -495,4 +503,56 @@ export async function eliminarPropuestasEnLote(
     if (r.ok) hechas++
   }
   return { hechas }
+}
+
+/**
+ * Borrador de los textos de ESTA propuesta, redactados por la IA interna a partir
+ * del diagnóstico del lead.
+ *
+ * Lo paga CLAUX (bolsa interna, origen `propuesta`): la conduce el comercial, no
+ * el cliente. Y **no escribe nada**: devuelve el texto y el editor lo pone en las
+ * cajas vacías, que siguen siendo editables y solo se guardan al pulsar Guardar.
+ * Es el hermano del botón «Traer lo del diagnóstico», que copia los campos tal
+ * cual; este los redacta, y llega a la cuarta viñeta y a los textos por módulo,
+ * que ningún formulario puede rellenar.
+ */
+export async function redactarPropuestaIa(
+  id: number,
+): Promise<{ ok: boolean; error?: string; borrador?: BorradorPropuesta }> {
+  await requirePermiso('propuestas')
+  const db = createAdminClient()
+
+  const { data: p } = await db.from('propuestas')
+    .select('id, nombre_negocio, diagnostico_id, modulos')
+    .eq('id', id).maybeSingle()
+  if (!p) return { ok: false, error: 'Propuesta no encontrada.' }
+
+  const claves = (p.modulos ?? []) as string[]
+  const [lead, { data: cat }] = await Promise.all([
+    p.diagnostico_id ? cargarLead(db, p.diagnostico_id as number) : Promise.resolve(null),
+    claves.length
+      ? db.from('modulos_catalogo').select('clave, nombre, beneficio, descripcion').in('clave', claves)
+      : Promise.resolve({ data: [] as { clave: string; nombre: string; beneficio: string | null; descripcion: string | null }[] }),
+  ])
+
+  try {
+    const borrador = await redactarPropuesta({
+      negocio:    (p.nombre_negocio as string) || 'el negocio',
+      sector:     lead?.sectorNombre ?? null,
+      tamano:     lead?.bandaPersonas ?? null,
+      modoActual: lead?.modoEtiqueta ?? null,
+      necesidad:  lead?.necesidadPrincipal ?? null,
+      notas:      null,
+      modulos: (cat ?? []).map(m => ({
+        clave: m.clave as string,
+        nombre: m.nombre as string,
+        beneficio: (m.beneficio as string | null) ?? (m.descripcion as string | null),
+      })),
+    })
+    if (!borrador) return { ok: false, error: 'La IA no pudo redactar el borrador. Vuelve a intentarlo.' }
+    return { ok: true, borrador }
+  } catch (e) {
+    if (e instanceof IaBolsaAgotada) return { ok: false, error: e.message }
+    throw e
+  }
 }

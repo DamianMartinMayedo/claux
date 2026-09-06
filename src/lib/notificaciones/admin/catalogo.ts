@@ -128,7 +128,7 @@ export const CATALOGO_ADMIN = {
     etiqueta: 'Correo que no salió',
     descripcion: 'Un envío quedó con error en el registro de correos.',
   },
-  // Los tres siguientes están DESCRITOS pero no enganchados: no hay hoy un sitio
+  // Los dos siguientes están DESCRITOS pero no enganchados: no hay hoy un sitio
   // donde colgarlos sin inventarse la métrica. Al implementarlos, basta poner
   // `implementado: true` y aparecen en Preferencias.
   facturacion_fallida: {
@@ -141,10 +141,17 @@ export const CATALOGO_ADMIN = {
     etiqueta: 'El cron no corrió',
     descripcion: 'No hay rastro del barrido diario de hoy.',
   },
+  // La bolsa de IA que paga CLAUX (mig. 235), no la del cliente: la del cliente
+  // tiene tope blando y se resuelve sola bajando al modelo gratis, así que avisar
+  // de ella sería ruido. Esta es dinero nuestro y al agotarse CORTA, así que el
+  // aviso es la única forma de enterarse antes de que alguien del equipo se
+  // encuentre el importador sin IA. Un aviso por mes y escalón: la entidad es el
+  // período (`ia_uso_interno` / `2026-09`) y de eso ya se encarga la idempotencia.
   ia_consumo_alto: {
-    categoria: 'plataforma', seccion: null, severidad: 'aviso', implementado: false,
-    etiqueta: 'Consumo de IA alto',
-    descripcion: 'El gasto del mes en el asistente pasó del umbral.',
+    categoria: 'plataforma', seccion: null, severidad: 'aviso', implementado: true,
+    etiqueta: 'Consumo de IA interna alto',
+    descripcion: 'La bolsa de IA que pagamos nosotros se acerca al tope del mes, o se agotó.',
+    umbrales: ['vencido'],
   },
 } satisfies Record<string, TipoAvisoAdmin>
 

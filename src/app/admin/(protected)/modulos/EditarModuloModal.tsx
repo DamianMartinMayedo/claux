@@ -1,13 +1,11 @@
 'use client'
 
-import { X } from 'lucide-react'
+import { Sparkles, X } from 'lucide-react'
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { editarModulo, previsualizarPrecio } from '@/app/actions/modulos'
-import { useModalKeyboard } from '@/lib/use-modal-keyboard'
+import { editarModulo, previsualizarPrecio, sugerirTextosModuloIa } from '@/app/actions/modulos'
 import FormHelp from '@/components/portal/FormHelp'
-import { useMounted } from '@/lib/use-mounted'
+import ModalShell from '@/components/portal/ModalShell'
 import { useToast } from '@/app/contexts/ToastContext'
 import { NIVELES, CAMPO_PRECIO, precioModulo, type Nivel } from '@/lib/niveles'
 import { MONEDAS_CLAUX } from '@/lib/moneda-claux'
@@ -74,18 +72,30 @@ export default function EditarModuloModal({
   const [nuevoLabel, setNuevoLabel] = useState('')
   const [addError, setAddError]     = useState('')
   const [editTipo, setEditTipo]     = useState(modulo.tipo)
+  /* Los tres textos van en estado y no en `defaultValue` porque la IA los
+     rellena desde fuera; el `name` sigue puesto y viajan igual en el FormData. */
+  const [textos, setTextos] = useState({
+    descripcion: modulo.descripcion ?? '',
+    beneficio:   modulo.beneficio ?? '',
+    resumen:     modulo.resumen ?? '',
+  })
+  const [iaPensando, setIaPensando] = useState(false)
   const [routeEdited, setRouteEdited] = useState(false)
   // Impacto pendiente de confirmar: mientras no sea null, el modal está
   // preguntando «esto le cambia la cuota a esta gente, ¿seguimos?».
   const [porConfirmar, setPorConfirmar] = useState<ImpactoFila[] | null>(null)
   const formRef               = useRef<HTMLFormElement>(null)
-  const mounted               = useMounted()
 
   // Reset intencional del formulario cuando cambia el módulo editado (p.ej. tras guardar + refresh).
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     setPaginas(ensurePages(modulo.paginas))
     setEditTipo(modulo.tipo)
+    setTextos({
+      descripcion: modulo.descripcion ?? '',
+      beneficio:   modulo.beneficio ?? '',
+      resumen:     modulo.resumen ?? '',
+    })
     setNuevaRuta(''); setNuevoLabel(''); setRouteEdited(false)
     setPorConfirmar(null)
   }, [modulo])
@@ -98,10 +108,32 @@ export default function EditarModuloModal({
     setNuevaRuta(''); setNuevoLabel(''); setRouteEdited(false)
     setPaginas(ensurePages(modulo.paginas))
     setEditTipo(modulo.tipo)
+    setTextos({
+      descripcion: modulo.descripcion ?? '',
+      beneficio:   modulo.beneficio ?? '',
+      resumen:     modulo.resumen ?? '',
+    })
     setPorConfirmar(null)
-  }, [isControlled, onCloseProp, modulo.paginas, modulo.tipo])
+  }, [isControlled, onCloseProp, modulo])
 
-  useModalKeyboard(open, handleClose)
+  /**
+   * Pide los tres textos a la IA interna y los deja en las casillas. No guarda:
+   * hasta que no se pulse Guardar, el catálogo sigue como estaba, y Cancelar lo
+   * deshace. Lo que la IA no devuelva se queda como estaba escrito.
+   */
+  async function sugerirConIa() {
+    setIaPensando(true)
+    const res = await sugerirTextosModuloIa(modulo.clave)
+    setIaPensando(false)
+    if (!res.ok || !res.textos) { toastError(res.error ?? 'No se pudo redactar.'); return }
+    const t = res.textos
+    setTextos(prev => ({
+      descripcion: t.descripcion ?? prev.descripcion,
+      beneficio:   t.beneficio   ?? prev.beneficio,
+      resumen:     t.resumen     ?? prev.resumen,
+    }))
+    toastSuccess('Textos sugeridos. Revísalos y guarda.')
+  }
 
   function handleLabelChange(val: string) {
     setNuevoLabel(val)
@@ -189,181 +221,200 @@ export default function EditarModuloModal({
   }
 
   const modal = (
-    <div className="modal-backdrop">
-      <div className="modal modal-lg">
-        <div className="modal-header">
-          <h2 className="modal-title">Editar — {modulo.clave}</h2>
-          <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
-            <X size={18} />
-          </button>
-        </div>
-        <form ref={formRef} onSubmit={handleSubmit}>
-          <input type="hidden" name="clave" value={modulo.clave} />
-          <div className="modal-body">
-            {/* ── Datos básicos ── */}
-            <div className="grid-cols-2">
-              <div className="input-group">
-                <label>Nombre <span className="required">*</span></label>
-                <input name="nombre" className="input" required defaultValue={modulo.nombre} />
-              </div>
-              <div className="input-group">
-                <div className="form-label-with-help">
-                  <label>Tipo</label>
-                  {modulo.tipo === 'addon' && <FormHelp text="Los addons no pueden cambiar de tipo." label="Por qué no se puede cambiar el tipo" />}
-                </div>
-                <select
-                  className="input"
-                  value={editTipo}
-                  onChange={e => setEditTipo(e.target.value)}
-                  disabled={modulo.tipo === 'addon'}
-                >
-                  <option value="modulo">Módulo</option>
-                  <option value="funcionalidad">Funcionalidad</option>
-                  {modulo.tipo === 'addon' && <option value="addon">Addon</option>}
-                </select>
-              </div>
+    <ModalShell title={<>Editar — {modulo.clave}</>} size="modal-lg" onClose={handleClose}>
+      <form ref={formRef} onSubmit={handleSubmit}>
+        <input type="hidden" name="clave" value={modulo.clave} />
+        <div className="modal-body">
+          {/* ── Datos básicos ── */}
+          <div className="grid-cols-2">
+            <div className="input-group">
+              <label>Nombre <span className="required">*</span></label>
+              <input name="nombre" className="input" required defaultValue={modulo.nombre} />
             </div>
-            {/* Los tres textos, juntos y con su destino escrito. Separados no hay
-                forma de ver que uno repite al otro, y son distintos a propósito:
-                uno describe, otro vende y el tercero cabe.
+            <div className="input-group">
+              <div className="form-label-with-help">
+                <label>Tipo</label>
+                {modulo.tipo === 'addon' && <FormHelp text="Los addons no pueden cambiar de tipo." label="Por qué no se puede cambiar el tipo" />}
+              </div>
+              <select
+                className="input"
+                value={editTipo}
+                onChange={e => setEditTipo(e.target.value)}
+                disabled={modulo.tipo === 'addon'}
+              >
+                <option value="modulo">Módulo</option>
+                <option value="funcionalidad">Funcionalidad</option>
+                {modulo.tipo === 'addon' && <option value="addon">Addon</option>}
+              </select>
+            </div>
+          </div>
+          {/* Los tres textos, juntos y con su destino escrito. Separados no hay
+              forma de ver que uno repite al otro, y son distintos a propósito:
+              uno describe, otro vende y el tercero cabe.
 
-                Aquí NO está el orden. Era una casilla muerta: el formulario lo
-                mandaba dos veces —un `hidden` y esta— y `FormData.get` devuelve
-                el primero, así que lo tecleado no llegaba nunca al servidor y no
-                lo decía. Y no se arregla dejando la casilla: el orden es la
-                POSICIÓN en la lista, se cambia arrastrando la fila y `reordenar
-                Modulos` renumera el catálogo entero; un número a mano solo puede
-                empatar con el de otro módulo. */}
+              Aquí NO está el orden. Era una casilla muerta: el formulario lo
+              mandaba dos veces —un `hidden` y esta— y `FormData.get` devuelve
+              el primero, así que lo tecleado no llegaba nunca al servidor y no
+              lo decía. Y no se arregla dejando la casilla: el orden es la
+              POSICIÓN en la lista, se cambia arrastrando la fila y `reordenar
+              Modulos` renumera el catálogo entero; un número a mano solo puede
+              empatar con el de otro módulo. */}
+          <div className="mod-textos">
+            <div className="input-group-head">
+              <span className="modal-section-label">Textos del catálogo</span>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={iaPensando}
+                onClick={sugerirConIa}
+              >
+                {iaPensando
+                  ? <><span className="spinner spinner-sm" /> Redactando…</>
+                  : <><Sparkles size={14} strokeWidth={2} /> Sugerir con IA</>}
+              </button>
+            </div>
             <div className="input-group">
               <label htmlFor="mod-descripcion">Descripción</label>
-              <input id="mod-descripcion" name="descripcion" className="input" defaultValue={modulo.descripcion ?? ''} />
+              <input
+                id="mod-descripcion" name="descripcion" className="input"
+                value={textos.descripcion}
+                onChange={e => setTextos(t => ({ ...t, descripcion: e.target.value }))}
+              />
               <span className="input-hint">Qué es. Landing y factura.</span>
             </div>
             <div className="input-group">
               <label htmlFor="mod-beneficio">Beneficio</label>
-              <textarea id="mod-beneficio" name="beneficio" className="input" rows={2} defaultValue={modulo.beneficio ?? ''} />
+              <textarea
+                id="mod-beneficio" name="beneficio" className="input" rows={2}
+                value={textos.beneficio}
+                onChange={e => setTextos(t => ({ ...t, beneficio: e.target.value }))}
+              />
               <span className="input-hint">Por qué le sirve al negocio. Diapositiva «Pensado para tu negocio» de la propuesta.</span>
             </div>
             <div className="input-group">
               <label htmlFor="mod-resumen">Resumen</label>
-              <input id="mod-resumen" name="resumen" className="input" maxLength={80} defaultValue={modulo.resumen ?? ''} />
+              <input
+                id="mod-resumen" name="resumen" className="input" maxLength={80}
+                value={textos.resumen}
+                onChange={e => setTextos(t => ({ ...t, resumen: e.target.value }))}
+              />
               <span className="input-hint">Dos líneas, unos 55 caracteres. Ficha de precios de la propuesta, cuatro por página: más largo y la ficha crece.</span>
             </div>
-            {/* Un precio por nivel Y POR MONEDA: seis casillas, las seis a mano. El
-                de euros no es el de dólares al cambio del día —ese era justo el
-                problema— sino un precio propio que se teclea aquí. Los rótulos de
-                nivel salen de /admin/niveles: si el dueño renombra uno, este
-                formulario lo dice sin tocar código. */}
-            {MONEDAS_CLAUX.map(moneda => (
-              <div className="grid-cols-3" key={moneda}>
-                {NIVELES.map(n => (
-                  <div className="input-group" key={n}>
-                    <label htmlFor={`mod-${moneda}-${n}`}>Precio {nombresNivel[n]} ({moneda})</label>
-                    <input id={`mod-${moneda}-${n}`} name={CAMPO_PRECIO[moneda][n]} className="input"
-                           type="number" min="0" step="any" required
-                           defaultValue={precioModulo(modulo, n, moneda)}
-                           onChange={() => setPorConfirmar(null)} />
-                  </div>
-                ))}
-              </div>
-            ))}
-            <label className="module-check">
-              <input type="checkbox" name="activo" value="true" defaultChecked={modulo.activo} />
-              Activo (visible en los toggles de cliente)
-            </label>
-
-            {/* Paso de confirmación: solo aparece cuando el precio nuevo le mueve
-                la cuota a alguien. Los campos siguen editables a propósito —
-                tocar uno vuelve a dejarlo en «Guardar» y a recalcular el aviso. */}
-            {porConfirmar && (
-              <ImpactoPrecios impacto={porConfirmar} nombresNivel={nombresNivel} />
-            )}
-
-            {/* ── Páginas internas (solo para módulos) ── */}
-            {editTipo === 'modulo' && (
-              <div className="mod-paginas-section">
-                <div className="mod-paginas-header">
-                  <h3 className="mod-paginas-title">Páginas internas</h3>
-                  <span className="text-xs-muted">{paginas.length} página{paginas.length !== 1 ? 's' : ''}</span>
+          </div>
+          {/* Un precio por nivel Y POR MONEDA: seis casillas, las seis a mano. El
+              de euros no es el de dólares al cambio del día —ese era justo el
+              problema— sino un precio propio que se teclea aquí. Los rótulos de
+              nivel salen de /admin/niveles: si el dueño renombra uno, este
+              formulario lo dice sin tocar código. */}
+          {MONEDAS_CLAUX.map(moneda => (
+            <div className="grid-cols-3" key={moneda}>
+              {NIVELES.map(n => (
+                <div className="input-group" key={n}>
+                  <label htmlFor={`mod-${moneda}-${n}`}>Precio {nombresNivel[n]} ({moneda})</label>
+                  <input id={`mod-${moneda}-${n}`} name={CAMPO_PRECIO[moneda][n]} className="input"
+                         type="number" min="0" step="any" required
+                         defaultValue={precioModulo(modulo, n, moneda)}
+                         onChange={() => setPorConfirmar(null)} />
                 </div>
+              ))}
+            </div>
+          ))}
+          <label className="module-check">
+            <input type="checkbox" name="activo" value="true" defaultChecked={modulo.activo} />
+            Activo (visible en los toggles de cliente)
+          </label>
 
-                {paginas.length > 0 && (
-                  <div className="mod-paginas-list">
-                    {paginas.map((p, i) => (
-                      <div
-                        key={p.ruta}
-                        className={`mod-pagina-row${dragIndex === i ? ' mod-pagina-dragging' : ''}`}
-                        draggable
-                        onDragStart={() => handlePageDragStart(i)}
-                        onDragOver={(e) => handlePageDragOver(e, i)}
-                        onDragEnd={handlePageDragEnd}
-                      >
-                        <span className="mod-pagina-drag">⠿</span>
-                        <div className="mod-pagina-info">
-                          <code className="mod-pagina-ruta">{p.ruta}</code>
-                          <span className="mod-pagina-label">{p.label}</span>
-                        </div>
-                        <button
-                          type="button"
-                          className="mod-pagina-remove"
-                          onClick={() => removePagina(i)}
-                          title="Quitar página"
-                          aria-label="Quitar página"
-                        >
-                          <X size={14} />
-                        </button>
+          {/* Paso de confirmación: solo aparece cuando el precio nuevo le mueve
+              la cuota a alguien. Los campos siguen editables a propósito —
+              tocar uno vuelve a dejarlo en «Guardar» y a recalcular el aviso. */}
+          {porConfirmar && (
+            <ImpactoPrecios impacto={porConfirmar} nombresNivel={nombresNivel} />
+          )}
+
+          {/* ── Páginas internas (solo para módulos) ── */}
+          {editTipo === 'modulo' && (
+            <div className="mod-paginas-section">
+              <div className="mod-paginas-header">
+                <h3 className="mod-paginas-title">Páginas internas</h3>
+                <span className="text-xs-muted">{paginas.length} página{paginas.length !== 1 ? 's' : ''}</span>
+              </div>
+
+              {paginas.length > 0 && (
+                <div className="mod-paginas-list">
+                  {paginas.map((p, i) => (
+                    <div
+                      key={p.ruta}
+                      className={`mod-pagina-row${dragIndex === i ? ' mod-pagina-dragging' : ''}`}
+                      draggable
+                      onDragStart={() => handlePageDragStart(i)}
+                      onDragOver={(e) => handlePageDragOver(e, i)}
+                      onDragEnd={handlePageDragEnd}
+                    >
+                      <span className="mod-pagina-drag">⠿</span>
+                      <div className="mod-pagina-info">
+                        <code className="mod-pagina-ruta">{p.ruta}</code>
+                        <span className="mod-pagina-label">{p.label}</span>
                       </div>
-                    ))}
-                  </div>
-                )}
-
-                <div className="mod-paginas-add">
-                  <div className="mod-paginas-add-fields">
-                    <input
-                      type="text"
-                      className="input"
-                      placeholder="Nombre visible"
-                      value={nuevoLabel}
-                      onChange={e => handleLabelChange(e.target.value)}
-                    />
-                    <input
-                      type="text"
-                      className="input mod-pagina-ruta-input"
-                      placeholder="/portal/nombre-continua"
-                      value={nuevaRuta}
-                      onChange={e => handleRouteChange(e.target.value)}
-                    />
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={addPagina}>
-                      + Añadir
-                    </button>
-                  </div>
-                  {addError && <span className="input-hint text-error">{addError}</span>}
+                      <button
+                        type="button"
+                        className="mod-pagina-remove"
+                        onClick={() => removePagina(i)}
+                        title="Quitar página"
+                        aria-label="Quitar página"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
                 </div>
+              )}
+
+              <div className="mod-paginas-add">
+                <div className="mod-paginas-add-fields">
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="Nombre visible"
+                    value={nuevoLabel}
+                    onChange={e => handleLabelChange(e.target.value)}
+                  />
+                  <input
+                    type="text"
+                    className="input mod-pagina-ruta-input"
+                    placeholder="/portal/nombre-continua"
+                    value={nuevaRuta}
+                    onChange={e => handleRouteChange(e.target.value)}
+                  />
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={addPagina}>
+                    + Añadir
+                  </button>
+                </div>
+                {addError && <span className="input-hint text-error">{addError}</span>}
               </div>
-            )}
-          </div>
-          <div className="modal-footer">
-            {porConfirmar ? (
-              <>
-                <button type="button" className="btn btn-secondary" onClick={() => setPorConfirmar(null)}>
-                  Volver a editar
-                </button>
-                <button type="button" className="btn btn-primary" onClick={guardar} disabled={loading}>
-                  {loading ? <><span className="spinner" /> Guardando...</> : 'Guardar y recalcular'}
-                </button>
-              </>
-            ) : (
-              <>
-                <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
-                <button type="submit" className="btn btn-primary" disabled={loading}>
-                  {loading ? <><span className="spinner" /> Guardando...</> : 'Guardar'}
-                </button>
-              </>
-            )}
-          </div>
-        </form>
-      </div>
-    </div>
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          {porConfirmar ? (
+            <>
+              <button type="button" className="btn btn-secondary" onClick={() => setPorConfirmar(null)}>
+                Volver a editar
+              </button>
+              <button type="button" className="btn btn-primary" onClick={guardar} disabled={loading}>
+                {loading ? <><span className="spinner" /> Guardando...</> : 'Guardar y recalcular'}
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
+              <button type="submit" className="btn btn-primary" disabled={loading}>
+                {loading ? <><span className="spinner" /> Guardando...</> : 'Guardar'}
+              </button>
+            </>
+          )}
+        </div>
+      </form>
+    </ModalShell>
   )
 
   return (
@@ -371,7 +422,7 @@ export default function EditarModuloModal({
       {!isControlled && (
         <button className="btn btn-secondary btn-sm" onClick={() => setOpen(true)}>Editar</button>
       )}
-      {mounted && open && createPortal(modal, document.body)}
+      {open && modal}
     </>
   )
 }

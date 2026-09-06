@@ -15,6 +15,8 @@ import { ADAPTADORES, DESHACEDORES, ETIQUETAS_AUXILIARES } from '@/lib/importado
 import { validarLoteFilas, aplicarLoteFilas, deshacerLoteFilas, type ResumenDeshacer } from '@/lib/importador/motor'
 import { leerArchivo, ArchivoIlegible, type FormatoArchivo } from '@/lib/importador/archivo'
 import { requisitosFaltantes, mensajeRequisitos } from '@/lib/importador/requisitos'
+import { sugerirMapeoColumnas } from '@/lib/ia/equipo'
+import { IaBolsaAgotada } from '@/lib/ia/interna'
 import { leerMigracion, resumenCuadre, ORDEN as ORDEN_MIGRACION } from '@/lib/importador/origenes/liangapp/migracion'
 import { COL_CUENTA, COL_GRUPO, COL_ORDEN, categoriaDeClave } from '@/lib/importador/origenes/liangapp/rutas'
 import { construirXlsxBase64, texto, numero, fecha, anchoPara, MARCA, type CeldaEstilo, type HojaExcel } from '@/lib/exportar/excel'
@@ -106,6 +108,57 @@ export async function obtenerCamposEntidad(
     campos: [...adaptador.campos, ...extra].map(c => ({ campo: c.campo, etiqueta: c.etiqueta, obligatorio: c.obligatorio, ayuda: c.ayuda, alias: c.alias ?? [] })),
     defaults,
     repetible: !!adaptador.repetible,
+  }
+}
+
+/**
+ * Propone con IA qué columna del archivo va a cada campo, para los que el
+ * auto-mapeo por nombre no supo emparejar.
+ *
+ * Es la IA INTERNA (la paga CLAUX, no el cliente): este asistente solo existe en
+ * modo configuración, o sea que quien está delante es alguien del equipo haciendo
+ * una migración, y el coste sigue a quien conduce la sesión.
+ *
+ * PROPONE Y NO ESCRIBE: devuelve el emparejamiento y el asistente rellena los
+ * desplegables, que siguen siendo editables. Nada toca la base hasta que se
+ * valida y se aplica el lote, igual que antes.
+ */
+export async function sugerirMapeoIa(
+  loteId: string,
+): Promise<{ ok: boolean; error?: string; columnas?: Record<string, string> }> {
+  const r = await resolverCtx()
+  if (!r) return { ok: false, error: 'Solo disponible en modo configuración.' }
+
+  const { data: lote } = await r.ctx.db.from('import_lotes')
+    .select('entidad, cabeceras, datos')
+    .eq('lote_id', loteId).eq('client_id', r.ctx.client_id).maybeSingle()
+  if (!lote) return { ok: false, error: 'Lote no encontrado.' }
+
+  const adaptador = ADAPTADORES[lote.entidad as string]
+  if (!adaptador) return { ok: false, error: 'Entidad no soportada.' }
+  if (!(await puedeEditarAlgunModulo(adaptador.modulos))) {
+    return { ok: false, error: 'El cliente no tiene contratado el módulo necesario.' }
+  }
+
+  const extra = adaptador.camposExtra ? await adaptador.camposExtra(r.ctx) : []
+  const campos = [...adaptador.campos, ...extra]
+  const cabeceras = (lote.cabeceras ?? []) as string[]
+  // Tres filas bastan para desempatar por contenido, y son las que caben sin
+  // mandarle al proveedor los datos del cliente entero.
+  const filas = ((lote.datos ?? []) as Record<string, string>[]).slice(0, 3)
+  const muestras = filas.map(f => cabeceras.map(c => String(f[c] ?? '')))
+
+  try {
+    const columnas = await sugerirMapeoColumnas({
+      entidad: adaptador.etiqueta,
+      campos: campos.map(c => ({ campo: c.campo, etiqueta: c.etiqueta, obligatorio: c.obligatorio, ayuda: c.ayuda })),
+      cabeceras, muestras,
+    })
+    if (!columnas) return { ok: false, error: 'La IA no supo emparejar ninguna columna. Hazlo a mano.' }
+    return { ok: true, columnas }
+  } catch (e) {
+    if (e instanceof IaBolsaAgotada) return { ok: false, error: e.message }
+    throw e
   }
 }
 

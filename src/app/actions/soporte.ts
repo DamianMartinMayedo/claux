@@ -4,11 +4,15 @@ import { requirePermiso } from '@/lib/admin-guard'
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { TOPE_VER_MAS } from '@/lib/listados'
 import { logActividad } from '@/lib/audit'
 import { isAuthBypassed } from '@/lib/dev-auth'
 import { revalidatePath } from 'next/cache'
 import { renderPlantilla } from '@/lib/email/render'
 import { enviarEmail, tipoEmailActivo } from '@/lib/email/enviar'
+import { leerCorreo } from '@/lib/settings'
+import { borradorSoporte } from '@/lib/ia/equipo'
+import { IaBolsaAgotada } from '@/lib/ia/interna'
 
 // Guard: el admin debe estar autenticado (o bypass en dev). Los datos se leen/escriben
 // con service_role, igual que el resto de la plataforma.
@@ -49,6 +53,10 @@ export async function listarMensajesSoporte(): Promise<MensajeSoporte[]> {
     .from('soporte_mensajes')
     .select('id, client_id, user_id, email, asunto, mensaje, estado, respuesta, respuesta_at, created_at, modulo_clave')
     .order('created_at', { ascending: false })
+    // TECHO EXPLÍCITO: la bandeja no se pagina, así que crece con cada mensaje que
+    // escribe cualquier cliente. Escrito aquí, el día que la cifra se acerque se ve
+    // en el código y no en una bandeja a la que le faltan los mensajes viejos.
+    .limit(TOPE_VER_MAS)
 
   const ids = [...new Set((msgs ?? []).map(m => m.client_id))]
   const { data: clientes } = await db
@@ -114,7 +122,11 @@ export async function listarAmpliaciones(): Promise<Ampliacion[]> {
     .from('soporte_mensajes')
     .select('id, client_id, email, modulo_clave, estado, created_at, respuesta')
     .not('modulo_clave', 'is', null)
+    // TECHO EXPLÍCITO: sin `.limit()` lo pone PostgREST por su cuenta y recorta sin
+    // decir nada. Escrito aquí, el día que la cifra se acerque se ve en el código y no
+    // en una lista a la que le faltan filas.
     .order('created_at', { ascending: false })
+    .limit(TOPE_VER_MAS)
 
   const ids = [...new Set((msgs ?? []).map(m => m.client_id))]
   const [{ data: clientes }, { data: catalogo }] = await Promise.all([
@@ -398,10 +410,13 @@ export async function responderMensajeSoporte(
       asunto: msg.asunto,
       mensaje_admin: respuesta,
     })
+    // El `from` va con el dominio verificado en Resend y no se toca; el `replyTo`
+    // es dónde cae la respuesta del cliente, y ese sí sale del ajuste: si cambia
+    // el buzón de soporte, las respuestas lo siguen sin desplegar.
     await enviarEmail({
       to: msg.email,
       from: 'CLAUX Soporte <soporte@claux.es>',
-      replyTo: 'soporte@claux.es',
+      replyTo: await leerCorreo('email_soporte'),
       subject: asunto,
       html,
       tipo: 'respuesta_soporte',
@@ -411,4 +426,58 @@ export async function responderMensajeSoporte(
 
   revalidatePath('/admin/soporte')
   return { ok: true }
+}
+
+// ── Borrador de respuesta con la IA interna ──────────────────────────────────
+// Redacta un BORRADOR y lo devuelve: no toca el mensaje, no lo marca resuelto y
+// no envía nada. Enviar sigue siendo un acto humano (`responderMensajeSoporte`).
+// Consume la bolsa interna de CLAUX, no la del cliente.
+export async function borradorRespuestaIa(
+  id: number,
+): Promise<{ ok: boolean; texto?: string; error?: string }> {
+  await requirePermiso('soporte')
+  if (!(await adminAutenticado())) return { ok: false, error: 'No autorizado.' }
+
+  const db = createAdminClient()
+  const { data: msg } = await db
+    .from('soporte_mensajes')
+    // `nombre_empresa` NO está aquí: vive en `clients` y se trae aparte, igual
+    // que en `listarMensajesSoporte`. Pedirla en este select tumba la consulta
+    // entera y el mensaje se vuelve «no encontrado».
+    .select('client_id, asunto, mensaje, modulo_clave')
+    .eq('id', id)
+    .maybeSingle()
+  if (!msg) return { ok: false, error: 'Mensaje no encontrado.' }
+
+  const { data: cliente } = await db
+    .from('clients').select('nombre_empresa').eq('client_id', msg.client_id).maybeSingle()
+
+  // Las FAQ del módulo del que va el mensaje y las generales: son la única
+  // fuente de verdad que le damos: sin ellas se inventa la plataforma.
+  const claves = ['general', ...(msg.modulo_clave ? [msg.modulo_clave] : [])]
+  const [{ data: faqs }, { data: modulo }] = await Promise.all([
+    db.from('soporte_faq')
+      .select('pregunta, respuesta')
+      .in('modulo_clave', claves)
+      .eq('activo', true)
+      .order('orden'),
+    msg.modulo_clave
+      ? db.from('modulos_catalogo').select('nombre').eq('clave', msg.modulo_clave).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ])
+
+  try {
+    const texto = await borradorSoporte({
+      empresa:     cliente?.nombre_empresa ?? 'el cliente',
+      asunto:      msg.asunto,
+      mensaje:     msg.mensaje,
+      faqs:        (faqs ?? []) as { pregunta: string; respuesta: string }[],
+      moduloVenta: (modulo as { nombre?: string } | null)?.nombre ?? msg.modulo_clave,
+    })
+    if (!texto) return { ok: false, error: 'La IA no está disponible ahora mismo.' }
+    return { ok: true, texto }
+  } catch (e) {
+    if (e instanceof IaBolsaAgotada) return { ok: false, error: e.message }
+    throw e
+  }
 }

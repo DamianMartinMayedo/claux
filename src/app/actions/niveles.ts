@@ -23,7 +23,14 @@ import { logActividad } from '@/lib/audit'
 import { NIVELES, normalizarNivel } from '@/lib/niveles'
 import { DIMENSIONES_LIMITE, type Dimension } from '@/lib/limites'
 
-/** Nombre y descripción de un nivel. La clave y el orden no se tocan. */
+/**
+ * Nombre, descripción y modelo de IA de un nivel. La clave y el orden no se tocan.
+ *
+ * El MODELO se valida contra el catálogo en vez de fiarse del formulario: el
+ * `<select>` solo ofrece activos, pero entre que se pinta la pantalla y se pulsa
+ * Guardar da tiempo a apagar un modelo en la otra pestaña, y un id apagado aquí
+ * dentro manda a todo un nivel al respaldo gratis sin que nadie lo vea.
+ */
 export async function guardarNivel(formData: FormData) {
   await requirePermiso('modulos')
   const supabase = await createClient()
@@ -32,12 +39,21 @@ export async function guardarNivel(formData: FormData) {
   const nombre      = (formData.get('nombre')      as string ?? '').trim()
   const descripcion = (formData.get('descripcion') as string ?? '').trim() || null
   const activo      = formData.get('activo') === 'true'
+  const iaModel     = (formData.get('ia_model')    as string ?? '').trim()
 
   if (!nombre) return { ok: false as const, error: 'El nombre del nivel no puede quedar vacío.' }
 
+  if (iaModel) {
+    const { data: m } = await supabase
+      .from('ia_modelos').select('id, activo').eq('id', iaModel).maybeSingle()
+    if (!m?.activo) {
+      return { ok: false as const, error: `El modelo «${iaModel}» ya no está disponible. Elige otro en la lista.` }
+    }
+  }
+
   const { error } = await supabase
     .from('niveles')
-    .update({ nombre, descripcion, activo, updated_at: new Date().toISOString() })
+    .update({ nombre, descripcion, activo, ia_model: iaModel || null, updated_at: new Date().toISOString() })
     .eq('clave', clave)
   if (error) return { ok: false as const, error: error.message }
 
@@ -47,7 +63,7 @@ export async function guardarNivel(formData: FormData) {
     entity:      'nivel',
     entity_id:   clave,
     action:      'editar',
-    description: `Editó el nivel ${clave} — nombre: "${nombre}" — ${activo ? 'a la venta' : 'retirado de la venta'}`,
+    description: `Editó el nivel ${clave} — nombre: "${nombre}" — ${activo ? 'a la venta' : 'retirado de la venta'} — IA: ${iaModel || 'la del principal'}`,
   })
 
   revalidatePath('/admin/niveles')

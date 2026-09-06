@@ -12,21 +12,40 @@ import { esDocumentoIa, defaultDocumentoIa } from '@/lib/ia/documentos'
 type Resp = { ok: true } | { ok: false; error: string }
 
 // ── Ajustes globales: nombre/tono del agente, modelo principal, fallback, cupo ──
+// y la bolsa INTERNA (mig. 235), que es dinero nuestro y no del cliente: qué modelo
+// usa el equipo desde /admin y cuántas conversaciones al mes estamos dispuestos a
+// pagar. Van en el mismo formulario porque se deciden mirando lo mismo.
 export async function guardarConfigIaGlobal(args: {
   nombre: string
   tono: string
   principal: string
   fallbackGratis: string
   cupo: number
+  /** '' = el equipo usa el mismo modelo principal que los clientes. */
+  modeloInterno: string
+  /** 0 = apagar la IA interna. */
+  cupoInterno: number
 }): Promise<Resp> {
   await requirePermiso('ia')
   const db = createAdminClient()
+
+  // El interno se valida contra el catálogo, igual que el de un nivel: el
+  // desplegable solo ofrece activos, pero el formulario puede llevar rato abierto.
+  const interno = (args.modeloInterno || '').trim()
+  if (interno) {
+    const { data: m } = await db.from('ia_modelos').select('id, activo').eq('id', interno).maybeSingle()
+    if (!m?.activo) return { ok: false, error: `El modelo «${interno}» ya no está disponible. Elige otro en la lista.` }
+  }
+
   const filas = [
     { key: 'ia_nombre_agente',          value: (args.nombre || '').trim().slice(0, 40) || 'Claux' },
     { key: 'ia_tono',                   value: (args.tono || '').trim().slice(0, 80) },
     { key: 'ia_model',                  value: (args.principal || '').trim() },
     { key: 'ia_modelo_fallback_gratis', value: (args.fallbackGratis || '').trim() },
     { key: 'ia_cupo_conversaciones',    value: String(Math.max(1, Math.floor(args.cupo || 0))) },
+    { key: 'ia_model_interno',          value: interno },
+    // Aquí el 0 SÍ vale: es la forma de apagar la IA interna sin tocar código.
+    { key: 'ia_cupo_interno_mes',       value: String(Math.max(0, Math.floor(args.cupoInterno || 0))) },
   ]
   const { error } = await db.from('settings').upsert(
     filas.map(f => ({ ...f, updated_at: new Date().toISOString() })),

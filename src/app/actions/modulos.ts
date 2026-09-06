@@ -14,6 +14,8 @@ import {
   impactoDeCambios, recalcularCuotas, sembrarPrecio,
   type CambioPrecio, type ImpactoCliente,
 } from '@/lib/catalogo-precios'
+import { sugerirTextosModulo, type TextosModulo } from '@/lib/ia/equipo'
+import { IaBolsaAgotada } from '@/lib/ia/interna'
 
 /**
  * Los SEIS precios del formulario (moneda × nivel, mig. 225), con el nombre de
@@ -403,4 +405,49 @@ export async function aplicarSiembra(
   revalidatePath('/admin/modulos')
   revalidatePath('/admin/clientes')
   return { ok: true as const, escritos: filas.length, clientesRecalculados: tocados }
+}
+
+// ── Los tres textos del catálogo, propuestos por la IA interna ───────────────
+// Devuelve una SUGERENCIA: no escribe en el catálogo. El modal la vuelca en las
+// casillas y sigue haciendo falta pulsar Guardar. Consume la bolsa interna.
+export async function sugerirTextosModuloIa(
+  clave: string,
+): Promise<{ ok: boolean; textos?: TextosModulo; error?: string }> {
+  await requirePermiso('modulos')
+  const supabase = await createClient()
+
+  const { data: mod } = await supabase
+    .from('modulos_catalogo')
+    .select('clave, nombre, descripcion, beneficio, resumen, paginas')
+    .eq('clave', clave)
+    .maybeSingle()
+  if (!mod) return { ok: false, error: 'Módulo no encontrado.' }
+
+  // Las pantallas son lo único que le dice a la IA qué hace de verdad el módulo;
+  // van guardadas como JSON y a veces como texto, así que se leen con cuidado.
+  let paginas: string[] = []
+  try {
+    const crudo = typeof mod.paginas === 'string' ? JSON.parse(mod.paginas) : mod.paginas
+    if (Array.isArray(crudo)) {
+      paginas = crudo
+        .map((p: { label?: string; ruta?: string }) => (p?.label ?? p?.ruta ?? '').trim())
+        .filter(Boolean)
+    }
+  } catch { paginas = [] }
+
+  try {
+    const textos = await sugerirTextosModulo({
+      clave:       mod.clave,
+      nombre:      mod.nombre,
+      paginas,
+      descripcion: mod.descripcion,
+      beneficio:   mod.beneficio,
+      resumen:     mod.resumen,
+    })
+    if (!textos) return { ok: false, error: 'La IA no está disponible ahora mismo.' }
+    return { ok: true, textos }
+  } catch (e) {
+    if (e instanceof IaBolsaAgotada) return { ok: false, error: e.message }
+    throw e
+  }
 }

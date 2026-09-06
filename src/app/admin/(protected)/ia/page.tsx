@@ -2,27 +2,36 @@ import { requireAccesoPagina } from '@/lib/admin-guard'
 import { createClient } from '@/lib/supabase/server'
 import { DOCUMENTOS_IA } from '@/lib/ia/documentos'
 import { normalizarNivel } from '@/lib/niveles'
+import { elegirUltimoRecurso } from '@/lib/ia/modelo'
 import IaAdminClient, { type ModeloIa, type ConsumoCliente, type DocumentoUi } from './IaAdminClient'
+import { obtenerUsoInternoMes } from '@/lib/ia/uso'
+import { mesEnTz } from '@/lib/fecha-tz'
+import { TOPE_VER_MAS } from '@/lib/listados'
 
 export const dynamic = 'force-dynamic'
-
-function periodoActual(): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Havana', year: 'numeric', month: '2-digit' })
-    .format(new Date()).slice(0, 7)
-}
 
 export default async function AdminIaPage() {
   await requireAccesoPagina('ia')
   const supabase = await createClient()
-  const periodo = periodoActual()
+  const periodo = mesEnTz()
 
   const [{ data: modelosRaw }, { data: settingsRaw }, { data: docsRaw }, { data: clientesRaw }] = await Promise.all([
-    supabase.from('ia_modelos').select('*').order('orden'),
+    // Orden FIJO: los de pago, luego el resto de activos y al final los apagados.
+    // `orden` solo desempata dentro de cada grupo y `nombre` cierra el desempate:
+    // sin ese último criterio dos modelos con el mismo `orden` (todos los nuevos
+    // nacen con 100) quedaban al albur del orden físico de Postgres, que cambia
+    // con cada UPDATE — la tabla se reordenaba sola al encender un interruptor.
+    supabase.from('ia_modelos').select('*')
+      .order('activo', { ascending: false }).order('gratis').order('orden').order('nombre'),
     supabase.from('settings').select('key, value')
-      .in('key', ['ia_model', 'ia_modelo_fallback_gratis', 'ia_cupo_conversaciones', 'ia_nombre_agente', 'ia_tono']),
+      .in('key', ['ia_model', 'ia_modelo_fallback_gratis', 'ia_cupo_conversaciones', 'ia_nombre_agente', 'ia_tono',
+                  'ia_model_interno', 'ia_cupo_interno_mes']),
     supabase.from('settings').select('key, value').in('key', DOCUMENTOS_IA.map(d => d.key)),
+    // Techo explícito: esta lista es la tabla de consumo de IA, y una fila que falte
+    // es un cliente gastando sin aparecer en el reparto.
     supabase.from('clients').select('client_id, nombre_empresa, ia_config, nivel')
-      .contains('modulos_activos', ['asistente_ia']),
+      .contains('modulos_activos', ['asistente_ia'])
+      .limit(TOPE_VER_MAS),
   ])
 
   // El cupo base de cada cliente sale de su NIVEL. Se leen las tres filas de una
@@ -37,9 +46,22 @@ export default async function AdminIaPage() {
 
   const modelos = (modelosRaw ?? []) as ModeloIa[]
   const S = Object.fromEntries((settingsRaw ?? []).map(r => [r.key, r.value]))
-  const principal      = S.ia_model || 'deepseek-v4-flash-free'
-  const fallbackGratis = S.ia_modelo_fallback_gratis || 'deepseek-v4-flash-free'
+  // Lo que esta pantalla enseña tiene que ser lo que el motor va a usar de verdad,
+  // así que se resuelve igual que `resolverModelo`: el id de `settings` si sigue
+  // ACTIVO en el catálogo y, si no, el último recurso del propio catálogo. Antes
+  // caía en un id escrito a mano —`deepseek-v4-flash-free`, borrado hace tiempo—, y
+  // un id que no está entre los activos no existe como `<option>`: el desplegable
+  // mostraba el primero de la lista mientras el estado guardaba el fantasma, así que
+  // guardar sin tocar nada escribía en `settings` un modelo que nadie había elegido.
+  const ultimo = elegirUltimoRecurso(modelos)
+  const activo = (id: string) => modelos.some(m => m.id === id && m.activo)
+  const principal      = activo(S.ia_model) ? S.ia_model : (ultimo?.id ?? '')
+  const fallbackGratis = activo(S.ia_modelo_fallback_gratis) ? S.ia_modelo_fallback_gratis : (ultimo?.id ?? '')
   const cupoGlobal     = parseInt(S.ia_cupo_conversaciones ?? '500', 10) || 500
+  // El interno vacío es un valor con significado («el mismo que el principal»), así
+  // que NO se resuelve al último recurso como los otros dos: se deja vacío y el
+  // desplegable lo dice con todas las letras.
+  const modeloInterno  = activo(S.ia_model_interno) ? S.ia_model_interno : ''
   const nombreAgente   = S.ia_nombre_agente || 'Claux'
   const tono           = S.ia_tono || 'cercano y directo, como un asesor de confianza'
   const principalGratis = modelos.find(m => m.id === principal)?.gratis ?? false
@@ -85,6 +107,9 @@ export default async function AdminIaPage() {
     }
   }).sort((a, b) => b.conversaciones - a.conversaciones)
 
+  // La bolsa interna: lo que gastamos NOSOTROS este mes, por origen (mig. 235).
+  const interno = await obtenerUsoInternoMes()
+
   return (
     <IaAdminClient
       modelos={modelos}
@@ -96,6 +121,8 @@ export default async function AdminIaPage() {
       documentos={documentos}
       periodo={periodo}
       consumo={consumo}
+      modeloInterno={modeloInterno}
+      interno={interno}
     />
   )
 }

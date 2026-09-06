@@ -1,13 +1,11 @@
 'use client'
 
-import { X } from 'lucide-react'
 import { useState, useRef } from 'react'
-import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { editarModeloIa } from '@/app/actions/ia-admin'
 import CampoPassword from '@/components/CampoPassword'
-import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import FormHelp from '@/components/portal/FormHelp'
+import ModalShell from '@/components/portal/ModalShell'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import type { ModeloIa } from './IaAdminClient'
 
@@ -26,8 +24,6 @@ export default function EditarModeloIaModal({ modelo, onClose }: { modelo: Model
   const [gratis, setGratis] = useState(modelo.gratis)
   const [quitarKey, setQuitarKey] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
-
-  useModalKeyboard(true, onClose)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -69,13 +65,8 @@ export default function EditarModeloIaModal({ modelo, onClose }: { modelo: Model
     router.refresh()
   }
 
-  return createPortal(
-    <div className="modal-backdrop">
-      <div className="modal modal-lg">
-        <div className="modal-header">
-          <h2 className="modal-title">Editar modelo</h2>
-          <button onClick={onClose} className="modal-close" aria-label="Cerrar"><X size={18} /></button>
-        </div>
+  return (
+    <ModalShell title="Editar modelo" subtitle={modelo.id} size="modal-lg" onClose={onClose}>
         <form ref={formRef} onSubmit={handleSubmit}>
           <div className="modal-body">
             <div className="grid-cols-2">
@@ -163,9 +154,7 @@ export default function EditarModeloIaModal({ modelo, onClose }: { modelo: Model
               {loading ? <><span className="spinner" /> Guardando...</> : 'Guardar cambios'}
             </button>
           </div>
-        </form>
-      </div>
-    </div>,
-    document.body,
+      </form>
+    </ModalShell>
   )
 }

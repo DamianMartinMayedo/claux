@@ -14,7 +14,11 @@ export type NivelFila = {
   descripcion: string | null
   orden:       number
   activo:      boolean
+  /** `null` = hereda el modelo principal de IA. */
+  ia_model:    string | null
 }
+
+export type ModeloFila = { id: string; nombre: string; gratis: boolean }
 
 export type LimiteFila = {
   dimension: Dimension
@@ -29,7 +33,8 @@ function aTexto(v: number | null): string {
 }
 
 export default function NivelesPageClient(
-  { niveles: inicial, matriz: matrizInicial }: { niveles: NivelFila[]; matriz: LimiteFila[] },
+  { niveles: inicial, matriz: matrizInicial, modelos }:
+  { niveles: NivelFila[]; matriz: LimiteFila[]; modelos: ModeloFila[] },
 ) {
   const router = useRouter()
   const { success: toastSuccess, error: toastError, loading: toastLoading } = useToast()
@@ -45,7 +50,7 @@ export default function NivelesPageClient(
   const [guardandoNiveles, empezarNiveles] = useTransition()
   const [guardandoLimites, empezarLimites] = useTransition()
 
-  function editarNivel(clave: Nivel, campo: 'nombre' | 'descripcion' | 'activo', valor: string | boolean) {
+  function editarNivel(clave: Nivel, campo: 'nombre' | 'descripcion' | 'activo' | 'ia_model', valor: string | boolean) {
     setNiveles(prev => prev.map(n => n.clave === clave ? { ...n, [campo]: valor } : n))
   }
 
@@ -58,6 +63,7 @@ export default function NivelesPageClient(
         fd.append('nombre', n.nombre)
         fd.append('descripcion', n.descripcion ?? '')
         fd.append('activo', String(n.activo))
+        fd.append('ia_model', n.ia_model ?? '')
         const res = await guardarNivel(fd)
         if (!res.ok) { await ld.dismiss(); toastError(res.error ?? 'No se pudo guardar'); return }
       }
@@ -128,6 +134,34 @@ export default function NivelesPageClient(
                   onChange={e => editarNivel(n.clave, 'descripcion', e.target.value)}
                 />
               </div>
+              <div className="input-group">
+                <label htmlFor={`niv-ia-${n.clave}`}>Modelo de IA</label>
+                {/* Lo que de verdad hace que un nivel se note: no solo cuántas
+                    preguntas caben, sino con qué contesta. Vacío = el principal,
+                    que es como estaban los tres hasta ahora. */}
+                <select
+                  id={`niv-ia-${n.clave}`} className="input"
+                  value={n.ia_model ?? ''}
+                  onChange={e => editarNivel(n.clave, 'ia_model', e.target.value)}
+                >
+                  <option value="">El principal de IA</option>
+                  {modelos.map(m => (
+                    <option key={m.id} value={m.id}>{m.nombre}{m.gratis ? '' : ' · pago'}</option>
+                  ))}
+                  {/* El que está guardado pero ya no está activo se sigue listando: si
+                      no, el desplegable enseñaría otro y parecería que el nivel usa
+                      uno que no usa. Se ve, se avisa y se cambia. */}
+                  {n.ia_model && !modelos.some(m => m.id === n.ia_model) && (
+                    <option value={n.ia_model}>{n.ia_model} · desactivado</option>
+                  )}
+                </select>
+                {n.ia_model && !modelos.some(m => m.id === n.ia_model) && (
+                  <span className="input-hint input-hint-warning">
+                    Ese modelo está desactivado: hoy contesta el principal. Elige otro.
+                  </span>
+                )}
+              </div>
+
               <label className="module-check">
                 <input
                   type="checkbox" checked={n.activo}

@@ -4,6 +4,8 @@ import { useState, useRef, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Pencil, Trash2, Activity, Loader2, X } from 'lucide-react'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import BarraGuardar from '@/components/BarraGuardar'
+import Tabs from '@/components/Tabs'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { RowActions } from '@/components/portal/RowActions'
 import FormHelp from '@/components/portal/FormHelp'
@@ -12,6 +14,7 @@ import { PRUEBA_LENTA_MS, type EstadoPrueba, type PruebaModeloUI, type PruebaMod
 import NuevoModeloIaModal from './NuevoModeloIaModal'
 import EditarModeloIaModal from './EditarModeloIaModal'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { useOrden, ThOrden, type ColumnasOrden } from '@/components/TableSort'
 import DocumentoIaModal from './DocumentoIaModal'
 
 export interface ModeloIa {
@@ -25,6 +28,11 @@ export interface ConsumoCliente {
 export interface DocumentoUi {
   key: string; label: string; descripcion: string; valor: string; esPersonalidad: boolean
 }
+export interface UsoInterno {
+  periodo: string; conversaciones: number; tokensIn: number; tokensOut: number
+  cupo: number; cercaDelTope: boolean; agotado: boolean
+  porOrigen: { origen: string; conversaciones: number; tokensIn: number; tokensOut: number }[]
+}
 
 interface Props {
   modelos: ModeloIa[]
@@ -36,6 +44,16 @@ interface Props {
   documentos: DocumentoUi[]
   periodo: string
   consumo: ConsumoCliente[]
+  modeloInterno: string
+  interno: UsoInterno
+}
+
+/** En qué se gasta la bolsa interna, dicho como se dice en el panel. */
+const ETIQUETA_ORIGEN: Record<string, string> = {
+  importador: 'Importador',
+  propuesta:  'Propuestas',
+  soporte:    'Soporte',
+  relleno:    'Relleno de textos',
 }
 
 // Resultado del health-check en la fila. «Lento» es su propio estado a propósito: un
@@ -52,6 +70,18 @@ function rotuloPrueba(pr: PruebaModeloUI): string {
   return '✗ Caído'
 }
 
+type PestanaIa = 'config' | 'documentos' | 'modelos' | 'consumo'
+
+/** Se ordena por lo que se mira: quién se está pasando de cupo y quién gasta. */
+const COLS_CONSUMO: ColumnasOrden<ConsumoCliente> = {
+  nombre:         { label: 'Cliente',        valor: c => c.nombre },
+  // El porcentaje, no el número: 400 conversaciones con cupo 5.000 no son un problema
+  // y 60 con cupo 50 sí. Sin cupo no hay porcentaje, y va al final como cualquier vacío.
+  conversaciones: { label: 'Conversaciones', valor: c => (c.cupo > 0 ? c.conversaciones / c.cupo : null) },
+  tokens:         { label: 'Tokens',         valor: c => c.tokens },
+  modelo:         { label: 'Modelo en uso',  valor: c => c.modeloActual },
+}
+
 function tituloPrueba(pr: PruebaModeloUI): string | undefined {
   if (pr.estado === 'lento') {
     return `No contestó en ${PRUEBA_LENTA_MS / 1000} s. Puede que acabe respondiendo, `
@@ -61,9 +91,10 @@ function tituloPrueba(pr: PruebaModeloUI): string | undefined {
   return pr.detalle
 }
 
-export default function IaAdminClient({ modelos, principal, fallbackGratis, cupoGlobal, nombreAgente, tono, documentos, periodo, consumo }: Props) {
+export default function IaAdminClient({ modelos, principal, fallbackGratis, cupoGlobal, nombreAgente, tono, documentos, periodo, consumo, modeloInterno, interno }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  const [tab, setTab] = useState<PestanaIa>('config')
 
   // Config global
   const [nombre, setNombre] = useState(nombreAgente)
@@ -71,6 +102,8 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
   const [prin, setPrin]   = useState(principal)
   const [fb, setFb]       = useState(fallbackGratis)
   const [cupo, setCupo]   = useState(String(cupoGlobal))
+  const [mInt, setMInt]   = useState(modeloInterno)
+  const [cInt, setCInt]   = useState(String(interno.cupo))
   const [confirmarBorrado, setConfirmarBorrado] = useState<ModeloIa | null>(null)
   const [editando, setEditando] = useState<ModeloIa | null>(null)
   const [pruebas, setPruebas] = useState<Record<string, PruebaModeloUI | 'cargando'>>({})
@@ -119,12 +152,27 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
   const activosGratis = activos.filter(m => m.gratis)
   const totalConv = consumo.reduce((s, c) => s + c.conversaciones, 0)
   const totalTok  = consumo.reduce((s, c) => s + c.tokens, 0)
-  const { pageItems: consumoItems, ...consumoPag } = usePagination(consumo)
+  const ordConsumo = useOrden(consumo, COLS_CONSUMO)
+  const { pageItems: consumoItems, ...consumoPag } = usePagination(ordConsumo.filas)
 
-  function guardarGlobal(e: React.FormEvent) {
-    e.preventDefault()
+  // Lo que está sin guardar de la configuración global. Se cuenta contra lo que vino del
+  // servidor, no contra un `sucio` de un solo bit: con la pantalla en pestañas, el pie
+  // tiene que poder decir cuántos campos quedan pendientes en una pestaña que no miras.
+  const cambiosConfig = ([
+    [nombre, nombreAgente], [ton, tono], [prin, principal],
+    [fb, fallbackGratis], [cupo, String(cupoGlobal)],
+    [mInt, modeloInterno], [cInt, String(interno.cupo)],
+  ] as const).filter(([ahora, antes]) => ahora !== antes).length
+
+  function guardarGlobal(e?: React.FormEvent) {
+    e?.preventDefault()
     startTransition(async () => {
-      const r = await guardarConfigIaGlobal({ nombre, tono: ton, principal: prin, fallbackGratis: fb, cupo: parseInt(cupo, 10) || 0 })
+      const r = await guardarConfigIaGlobal({
+        nombre, tono: ton, principal: prin, fallbackGratis: fb,
+        cupo: parseInt(cupo, 10) || 0,
+        modeloInterno: mInt,
+        cupoInterno: parseInt(cInt, 10) || 0,
+      })
       if (!r.ok) { toastError(r.error); return }
       toastSuccess('Configuración de IA guardada')
       router.refresh()
@@ -160,8 +208,21 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
         </div>
       </div>
 
-      {/* ── Configuración global ── */}
-      <div className="card mb-5">
+      {/* Cuatro tarjetas seguidas —config, documentos, catálogo y consumo— eran un scroll
+          de pantalla y media para llegar a una tabla. Son cuatro asuntos distintos y cada
+          uno se abre por su cuenta. */}
+      <Tabs
+        tabs={[
+          { id: 'config',     label: 'Configuración' },
+          { id: 'documentos', label: 'Documentos', count: documentos.length },
+          { id: 'modelos',    label: 'Modelos',    count: activos.length },
+          { id: 'consumo',    label: 'Consumo',    count: consumo.length },
+        ]}
+        active={tab} onChange={setTab} ariaLabel="Secciones del asistente"
+      />
+
+      {tab === 'config' && (
+      <div className="card">
         <div className="card-header">
           <h2 className="card-title">Configuración global</h2>
         </div>
@@ -212,14 +273,44 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
             <input id="ia-cupo" type="number" min="1" step="1" className="input"
                    value={cupo} onChange={e => setCupo(e.target.value)} />
           </div>
-          <button type="submit" className="btn btn-primary" disabled={isPending}>
-            {isPending ? <><span className="spinner" /> Guardando...</> : 'Guardar configuración'}
-          </button>
+
+          {/* ── La bolsa que pagamos nosotros ── */}
+          <div className="config-subseccion">
+            <h3 className="config-section-title">IA interna (la pagamos nosotros)</h3>
+            <p className="config-section-sub">
+              La que usa el equipo desde el panel: el importador, los borradores de propuesta,
+              las respuestas de soporte y el relleno de textos. No sale del cupo de ningún cliente.
+            </p>
+          </div>
+          <div className="grid-cols-2">
+            <div className="input-group">
+              <div className="form-label-with-help">
+                <label htmlFor="ia-int-model">Modelo del equipo</label>
+                <FormHelp text="Aquí cabe el caro: lo usamos nosotros, no miles de clientes." label="Qué modelo usa el equipo" />
+              </div>
+              <select id="ia-int-model" className="input" value={mInt} onChange={e => setMInt(e.target.value)}>
+                <option value="">El mismo que el principal</option>
+                {activos.map(m => <option key={m.id} value={m.id}>{m.nombre}{m.gratis ? '' : ' · pago'}</option>)}
+              </select>
+            </div>
+            <div className="input-group">
+              <div className="form-label-with-help">
+                <label htmlFor="ia-int-cupo">Tope del mes (conversaciones)</label>
+                <FormHelp text="Al llegar al tope, las funciones con IA del panel se cortan hasta el mes que viene. Al cliente no se le corta nunca: baja al modelo gratis. 0 apaga la IA interna." label="Qué pasa al llegar al tope" />
+              </div>
+              <input id="ia-int-cupo" type="number" min="0" step="10" className="input"
+                     value={cInt} onChange={e => setCInt(e.target.value)} />
+            </div>
+          </div>
+          {/* El botón vive en el pie pegado (`<BarraGuardar>`, abajo). El submit se queda
+              para que Enter siga guardando desde cualquier campo. */}
         </form>
       </div>
+      )}
 
       {/* ── Documentos de Claux (personalidad + prompts por sección) ── */}
-      <div className="card mb-5">
+      {tab === 'documentos' && (
+      <div className="card">
         <div className="card-header">
           <h2 className="card-title">Documentos de {nombre || 'Claux'}</h2>
           <span className="badge badge-neutral">{documentos.length}</span>
@@ -238,9 +329,11 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
           ))}
         </div>
       </div>
+      )}
 
       {/* ── Catálogo de modelos ── */}
-      <div className="card mb-5">
+      {tab === 'modelos' && (
+      <div className="card">
         <div className="card-header">
           <h2 className="card-title">Modelos disponibles</h2>
           <div className="ia-cell-badges">
@@ -314,8 +407,58 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
           </table>
         </div>
       </div>
+      )}
 
       {/* ── Consumo del mes ── */}
+      {tab === 'consumo' && (
+      <>
+      {/* Primero lo nuestro: es la única cifra de esta pantalla que sale de nuestro
+          bolsillo, y la única que CORTA al llegar al tope. */}
+      <div className="card mb-5">
+        <div className="card-header">
+          <h2 className="card-title">IA interna ({interno.periodo})</h2>
+          <span className={`badge ${interno.agotado ? 'badge-error' : interno.cercaDelTope ? 'badge-warning' : 'badge-neutral'}`}>
+            {interno.conversaciones.toLocaleString('es-ES')} / {interno.cupo.toLocaleString('es-ES')} conversaciones
+          </span>
+        </div>
+
+        {interno.porOrigen.length === 0 ? (
+          <div className="table-empty table-empty-sm">
+            <p>{interno.cupo === 0
+              ? 'La IA interna está apagada (tope en 0).'
+              : 'El equipo no ha gastado IA este mes.'}</p>
+          </div>
+        ) : (
+          <div className="table-wrapper table-wrapper-flush">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>En qué se fue</th>
+                  <th className="col-num">Conversaciones</th>
+                  <th className="col-num">Tokens</th>
+                </tr>
+              </thead>
+              <tbody>
+                {interno.porOrigen.map(o => (
+                  <tr key={o.origen}>
+                    <td data-label="En qué se fue">{ETIQUETA_ORIGEN[o.origen] ?? o.origen}</td>
+                    <td data-label="Conversaciones" className="col-num">{o.conversaciones.toLocaleString('es-ES')}</td>
+                    <td data-label="Tokens" className="col-num">{(o.tokensIn + o.tokensOut).toLocaleString('es-ES')}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td>Total</td>
+                  <td className="col-num">{interno.conversaciones.toLocaleString('es-ES')}</td>
+                  <td className="col-num">{(interno.tokensIn + interno.tokensOut).toLocaleString('es-ES')}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </div>
+
       <div className="card">
         <div className="card-header">
           <h2 className="card-title">Consumo del mes ({periodo})</h2>
@@ -329,10 +472,10 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
             <table className="table">
               <thead>
                 <tr>
-                  <th>Cliente</th>
-                  <th className="col-num">Conversaciones</th>
-                  <th className="col-num">Tokens</th>
-                  <th>Modelo en uso</th>
+                  <ThOrden orden={ordConsumo} clave="nombre">Cliente</ThOrden>
+                  <ThOrden orden={ordConsumo} clave="conversaciones" className="col-num">Conversaciones</ThOrden>
+                  <ThOrden orden={ordConsumo} clave="tokens" className="col-num">Tokens</ThOrden>
+                  <ThOrden orden={ordConsumo} clave="modelo">Modelo en uso</ThOrden>
                 </tr>
               </thead>
               <tbody>
@@ -367,6 +510,18 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
         )}
         <TablePagination {...consumoPag} label="cliente" />
       </div>
+      </>
+      )}
+
+      {/* En la pestaña de configuración siempre, y en las otras SOLO si dejaste algo sin
+          guardar: si no, el pie sería una barra apagada bajo tres pestañas que no guardan
+          nada. Lo pendiente te sigue; lo demás no estorba. */}
+      {(tab === 'config' || cambiosConfig > 0) && (
+        <BarraGuardar
+          cambios={cambiosConfig} guardando={isPending}
+          onGuardar={() => guardarGlobal()} textoGuardar="Guardar configuración"
+        />
+      )}
 
       {editando && (
         <EditarModeloIaModal modelo={editando} onClose={() => setEditando(null)} />

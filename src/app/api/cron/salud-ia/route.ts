@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { probarModelo } from '@/lib/ia/modelo'
+import { probarModelo, elegirUltimoRecurso } from '@/lib/ia/modelo'
 import { enviarAvisoInterno } from '@/lib/email/enviar'
 
 // Chequeo diario de salud de los modelos de IA (ver vercel.json, 08:00 UTC ≈ 9-10h
@@ -30,13 +30,31 @@ export async function GET(req: NextRequest) {
   const db = createAdminClient()
   const [{ data: setRows }, { data: activosRaw }] = await Promise.all([
     db.from('settings').select('key, value').in('key', ['ia_model', 'ia_modelo_fallback_gratis']),
-    db.from('ia_modelos').select('id, nombre').eq('activo', true),
+    // Mismo desempate que el motor (`orden` + `nombre`): si el informe ordenara
+    // distinto, señalaría como último recurso un modelo que no es el que se usa.
+    db.from('ia_modelos').select('id, nombre, gratis, activo').eq('activo', true)
+      .order('orden').order('nombre'),
   ])
   const S = Object.fromEntries((setRows ?? []).map((r: { key: string; value: string }) => [r.key, r.value]))
-  const principalId = S.ia_model || 'deepseek-v4-flash-free'
-  const fallbackId  = S.ia_modelo_fallback_gratis || 'deepseek-v4-flash-free'
-  const activos = (activosRaw ?? []) as { id: string; nombre: string }[]
+  const activos = (activosRaw ?? []) as { id: string; nombre: string; gratis: boolean; activo: boolean }[]
   const nombreDe = new Map(activos.map(m => [m.id, m.nombre]))
+
+  // Los dos críticos se resuelven contra el catálogo VIVO, igual que hace el motor
+  // (`resolverModelo`): el id de `settings` si sigue activo y, si no, el último
+  // recurso del catálogo. Antes había un id escrito a mano ya borrado de la tabla:
+  // el cron lo habría probado, el proveedor habría devuelto 404 y el correo habría
+  // dicho «el modelo principal está caído» sobre un modelo que no existe. Un aviso
+  // que miente es peor que no avisar, porque se deja de leer.
+  const ultimo = elegirUltimoRecurso(activos)
+  const vigente = (id: string) => activos.some(m => m.id === id)
+  const principalId = vigente(S.ia_model) ? S.ia_model : (ultimo?.id ?? '')
+  const fallbackId  = vigente(S.ia_modelo_fallback_gratis) ? S.ia_modelo_fallback_gratis : (ultimo?.id ?? '')
+
+  // Sin un solo modelo activo no hay nada que probar y no hay nada roto que avisar:
+  // es una configuración vacía, y quien la ve es /admin/ia.
+  if (!activos.length) {
+    return NextResponse.json({ ok: true, avisado: false, motivo: 'sin modelos activos' })
+  }
 
   // Probar principal, respaldo y el resto de activos (las "alternativas"). Los dos
   // críticos con reintento; el resto una sola vez (solo informan si hace falta cambiar).
