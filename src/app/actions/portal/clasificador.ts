@@ -18,13 +18,17 @@ import { ESTADOS_FACTURA_INGRESO } from '@/lib/contabilidad'
 import { tieneModulo }  from '@/lib/modulos'
 import { hoyEnTz }      from '@/lib/fecha-tz'
 import { apuntesDeFilas, type FilaFacturaPL, type FilaGastoCobroPL } from '@/lib/pl/apuntes'
-import { esRolPL, indexarCategorias, type CategoriaPL, type RolPL } from '@/lib/pl/estado'
+import { esRolPL, indexarCategorias, ROL_PL_LABEL, type CategoriaPL, type RolPL } from '@/lib/pl/estado'
 import {
   candidatasPara, naceMarcada, duplicadosPropios,
   type Candidata, type Confianza, type CategoriaPropia,
 } from '@/lib/catalogo/emparejar'
 import { revalidarFinanzas } from './_finanzas-revalidar'
 import { impactoAgregado, type ImpactoEstructural, type OperacionEstructural } from '@/lib/pl/impacto'
+import { clasificarCuentas, type RolPropuesto } from '@/lib/ia/equipo'
+import { IaApagada, IaBolsaAgotada } from '@/lib/ia/interna'
+import { IA_SIN_RESPUESTA, selloIa, type PropuestaIa } from '@/lib/ia/propuesta'
+import { logActividad } from '@/lib/audit'
 
 export interface ResumenSemilla {
   ok: boolean
@@ -766,4 +770,153 @@ export async function marcarDepreciacionComoCoste(
   revalidarFinanzas()
 
   return { ok: true, hechos: aplicables.length, omitidos: pedidos.length - aplicables.length }
+}
+
+// ── Colocar en el plan las cuentas que llegaron con la migración (Fase 9) ─────
+//
+// Herramienta del EQUIPO, no del cliente: solo se ofrece en impersonación, que es
+// como migramos un negocio. Por eso su coste va a la bolsa interna de CLAUX y no
+// al addon del cliente — la misma regla que el importador (`lib/ia/interna.ts`).
+//
+// Y por eso conviven aquí las dos doctrinas sin mezclarse: la IA propone, y quien
+// escribe es la persona que pulsa aplicar. Que en el admin la IA pueda escribir
+// tras un clic no autoriza a que escriba sola en la contabilidad de un cliente.
+
+/** Cuántos nombres del lote caben en una línea de auditoría antes de resumir. */
+const AUDIT_CUENTAS = 6
+
+export async function proponerRolesIa(): Promise<
+  { ok: true; propuesta: PropuestaIa<RolPropuesto> } | { ok: false; error: string; reintentar?: boolean }
+> {
+  const session = await getPortalSession()
+  if (!session)     return { ok: false, error: 'Sesión inválida.' }
+  if (!session.imp) return { ok: false, error: 'Esta herramienta es del equipo de CLAUX.' }
+  if (!(await puedeEditarModulo('base'))) {
+    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  }
+
+  const db = createAdminClient()
+  const [{ data: cats }, { data: cli }] = await Promise.all([
+    db.from('categorias_gastos')
+      .select('categoria_id, nombre, descripcion, parent_id, rol_pl, es_sistema, estado')
+      .eq('client_id', session.client_id).eq('estado', 'ACTIVO'),
+    db.from('clients').select('nombre_empresa, sector').eq('client_id', session.client_id).maybeSingle(),
+  ])
+
+  type Fila = {
+    categoria_id: string; nombre: string; descripcion: string | null
+    parent_id: string | null; rol_pl: RolPL; es_sistema: boolean
+  }
+  const filas = (cats ?? []) as Fila[]
+  const hijasDe = new Map<string, string[]>()
+  for (const c of filas) {
+    if (!c.parent_id) continue
+    hijasDe.set(c.parent_id, [...(hijasDe.get(c.parent_id) ?? []), c.nombre])
+  }
+
+  // Las del sistema ya vienen colocadas por la semilla: no se preguntan, se le
+  // enseñan al modelo para que siga el mismo criterio en este negocio.
+  const raices  = filas.filter(c => !c.parent_id)
+  const propias = raices.filter(c => !c.es_sistema)
+  if (!propias.length) {
+    return { ok: false, error: 'No hay categorías propias que colocar: las que hay las puso el catálogo.' }
+  }
+
+  let negocio = (cli?.nombre_empresa as string | null) ?? 'un negocio'
+  if (cli?.sector) {
+    const { data: s } = await db.from('plantillas_sector')
+      .select('nombre').eq('sector', cli.sector).maybeSingle()
+    negocio = `${negocio} · ${(s?.nombre as string | null) ?? cli.sector}`
+  }
+
+  try {
+    const propuesta = await clasificarCuentas({
+      negocio,
+      cuentas: propias.map(c => ({
+        categoria_id: c.categoria_id,
+        nombre:       c.nombre,
+        descripcion:  c.descripcion,
+        hijas:        hijasDe.get(c.categoria_id) ?? [],
+        rol_actual:   c.rol_pl,
+      })),
+      yaClasificadas: raices.filter(c => c.es_sistema).map(c => ({ nombre: c.nombre, rol: c.rol_pl })),
+    })
+    if (!propuesta) return { ok: false, error: IA_SIN_RESPUESTA, reintentar: true }
+    return { ok: true, propuesta }
+  } catch (e) {
+    if (e instanceof IaBolsaAgotada || e instanceof IaApagada) return { ok: false, error: e.message }
+    throw e
+  }
+}
+
+/**
+ * Aplica lo marcado. Lo que llega del navegador NO se cree: se vuelve a leer qué
+ * categorías son de este cliente, raíces y no del sistema, y lo que no sobreviva
+ * al cruce no se escribe. Cambiar el papel de una raíz mueve dinero de renglón en
+ * el informe de un negocio real; el id de una categoría ajena no puede entrar por
+ * el `update`.
+ */
+export async function aplicarRolesIa(args: { entradas: RolPropuesto[]; propuestas: number }): Promise<
+  { ok: boolean; aplicadas?: number; error?: string }
+> {
+  const session = await getPortalSession()
+  if (!session)             return { ok: false, error: 'Sesión inválida.' }
+  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (!session.imp)         return { ok: false, error: 'Esta herramienta es del equipo de CLAUX.' }
+  if (!(await puedeEditarModulo('base'))) {
+    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  }
+  if (!args.entradas.length) return { ok: false, error: 'No has marcado ninguna categoría.' }
+
+  const db = createAdminClient()
+  const { data } = await db.from('categorias_gastos')
+    .select('categoria_id, nombre, rol_pl, parent_id, es_sistema')
+    .eq('client_id', session.client_id)
+    .in('categoria_id', args.entradas.map(e => e.categoria_id).slice(0, 100))
+
+  const validas = new Map(
+    ((data ?? []) as { categoria_id: string; nombre: string; rol_pl: RolPL; parent_id: string | null; es_sistema: boolean }[])
+      .filter(c => !c.parent_id && !c.es_sistema)
+      .map(c => [c.categoria_id, c]),
+  )
+
+  // Un update por renglón y no uno por categoría: son once renglones como mucho.
+  const porRol = new Map<RolPL, { ids: string[]; nombres: string[] }>()
+  for (const e of args.entradas) {
+    const cat = validas.get(e.categoria_id)
+    if (!cat || !esRolPL(e.rol) || e.rol === cat.rol_pl) continue
+    const g = porRol.get(e.rol) ?? { ids: [], nombres: [] }
+    g.ids.push(cat.categoria_id)
+    g.nombres.push(`${cat.nombre} → ${ROL_PL_LABEL[e.rol]}`)
+    porRol.set(e.rol, g)
+  }
+  if (!porRol.size) {
+    return { ok: false, error: 'Ninguna de esas categorías se puede cambiar ya. Vuelve a pedir la propuesta.' }
+  }
+
+  const cambios: string[] = []
+  for (const [rol, g] of porRol) {
+    const { error } = await db.from('categorias_gastos')
+      .update({ rol_pl: rol, updated_at: new Date().toISOString() })
+      .eq('client_id', session.client_id)
+      .in('categoria_id', g.ids)
+    if (error) return { ok: false, error: error.message }
+    cambios.push(...g.nombres)
+  }
+
+  // Una traza por lote y no por categoría: lo que hubo aquí fue UN clic, y el
+  // registro tiene que contar eso —quién, cuántas y de qué a qué—.
+  const resumen = cambios.slice(0, AUDIT_CUENTAS).join('; ')
+  await logActividad(db, {
+    user_email: session.imp.admin_email,
+    entity:     'categoria',
+    entity_id:  session.client_id,
+    action:     'clasificar_ia',
+    description: `${selloIa('contabilidad_cuentas', cambios.length, args.propuestas)} — ${resumen}`
+      + (cambios.length > AUDIT_CUENTAS ? ` y ${cambios.length - AUDIT_CUENTAS} más` : ''),
+  })
+
+  revalidatePath('/portal/gastos')
+  revalidarFinanzas()
+  return { ok: true, aplicadas: cambios.length }
 }

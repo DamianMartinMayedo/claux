@@ -27,6 +27,8 @@ export const ENTIDADES_AUDIT = {
   nivel:                 { label: 'Nivel',                tono: 'badge-warning' },
   modulo_catalogo:       { label: 'Módulo del catálogo',  tono: 'badge-warning' },
   modulo_cliente:        { label: 'Módulo de un cliente', tono: 'badge-warning' },
+  faq:                   { label: 'Pregunta frecuente',   tono: 'badge-neutral' },
+  categoria:             { label: 'Categoría de gasto',   tono: 'badge-neutral' },
   usuario:               { label: 'Usuario',              tono: 'badge-info' },
   firma:                 { label: 'Firma',                tono: 'badge-neutral' },
   captura:               { label: 'Captura',              tono: 'badge-neutral' },

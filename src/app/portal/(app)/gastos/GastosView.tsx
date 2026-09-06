@@ -49,6 +49,7 @@ import { useEmpresas }                 from '@/components/portal/EmpresaColorCon
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
 import Tabs                            from '@/components/Tabs'
 import AsistenteCatalogo               from './AsistenteCatalogo'
+import ClasificarCuentasIa             from './ClasificarCuentasIa'
 import { useRowSelection }             from '@/components/portal/useRowSelection'
 import BulkBar                         from '@/components/portal/BulkBar'
 import HeaderCheck                     from '@/components/portal/HeaderCheck'
@@ -822,10 +823,12 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
 
 // ── Vista principal ─────────────────────────────────────────────────────────────
 
-export default function GastosView({ data, puedeEditar, gaveta, children }: {
+export default function GastosView({ data, puedeEditar, gaveta, iaCuentas, children }: {
   data: GastosCobrosPageData
   puedeEditar: boolean
   gaveta: ResumenGaveta
+  /** Colocar las categorías migradas con IA: solo el equipo, y solo si está encendida. */
+  iaCuentas?: boolean
   children?: React.ReactNode
 }) {
   const router = useRouter()
@@ -1438,6 +1441,10 @@ export default function GastosView({ data, puedeEditar, gaveta, children }: {
 
       {/* ══ TAB CATEGORÍAS ══ */}
       {tab === 'categorias' && (
+        <>
+        {/* Herramienta del equipo, no del cliente: solo se pinta en impersonación
+            (la página lo decide). Es la última mano de una migración. */}
+        {iaCuentas && <ClasificarCuentasIa />}
         <div className="card card-table">
           <div className="mon-card-header">
             <h2 className="mon-section-title">Categorías de gastos</h2>
@@ -1549,6 +1556,7 @@ export default function GastosView({ data, puedeEditar, gaveta, children }: {
           )}
           <TablePagination {...catPag} label="categoría" />
         </div>
+        </>
       )}
 
       {/* Modales */}
