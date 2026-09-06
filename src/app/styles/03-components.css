@@ -2611,3 +2611,232 @@ input[type="checkbox"]:checked::after {
 .account-menu-logout svg { color: var(--color-error); }
 .account-menu-logout:hover { background: var(--color-error-bg); color: var(--color-error); }
 
+
+/* ═══════════════════════════════════════════════════
+   IA — LO COMPARTIDO POR LAS DOS CARAS
+   ═══════════════════════════════════════════════════
+   La IA del admin (bolsa interna, nuestro dinero) se ve IGUAL que la del portal
+   (addon del cliente): misma estrellita, mismos puntos de espera, mismo botón-
+   icono. No es ahorro de CSS, es que un miembro del equipo que ya usó el portal
+   reconoce «esto lo escribió la IA» sin que se lo expliquen otra vez.
+   Lo que cambia entre caras es la DOCTRINA, no el aspecto: en el portal la IA
+   propone y nunca escribe; en el admin puede escribir, pero solo tras la vista
+   previa de `.iap-*` y un clic (docs/planes/ia-claux-plataforma.md §1-§2).
+   `.btn-ia` y `.ia-sparkle-icon` están arriba, con el resto de botones. */
+
+/* El <defs> del degradado que `IaSparkle` inyecta por instancia. Fuera de flujo:
+   es un SVG de 0×0 que solo existe para que el trazo tenga de dónde tirar. */
+.ia-grad-defs { position: absolute; width: 0; height: 0; pointer-events: none; }
+.ia-grad-0 { stop-color: var(--color-primary); }
+.ia-grad-1 { stop-color: var(--color-amber); }
+
+/* Botón-icono dentro de un panel de IA (copiar, cerrar, rehacer). */
+.ia-icon-btn       { background: none; border: none; color: var(--color-text-muted); cursor: pointer; display: inline-flex; padding: var(--space-1); border-radius: var(--radius-sm); transition: var(--transition); }
+.ia-icon-btn:hover { background: var(--color-surface-2); color: var(--color-text); }
+.ia-icon-btn:active { transform: scale(0.92); }
+.ia-icon-btn--active { background: var(--color-primary-subtle); color: var(--color-primary-text); }
+
+/* Indicador «escribiendo» (puntos). En Cuba una llamada de IA tarda, y una
+   pantalla quieta se lee como rota. */
+.ia-typing      { display: inline-flex; align-items: center; gap: 4px; padding: var(--space-1) 0; }
+.ia-typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--color-text-faint); display: inline-block; animation: ia-typing-bounce 1.2s infinite ease-in-out; }
+.ia-typing span:nth-child(2) { animation-delay: 0.15s; }
+.ia-typing span:nth-child(3) { animation-delay: 0.30s; }
+@keyframes ia-typing-bounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-4px); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .ia-typing span { animation: none; } }
+
+/* ── Toque de IA colgado de un icono (`.ia-tp-*`) ────────────────────────────
+   El globo pequeño: una estrellita que se pulsa y suelta un panel flotante con
+   lo que la IA tiene que decir. Nació en el portal (el análisis de un apartado) y
+   lo usa también el parte del panel del admin, que es lo mismo con otros datos:
+   se mira de pasada, no se trabaja sobre él. Cuando hay que TRABAJAR sobre lo que
+   dice la IA —marcar, aplicar, revisar línea a línea— eso es `.iap-*`, no esto. */
+.ia-tp         { position: relative; display: inline-flex; }
+/* Solo las «estrellitas» con el degradado de marca (sin círculo). El trazo del
+   icono usa el gradiente SVG #iaspark-… definido en el propio componente. */
+.ia-tp-icon {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  padding: 2px; border: none; background: none; line-height: 0;
+  color: var(--color-primary-text); cursor: pointer; transition: transform var(--transition);
+}
+.ia-tp-icon:hover  { transform: scale(1.1); }
+.ia-tp-icon:active { transform: scale(0.94); }
+/* El degradado de `IaSparkle` (.ia-grad-*) y el botón-icono de IA (.ia-icon-btn)
+   se mudaron a 03-components.css: los usan las dos caras desde que el admin tiene
+   su propia IA interna. */
+
+/* Aviso automático: solo informa (la acción la hace el icono) + cerrar */
+.ia-tp-callout {
+  position: absolute; top: calc(100% + var(--space-2)); left: 0; z-index: 35;
+  display: flex; align-items: flex-start; gap: var(--space-2);
+  width: min(300px, 82vw); padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
+  font-size: var(--text-sm); line-height: 1.45; color: var(--color-text);
+}
+.ia-tp-callout-text { flex: 1; font-weight: 500; }
+
+/* Panel de resultado del análisis */
+.ia-tp-panel {
+  position: absolute; top: calc(100% + var(--space-2)); left: 0; z-index: 35; display: block;
+  width: min(360px, 82vw); padding: var(--space-4);
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
+}
+.ia-tp-panel-head  { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-2); }
+.ia-tp-panel-title { font-size: var(--text-sm); font-weight: 700; color: var(--color-text); display: inline-flex; align-items: center; gap: var(--space-2); }
+.ia-tp-body        { display: block; font-size: var(--text-sm); color: var(--color-text); line-height: 1.55; white-space: pre-wrap; }
+.ia-tp-error       { display: block; color: var(--color-error); font-size: var(--text-sm); }
+.ia-tp-disclaimer  { display: block; margin-top: var(--space-3); font-size: var(--text-xs); color: var(--color-text-faint); }
+
+/* En móvil el aviso/panel de IA se ancla como sheet inferior a todo el ancho (con
+   márgenes) en vez de colgar del icono: si el touchpoint está a la derecha, el
+   posicionamiento absoluto `left: 0` se salía de la pantalla (se cortaba). */
+@media (max-width: 640px) {
+  .ia-tp-callout,
+  .ia-tp-panel {
+    position: fixed;
+    left: var(--space-4);
+    right: var(--space-4);
+    bottom: max(var(--space-4), env(safe-area-inset-bottom));
+    top: auto;
+    width: auto;
+    max-height: 70dvh;
+    overflow-y: auto;
+    z-index: 120;
+  }
+}
+
+/* Colgado de la derecha (cabecera de página): con `left: 0` el globo se salía
+   por el borde. En móvil manda el sheet de abajo, que ya ignora los dos lados. */
+.ia-tp-fin > .ia-tp-panel,
+.ia-tp-fin > .ia-tp-callout { left: auto; right: 0; }
+
+/* Varias frases en el mismo globo (el parte del día). Una debajo de otra y con
+   el enlace de la línea dentro, que es a dónde hay que ir a hacerlo. */
+.ia-tp-lineas { display: flex; flex-direction: column; gap: var(--space-3); }
+.ia-tp-linea  { display: block; font-size: var(--text-sm); color: var(--color-text); line-height: 1.5; }
+.ia-tp-linea a { color: var(--color-primary-text); text-decoration: none; font-weight: 600; }
+.ia-tp-linea a:hover { text-decoration: underline; }
+.ia-tp-reintentar { margin-top: var(--space-3); }
+
+/* ── Panel de propuesta supervisada (`.iap-*`) ───────────────────────────────
+   La vista previa de lo que la IA va a escribir, con sus líneas marcables. Es la
+   pieza que hace aplicable la doctrina del admin: sin ella «la IA escribe» sería
+   confiar a ciegas. Familia propia (`iap` = IA-propuesta) y no `.ia-tp-*` porque
+   aquel es un globo colgado de un icono y este es un bloque dentro del formulario,
+   con lista, scroll y pie de acciones. */
+.iap {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  overflow: hidden;
+  /* Separado por los dos lados: el panel se abre EN MEDIO de una pantalla —entre
+     el botón que lo pidió y la tabla de debajo—, y sin el margen de abajo queda
+     pegado a lo que sigue como si fuera parte de ello. */
+  margin-top: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.iap-head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  /* El mismo lavado tenue del `.btn-ia` en reposo: identifica el bloque como IA
+     sin robarle atención a los datos, que es lo que hay que leer. */
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--color-primary) 8%, var(--color-surface)) 0%,
+    color-mix(in srgb, var(--color-amber) 8%, var(--color-surface)) 100%);
+}
+.iap-title {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  font-size: var(--text-sm); font-weight: 700; color: var(--color-text);
+}
+.iap-count { font-size: var(--text-xs); color: var(--color-text-muted); font-weight: 500; }
+.iap-head-actions { display: inline-flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
+
+/* Aviso del conjunto: lo que la IA no supo resolver. */
+.iap-nota {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+  font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.5;
+}
+
+/* La lista. Tope de alto para que el pie de acciones no se vaya de la pantalla
+   con veinte líneas: el botón de aplicar tiene que verse siempre. */
+.iap-lista { max-height: 22rem; overflow-y: auto; }
+.iap-linea {
+  display: flex; align-items: flex-start; gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+.iap-linea:last-child { border-bottom: none; }
+.iap-linea:hover { background: var(--color-surface-2); }
+/* Desmarcada: sigue legible —hay que poder revisarla— pero se retira. */
+.iap-linea--off { opacity: 0.55; }
+.iap-check { margin-top: 2px; flex-shrink: 0; }
+.iap-cuerpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.iap-linea-head { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.iap-linea-titulo { font-size: var(--text-sm); font-weight: 600; color: var(--color-text); }
+
+/* El cambio, en una línea: lo que hay → lo que quedaría. El «antes» va tachado y
+   apagado porque el ojo tiene que quedarse con el «después». */
+.iap-cambio { display: flex; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; font-size: var(--text-sm); }
+.iap-antes  { color: var(--color-text-faint); text-decoration: line-through; word-break: break-word; }
+.iap-vacio  { color: var(--color-text-faint); font-style: italic; }
+.iap-flecha { color: var(--color-text-faint); flex-shrink: 0; }
+.iap-despues { color: var(--color-text); font-weight: 600; word-break: break-word; }
+.iap-motivo  { font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.45; }
+
+.iap-pie {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+}
+/* El descargo, con las mismas palabras que en el portal. */
+.iap-disclaimer { font-size: var(--text-xs); color: var(--color-text-faint); flex: 1 1 14rem; line-height: 1.4; }
+.iap-pie-actions { display: inline-flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
+/* El fallo lleva al lado su reintento: que el modelo no conteste es un tropiezo,
+   no una respuesta, y obligar a cerrar el panel y volver a buscar el botón por un
+   tropiezo es castigar al que mira. */
+.iap-error {
+  display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  color: var(--color-error); font-size: var(--text-sm);
+}
+.iap-error-texto { flex: 1 1 12rem; }
+.iap-cargando { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4); color: var(--color-text-muted); font-size: var(--text-sm); }
+
+/* Diagnóstico (`PanelDiagnosticoIa`): la variante que solo lee. Sin casilla, así
+   que el hueco de la izquierda lo ocupa la MARCA de la línea —lo que se busca al
+   leerlo: cuántas filas caen por cada cosa, o cuánto importa cada aviso. */
+.iap-diag {
+  display: flex; align-items: flex-start; gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+.iap-diag:last-child { border-bottom: none; }
+.iap-diag-marca {
+  flex-shrink: 0; min-width: 4.5rem;
+  font-size: var(--text-xs); font-weight: 700; color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+/* Qué hacer con ello. Va destacado sobre el apoyo: es lo accionable. */
+.iap-diag-detalle { font-size: var(--text-sm); color: var(--color-text); line-height: 1.45; }
+/* A dónde se va a hacerlo. Solo aparece cuando quien llama tiene una ruta real. */
+.iap-diag-enlace {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  align-self: flex-start;
+  font-size: var(--text-xs); font-weight: 600; color: var(--color-primary-text);
+  text-decoration: none; transition: var(--transition);
+}
+.iap-diag-enlace:hover { text-decoration: underline; }
+
+@media (max-width: 640px) {
+  .iap-head { flex-wrap: wrap; }
+  .iap-pie-actions { width: 100%; }
+  .iap-pie-actions .btn { flex: 1; justify-content: center; }
+  .iap-diag { flex-direction: column; gap: var(--space-1); }
+}

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requirePermiso } from '@/lib/admin-guard'
 import { esDocumentoIa, defaultDocumentoIa } from '@/lib/ia/documentos'
+import { esFuncionIa, type FnIa } from '@/lib/ia/funciones'
 
 // Acciones del panel de control de IA del admin (catálogo de modelos, límites
 // globales y override de cupo por cliente). Server-only; el acceso ya está
@@ -56,6 +57,30 @@ export async function guardarConfigIaGlobal(args: {
   return { ok: true }
 }
 
+// ── El interruptor de la IA interna ──
+// Aparte de `guardarConfigIaGlobal` a propósito: un interruptor se guarda al
+// pulsarlo, no al pulsar «Guardar». Uno que espera al pie deja la duda de si está
+// apagada o solo pendiente, y esa duda es justo la que el interruptor venía a
+// quitar. Se guarda lo APAGADO (no lo encendido) para que una función nueva nazca
+// encendida sin tener que reescribir el ajuste.
+export async function guardarInterruptoresIa(args: {
+  activa: boolean
+  apagadas: string[]
+}): Promise<Resp> {
+  await requirePermiso('ia')
+  const db = createAdminClient()
+  // Solo claves del catálogo: una clave inventada no apagaría nada y se quedaría
+  // ahí para siempre confundiendo al siguiente que lea el ajuste.
+  const apagadas: FnIa[] = [...new Set((args.apagadas ?? []).filter(esFuncionIa))]
+  const { error } = await db.from('settings').upsert([
+    { key: 'ia_interna_activa', value: args.activa ? '1' : '0', updated_at: new Date().toISOString() },
+    { key: 'ia_funciones_off',  value: JSON.stringify(apagadas), updated_at: new Date().toISOString() },
+  ], { onConflict: 'key' })
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/admin/ia')
+  return { ok: true }
+}
+
 // ── Documentos de IA editables (personalidad + prompts por sección) ──
 // La clave se valida contra el registro DOCUMENTOS_IA (no se permite escribir
 // cualquier setting arbitrario).
@@ -96,8 +121,15 @@ export async function toggleModeloIa(id: string, activo: boolean): Promise<Resp>
   return { ok: true }
 }
 
+/** Tarifa en USD por millón de tokens. Vacío o 0 = sin tarifa (no se estima coste). */
+function precio(v: unknown): number | null {
+  const n = Number(String(v ?? '').replace(',', '.'))
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
 export async function crearModeloIa(args: {
   id: string; nombre: string; gratis: boolean; api_base?: string | null; api_key_env?: string | null; api_key?: string | null
+  precioIn?: string | number | null; precioOut?: string | number | null
 }): Promise<Resp> {
   await requirePermiso('ia')
   const id = (args.id || '').trim()
@@ -108,6 +140,7 @@ export async function crearModeloIa(args: {
     id, nombre: nombre || id, gratis: !!args.gratis,
     api_base: args.api_base?.trim() || null,
     api_key_env: args.api_key_env?.trim() || null,
+    precio_in: precio(args.precioIn), precio_out: precio(args.precioOut),
     activo: true, orden: 100,
   })
   if (error) return { ok: false, error: error.message }
@@ -128,6 +161,7 @@ export async function editarModeloIa(args: {
   id: string; nombre: string; gratis: boolean
   api_base?: string | null; api_key_env?: string | null
   api_key?: string | null; quitarKey?: boolean
+  precioIn?: string | number | null; precioOut?: string | number | null
 }): Promise<Resp> {
   await requirePermiso('ia')
   const id = (args.id || '').trim()
@@ -138,6 +172,7 @@ export async function editarModeloIa(args: {
     gratis: !!args.gratis,
     api_base: args.api_base?.trim() || null,
     api_key_env: args.api_key_env?.trim() || null,
+    precio_in: precio(args.precioIn), precio_out: precio(args.precioOut),
   }).eq('id', id)
   if (error) return { ok: false, error: error.message }
 

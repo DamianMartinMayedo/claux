@@ -9,7 +9,10 @@ import Tabs from '@/components/Tabs'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { RowActions } from '@/components/portal/RowActions'
 import FormHelp from '@/components/portal/FormHelp'
-import { guardarConfigIaGlobal, toggleModeloIa, eliminarModeloIa } from '@/app/actions/ia-admin'
+import { guardarConfigIaGlobal, guardarInterruptoresIa, toggleModeloIa, eliminarModeloIa } from '@/app/actions/ia-admin'
+import IaSparkle from '@/components/ia/IaSparkle'
+import { FUNCIONES_IA, ETIQUETA_ORIGEN, type FnIa } from '@/lib/ia/funciones'
+import { costeUsd, formatearUsd, type Tarifa } from '@/lib/ia/coste'
 import { PRUEBA_LENTA_MS, type EstadoPrueba, type PruebaModeloUI, type PruebaModeloResp } from '@/lib/ia/prueba-tipos'
 import NuevoModeloIaModal from './NuevoModeloIaModal'
 import EditarModeloIaModal from './EditarModeloIaModal'
@@ -20,6 +23,8 @@ import DocumentoIaModal from './DocumentoIaModal'
 export interface ModeloIa {
   id: string; nombre: string; gratis: boolean; activo: boolean
   api_base: string | null; api_key_env: string | null; key_hint: string | null; orden: number
+  /** Tarifa en USD por millón de tokens. null = sin tarifa (no se estima coste). */
+  precio_in: number | null; precio_out: number | null
 }
 export interface ConsumoCliente {
   client_id: string; nombre: string; conversaciones: number; tokens: number
@@ -46,14 +51,14 @@ interface Props {
   consumo: ConsumoCliente[]
   modeloInterno: string
   interno: UsoInterno
-}
-
-/** En qué se gasta la bolsa interna, dicho como se dice en el panel. */
-const ETIQUETA_ORIGEN: Record<string, string> = {
-  importador: 'Importador',
-  propuesta:  'Propuestas',
-  soporte:    'Soporte',
-  relleno:    'Relleno de textos',
+  /** El interruptor general de la IA interna. */
+  iaActiva: boolean
+  /** Las funciones apagadas una a una. */
+  funcionesOff: FnIa[]
+  /** La tarifa del modelo que usa el equipo, para poner el gasto en dinero. */
+  tarifaInterna: Tarifa
+  /** El nombre del modelo con el que se estima ese coste. */
+  modeloInternoNombre: string
 }
 
 // Resultado del health-check en la fila. «Lento» es su propio estado a propósito: un
@@ -70,7 +75,10 @@ function rotuloPrueba(pr: PruebaModeloUI): string {
   return '✗ Caído'
 }
 
-type PestanaIa = 'config' | 'documentos' | 'modelos' | 'consumo'
+type PestanaIa = 'config' | 'equipo' | 'documentos' | 'modelos' | 'consumo'
+
+/** Las funciones agrupadas por el área donde aparecen, en el orden del catálogo. */
+const AREAS_FUNCIONES = [...new Set(FUNCIONES_IA.map(f => f.area))]
 
 /** Se ordena por lo que se mira: quién se está pasando de cupo y quién gasta. */
 const COLS_CONSUMO: ColumnasOrden<ConsumoCliente> = {
@@ -91,7 +99,10 @@ function tituloPrueba(pr: PruebaModeloUI): string | undefined {
   return pr.detalle
 }
 
-export default function IaAdminClient({ modelos, principal, fallbackGratis, cupoGlobal, nombreAgente, tono, documentos, periodo, consumo, modeloInterno, interno }: Props) {
+export default function IaAdminClient({
+  modelos, principal, fallbackGratis, cupoGlobal, nombreAgente, tono, documentos, periodo,
+  consumo, modeloInterno, interno, iaActiva, funcionesOff, tarifaInterna, modeloInternoNombre,
+}: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [tab, setTab] = useState<PestanaIa>('config')
@@ -104,6 +115,11 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
   const [cupo, setCupo]   = useState(String(cupoGlobal))
   const [mInt, setMInt]   = useState(modeloInterno)
   const [cInt, setCInt]   = useState(String(interno.cupo))
+  // Los interruptores NO van al pie de guardar: se aplican al pulsarlos (ver
+  // `guardarInterruptoresIa`). El estado local es solo para que la pantalla
+  // responda al instante mientras la acción viaja.
+  const [activa, setActiva] = useState(iaActiva)
+  const [off, setOff]       = useState<FnIa[]>(funcionesOff)
   const [confirmarBorrado, setConfirmarBorrado] = useState<ModeloIa | null>(null)
   const [editando, setEditando] = useState<ModeloIa | null>(null)
   const [pruebas, setPruebas] = useState<Record<string, PruebaModeloUI | 'cargando'>>({})
@@ -150,6 +166,8 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
 
   const activos = modelos.filter(m => m.activo)
   const activosGratis = activos.filter(m => m.gratis)
+  // null = no hay tarifa del modelo interno, y entonces no se enseña un número.
+  const costeTotal = costeUsd(interno.tokensIn, interno.tokensOut, tarifaInterna)
   const totalConv = consumo.reduce((s, c) => s + c.conversaciones, 0)
   const totalTok  = consumo.reduce((s, c) => s + c.tokens, 0)
   const ordConsumo = useOrden(consumo, COLS_CONSUMO)
@@ -177,6 +195,23 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
       toastSuccess('Configuración de IA guardada')
       router.refresh()
     })
+  }
+
+  // Un interruptor se guarda al pulsarlo. La pantalla se mueve ya y, si la acción
+  // falla, vuelve a donde estaba y lo dice: dejarla movida con el ajuste sin
+  // guardar sería mentir sobre si la IA está encendida.
+  function guardarSwitches(nuevaActiva: boolean, nuevasOff: FnIa[]) {
+    const antesActiva = activa, antesOff = off
+    setActiva(nuevaActiva); setOff(nuevasOff)
+    startTransition(async () => {
+      const r = await guardarInterruptoresIa({ activa: nuevaActiva, apagadas: nuevasOff })
+      if (!r.ok) { setActiva(antesActiva); setOff(antesOff); toastError(r.error); return }
+      router.refresh()
+    })
+  }
+
+  function toggleFuncion(clave: FnIa, encender: boolean) {
+    guardarSwitches(activa, encender ? off.filter(f => f !== clave) : [...off, clave])
   }
 
   function toggle(id: string, activo: boolean) {
@@ -208,12 +243,14 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
         </div>
       </div>
 
-      {/* Cuatro tarjetas seguidas —config, documentos, catálogo y consumo— eran un scroll
-          de pantalla y media para llegar a una tabla. Son cuatro asuntos distintos y cada
-          uno se abre por su cuenta. */}
+      {/* Cinco asuntos distintos, cada uno por su cuenta: seguidos eran un scroll de
+          pantalla y media para llegar a una tabla. «Equipo» es la IA que pagamos
+          nosotros —interruptores, modelo, tope y lo que llevamos gastado—; el resto
+          de la pantalla es la IA que contrata el cliente. */}
       <Tabs
         tabs={[
           { id: 'config',     label: 'Configuración' },
+          { id: 'equipo',     label: 'Equipo' },
           { id: 'documentos', label: 'Documentos', count: documentos.length },
           { id: 'modelos',    label: 'Modelos',    count: activos.length },
           { id: 'consumo',    label: 'Consumo',    count: consumo.length },
@@ -274,38 +311,180 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
                    value={cupo} onChange={e => setCupo(e.target.value)} />
           </div>
 
-          {/* ── La bolsa que pagamos nosotros ── */}
-          <div className="config-subseccion">
-            <h3 className="config-section-title">IA interna (la pagamos nosotros)</h3>
-            <p className="config-section-sub">
-              La que usa el equipo desde el panel: el importador, los borradores de propuesta,
-              las respuestas de soporte y el relleno de textos. No sale del cupo de ningún cliente.
-            </p>
-          </div>
-          <div className="grid-cols-2">
-            <div className="input-group">
-              <div className="form-label-with-help">
-                <label htmlFor="ia-int-model">Modelo del equipo</label>
-                <FormHelp text="Aquí cabe el caro: lo usamos nosotros, no miles de clientes." label="Qué modelo usa el equipo" />
-              </div>
-              <select id="ia-int-model" className="input" value={mInt} onChange={e => setMInt(e.target.value)}>
-                <option value="">El mismo que el principal</option>
-                {activos.map(m => <option key={m.id} value={m.id}>{m.nombre}{m.gratis ? '' : ' · pago'}</option>)}
-              </select>
-            </div>
-            <div className="input-group">
-              <div className="form-label-with-help">
-                <label htmlFor="ia-int-cupo">Tope del mes (conversaciones)</label>
-                <FormHelp text="Al llegar al tope, las funciones con IA del panel se cortan hasta el mes que viene. Al cliente no se le corta nunca: baja al modelo gratis. 0 apaga la IA interna." label="Qué pasa al llegar al tope" />
-              </div>
-              <input id="ia-int-cupo" type="number" min="0" step="10" className="input"
-                     value={cInt} onChange={e => setCInt(e.target.value)} />
-            </div>
-          </div>
+          {/* La IA que pagamos nosotros tiene su propia pestaña («Equipo»): es otro
+              dinero, otro tope y otras reglas, y mezclada aquí se leía como un
+              apéndice de la del cliente. */}
           {/* El botón vive en el pie pegado (`<BarraGuardar>`, abajo). El submit se queda
               para que Enter siga guardando desde cualquier campo. */}
         </form>
       </div>
+      )}
+
+      {/* ── Equipo: la IA que pagamos nosotros ── */}
+      {tab === 'equipo' && (
+      <>
+      <div className="card mb-5">
+        <div className="card-header">
+          <h2 className="card-title">IA del equipo</h2>
+          <span className={`badge ${activa ? 'badge-success' : 'badge-neutral'}`}>{activa ? 'Encendida' : 'Apagada'}</span>
+        </div>
+        <p className="config-field-hint mb-4">
+          La que usamos nosotros desde el panel. La paga CLAUX, no sale del cupo de ningún
+          cliente, y a diferencia de la del cliente aquí puede escribir: siempre enseñando
+          antes qué va a cambiar, y siempre aplicándolo alguien.
+        </p>
+
+        <div className={activa ? 'ia-master' : 'ia-master ia-master--off'}>
+          <span className="ia-master-info">
+            <span className="ia-master-label"><IaSparkle size={15} strokeWidth={2} /> IA interna</span>
+            <span className="ia-master-desc">
+              {activa
+                ? 'Las funciones de abajo pueden llamar al proveedor.'
+                : 'Ninguna función llama al proveedor. Los botones lo dicen y no gastan.'}
+            </span>
+          </span>
+          <label className="switch" title="Encender o apagar toda la IA interna">
+            <input type="checkbox" checked={activa} disabled={isPending}
+                   aria-label="Encender o apagar toda la IA interna"
+                   onChange={e => guardarSwitches(e.target.checked, off)} />
+            <span className="switch-track" aria-hidden="true" />
+          </label>
+        </div>
+
+        <div className="grid-cols-2 mt-4">
+          <div className="input-group">
+            <div className="form-label-with-help">
+              <label htmlFor="ia-int-model">Modelo del equipo</label>
+              <FormHelp text="Aquí cabe el caro: lo usamos nosotros, no miles de clientes." label="Qué modelo usa el equipo" />
+            </div>
+            <select id="ia-int-model" className="input" value={mInt} onChange={e => setMInt(e.target.value)}>
+              <option value="">El mismo que el principal</option>
+              {activos.map(m => <option key={m.id} value={m.id}>{m.nombre}{m.gratis ? '' : ' · pago'}</option>)}
+            </select>
+          </div>
+          <div className="input-group">
+            <div className="form-label-with-help">
+              <label htmlFor="ia-int-cupo">Tope del mes (conversaciones)</label>
+              <FormHelp text="Un techo contra un bucle nuestro, no un ahorro: al llegar, las funciones con IA del panel se cortan hasta el mes que viene. Al cliente no se le corta nunca: baja al modelo gratis. Para apagarla, usa el interruptor de arriba." label="Qué pasa al llegar al tope" />
+            </div>
+            <input id="ia-int-cupo" type="number" min="0" step="10" className="input"
+                   value={cInt} onChange={e => setCInt(e.target.value)} />
+          </div>
+        </div>
+      </div>
+
+      {/* ── Función por función ── */}
+      <div className="card mb-5">
+        <div className="card-header">
+          <h2 className="card-title">Funciones</h2>
+          <span className="badge badge-neutral">{FUNCIONES_IA.length - off.length} de {FUNCIONES_IA.length} encendidas</span>
+        </div>
+        <p className="config-field-hint">
+          Apagar una función no es esconder su botón: la puerta se niega a llamar al
+          proveedor, así que tampoco gasta por otro camino. Las marcadas como «escribe»
+          pueden cambiar datos, siempre tras enseñar qué y con un clic de una persona.
+        </p>
+
+        {AREAS_FUNCIONES.map(area => (
+          <div key={area} className="ia-fn-grupo">
+            <span className="ia-fn-grupo-title">{area}</span>
+            {FUNCIONES_IA.filter(f => f.area === area).map(f => {
+              const encendida = !off.includes(f.clave)
+              return (
+                <div key={f.clave} className={activa ? 'ia-doc-row' : 'ia-doc-row ia-fn-row--inerte'}>
+                  <div className="ia-doc-info">
+                    <span className="ia-doc-label ia-cell-badges">
+                      {f.label}
+                      {f.escribe && <span className="badge badge-warning">escribe</span>}
+                    </span>
+                    <span className="ia-doc-desc">{f.descripcion}</span>
+                  </div>
+                  <label className="switch" title={`Encender o apagar: ${f.label}`}>
+                    <input type="checkbox" checked={encendida} disabled={isPending}
+                           aria-label={`Encender o apagar: ${f.label}`}
+                           onChange={e => toggleFuncion(f.clave, e.target.checked)} />
+                    <span className="switch-track" aria-hidden="true" />
+                  </label>
+                </div>
+              )
+            })}
+          </div>
+        ))}
+      </div>
+
+      {/* ── Lo que llevamos gastado ── */}
+      <div className="card">
+        <div className="card-header">
+          <h2 className="card-title">Gasto del mes ({interno.periodo})</h2>
+          <span className={`badge ${interno.agotado ? 'badge-error' : interno.cercaDelTope ? 'badge-warning' : 'badge-neutral'}`}>
+            {interno.conversaciones.toLocaleString('es-ES')} / {interno.cupo.toLocaleString('es-ES')} conversaciones
+          </span>
+        </div>
+
+        <div className="ia-uso-grid">
+          <div className="ia-uso-item">
+            <div className={`ia-uso-num ${interno.cercaDelTope ? 'ia-uso-warn' : ''}`}>{interno.conversaciones.toLocaleString('es-ES')}</div>
+            <div className="ia-uso-lbl">Conversaciones</div>
+          </div>
+          <div className="ia-uso-item">
+            <div className="ia-uso-num">{(interno.tokensIn + interno.tokensOut).toLocaleString('es-ES')}</div>
+            <div className="ia-uso-lbl">Tokens</div>
+          </div>
+          <div className="ia-uso-item">
+            <div className="ia-uso-num">{costeTotal == null ? '—' : formatearUsd(costeTotal)}</div>
+            {/* Estimado, y dicho: la tarifa la tecleamos nosotros y el gasto se
+                calcula con el modelo de HOY, aunque parte del mes fuera otro. */}
+            <div className="ia-uso-lbl">
+              {costeTotal == null ? `Sin tarifa (${modeloInternoNombre})` : `Coste estimado · ${modeloInternoNombre}`}
+            </div>
+          </div>
+        </div>
+
+        {interno.porOrigen.length === 0 ? (
+          <div className="table-empty table-empty-sm">
+            <p>{!activa
+              ? 'La IA interna está apagada.'
+              : interno.cupo === 0
+                ? 'La IA interna no tiene tope asignado.'
+                : 'El equipo no ha gastado IA este mes.'}</p>
+          </div>
+        ) : (
+          <div className="table-wrapper table-wrapper-flush">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>En qué se fue</th>
+                  <th className="col-num">Conversaciones</th>
+                  <th className="col-num">Tokens</th>
+                  <th className="col-num">Coste</th>
+                </tr>
+              </thead>
+              <tbody>
+                {interno.porOrigen.map(o => {
+                  const c = costeUsd(o.tokensIn, o.tokensOut, tarifaInterna)
+                  return (
+                    <tr key={o.origen}>
+                      <td data-label="En qué se fue">{ETIQUETA_ORIGEN[o.origen as keyof typeof ETIQUETA_ORIGEN] ?? o.origen}</td>
+                      <td data-label="Conversaciones" className="col-num">{o.conversaciones.toLocaleString('es-ES')}</td>
+                      <td data-label="Tokens" className="col-num">{(o.tokensIn + o.tokensOut).toLocaleString('es-ES')}</td>
+                      <td data-label="Coste" className="col-num">{c == null ? '—' : formatearUsd(c)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td>Total</td>
+                  <td className="col-num">{interno.conversaciones.toLocaleString('es-ES')}</td>
+                  <td className="col-num">{(interno.tokensIn + interno.tokensOut).toLocaleString('es-ES')}</td>
+                  <td className="col-num">{costeTotal == null ? '—' : formatearUsd(costeTotal)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </div>
+      </>
       )}
 
       {/* ── Documentos de Claux (personalidad + prompts por sección) ── */}
@@ -411,54 +590,6 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
 
       {/* ── Consumo del mes ── */}
       {tab === 'consumo' && (
-      <>
-      {/* Primero lo nuestro: es la única cifra de esta pantalla que sale de nuestro
-          bolsillo, y la única que CORTA al llegar al tope. */}
-      <div className="card mb-5">
-        <div className="card-header">
-          <h2 className="card-title">IA interna ({interno.periodo})</h2>
-          <span className={`badge ${interno.agotado ? 'badge-error' : interno.cercaDelTope ? 'badge-warning' : 'badge-neutral'}`}>
-            {interno.conversaciones.toLocaleString('es-ES')} / {interno.cupo.toLocaleString('es-ES')} conversaciones
-          </span>
-        </div>
-
-        {interno.porOrigen.length === 0 ? (
-          <div className="table-empty table-empty-sm">
-            <p>{interno.cupo === 0
-              ? 'La IA interna está apagada (tope en 0).'
-              : 'El equipo no ha gastado IA este mes.'}</p>
-          </div>
-        ) : (
-          <div className="table-wrapper table-wrapper-flush">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>En qué se fue</th>
-                  <th className="col-num">Conversaciones</th>
-                  <th className="col-num">Tokens</th>
-                </tr>
-              </thead>
-              <tbody>
-                {interno.porOrigen.map(o => (
-                  <tr key={o.origen}>
-                    <td data-label="En qué se fue">{ETIQUETA_ORIGEN[o.origen] ?? o.origen}</td>
-                    <td data-label="Conversaciones" className="col-num">{o.conversaciones.toLocaleString('es-ES')}</td>
-                    <td data-label="Tokens" className="col-num">{(o.tokensIn + o.tokensOut).toLocaleString('es-ES')}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td>Total</td>
-                  <td className="col-num">{interno.conversaciones.toLocaleString('es-ES')}</td>
-                  <td className="col-num">{(interno.tokensIn + interno.tokensOut).toLocaleString('es-ES')}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        )}
-      </div>
-
       <div className="card">
         <div className="card-header">
           <h2 className="card-title">Consumo del mes ({periodo})</h2>
@@ -510,13 +641,13 @@ export default function IaAdminClient({ modelos, principal, fallbackGratis, cupo
         )}
         <TablePagination {...consumoPag} label="cliente" />
       </div>
-      </>
       )}
 
-      {/* En la pestaña de configuración siempre, y en las otras SOLO si dejaste algo sin
-          guardar: si no, el pie sería una barra apagada bajo tres pestañas que no guardan
-          nada. Lo pendiente te sigue; lo demás no estorba. */}
-      {(tab === 'config' || cambiosConfig > 0) && (
+      {/* En las dos pestañas que guardan campos siempre, y en las otras SOLO si dejaste
+          algo sin guardar: si no, el pie sería una barra apagada bajo pestañas que no
+          guardan nada. Lo pendiente te sigue; lo demás no estorba. Los interruptores no
+          cuentan aquí: se guardan solos al pulsarlos. */}
+      {(tab === 'config' || tab === 'equipo' || cambiosConfig > 0) && (
         <BarraGuardar
           cambios={cambiosConfig} guardando={isPending}
           onGuardar={() => guardarGlobal()} textoGuardar="Guardar configuración"

@@ -10,7 +10,7 @@ import { autocompletarItemCatalogo } from '@/app/actions/portal/ia'
 import { OPCIONES_PERIODO } from '@/lib/catalogo-periodo'
 import ImageUpload from '@/components/ImageUpload'
 import { X, Check, Loader2 } from 'lucide-react'
-import IaSparkle from '@/components/portal/ia/IaSparkle'
+import IaSparkle from '@/components/ia/IaSparkle'
 import FormHelp from '@/components/portal/FormHelp'
 
 // Modal de alta/edición de un ítem del catálogo. Compartido entre el editor

@@ -3058,74 +3058,12 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 
 /* Icono de IA junto al nombre de un apartado */
 .page-title-ia { display: flex; align-items: center; gap: var(--space-2); }
-.ia-tp         { position: relative; display: inline-flex; }
-/* Solo las «estrellitas» con el degradado de marca (sin círculo). El trazo del
-   icono usa el gradiente SVG #iaspark-… definido en el propio componente. */
-.ia-tp-icon {
-  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
-  padding: 2px; border: none; background: none; line-height: 0;
-  color: var(--color-primary-text); cursor: pointer; transition: transform var(--transition);
-}
-.ia-tp-icon:hover  { transform: scale(1.1); }
-.ia-tp-icon:active { transform: scale(0.94); }
-.ia-grad-defs { position: absolute; width: 0; height: 0; pointer-events: none; }
-.ia-grad-0 { stop-color: var(--color-primary); }
-.ia-grad-1 { stop-color: var(--color-amber); }
+/* La familia `.ia-tp-*` (el icono, el aviso y el globo de resultado) se mudó a
+   03-components.css: desde que el parte del admin usa el mismo globo, la pintan
+   las dos caras. Aquí solo queda `.page-title-ia`, que es del portal. */
 
-.ia-icon-btn       { background: none; border: none; color: var(--color-text-muted); cursor: pointer; display: inline-flex; padding: var(--space-1); border-radius: var(--radius-sm); transition: var(--transition); }
-.ia-icon-btn:hover { background: var(--color-surface-2); color: var(--color-text); }
-.ia-icon-btn:active { transform: scale(0.92); }
-.ia-icon-btn--active { background: var(--color-primary-subtle); color: var(--color-primary-text); }
-
-/* Aviso automático: solo informa (la acción la hace el icono) + cerrar */
-.ia-tp-callout {
-  position: absolute; top: calc(100% + var(--space-2)); left: 0; z-index: 35;
-  display: flex; align-items: flex-start; gap: var(--space-2);
-  width: min(300px, 82vw); padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
-  background: var(--color-surface); border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
-  font-size: var(--text-sm); line-height: 1.45; color: var(--color-text);
-}
-.ia-tp-callout-text { flex: 1; font-weight: 500; }
-
-/* Panel de resultado del análisis */
-.ia-tp-panel {
-  position: absolute; top: calc(100% + var(--space-2)); left: 0; z-index: 35; display: block;
-  width: min(360px, 82vw); padding: var(--space-4);
-  background: var(--color-surface); border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
-}
-.ia-tp-panel-head  { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-2); }
-.ia-tp-panel-title { font-size: var(--text-sm); font-weight: 700; color: var(--color-text); display: inline-flex; align-items: center; gap: var(--space-2); }
-.ia-tp-body        { display: block; font-size: var(--text-sm); color: var(--color-text); line-height: 1.55; white-space: pre-wrap; }
-.ia-tp-error       { display: block; color: var(--color-error); font-size: var(--text-sm); }
-.ia-tp-disclaimer  { display: block; margin-top: var(--space-3); font-size: var(--text-xs); color: var(--color-text-faint); }
-
-/* En móvil el aviso/panel de IA se ancla como sheet inferior a todo el ancho (con
-   márgenes) en vez de colgar del icono: si el touchpoint está a la derecha, el
-   posicionamiento absoluto `left: 0` se salía de la pantalla (se cortaba). */
-@media (max-width: 640px) {
-  .ia-tp-callout,
-  .ia-tp-panel {
-    position: fixed;
-    left: var(--space-4);
-    right: var(--space-4);
-    bottom: max(var(--space-4), env(safe-area-inset-bottom));
-    top: auto;
-    width: auto;
-    max-height: 70dvh;
-    overflow-y: auto;
-    z-index: 120;
-  }
-}
-
-/* Indicador "escribiendo" (puntos) — chat e insights */
-.ia-typing      { display: inline-flex; align-items: center; gap: 4px; padding: var(--space-1) 0; }
-.ia-typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--color-text-faint); display: inline-block; animation: ia-typing-bounce 1.2s infinite ease-in-out; }
-.ia-typing span:nth-child(2) { animation-delay: 0.15s; }
-.ia-typing span:nth-child(3) { animation-delay: 0.30s; }
-@keyframes ia-typing-bounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-4px); opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .ia-typing span { animation: none; } }
+/* El indicador «escribiendo» (.ia-typing) también vive ahora en 03-components.css:
+   lo pintan el chat del portal y las esperas de IA del admin. */
 
 /* Banner del asistente IA en la configuración de reservas/citas */
 .ia-banner {

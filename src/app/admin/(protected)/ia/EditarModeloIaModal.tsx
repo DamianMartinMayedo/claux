@@ -7,6 +7,7 @@ import CampoPassword from '@/components/CampoPassword'
 import FormHelp from '@/components/portal/FormHelp'
 import ModalShell from '@/components/portal/ModalShell'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import CamposTarifa from './CamposTarifa'
 import type { ModeloIa } from './IaAdminClient'
 
 // Edición de un modelo de IA. Modal controlado por el padre (se abre desde el menú de
@@ -57,7 +58,10 @@ export default function EditarModeloIaModal({ modelo, onClose }: { modelo: Model
     }
 
     setLoading(true)
-    const r = await editarModeloIa({ id: modelo.id, nombre, gratis, api_base, api_key, api_key_env, quitarKey: quitar })
+    const r = await editarModeloIa({
+      id: modelo.id, nombre, gratis, api_base, api_key, api_key_env, quitarKey: quitar,
+      precioIn: (fd.get('precio_in') as string) ?? '', precioOut: (fd.get('precio_out') as string) ?? '',
+    })
     setLoading(false)
     if (!r.ok) { toastError(r.error); return }
     toastSuccess('Modelo actualizado')
@@ -147,6 +151,11 @@ export default function EditarModeloIaModal({ modelo, onClose }: { modelo: Model
               <input type="checkbox" checked={gratis} onChange={e => setGratis(e.target.checked)} />
               <span>Es un modelo gratis</span>
             </label>
+
+            {/* La tarifa solo sirve para poner en dinero lo que ya medimos en tokens
+                (pestaña Equipo). Sin ella el panel dice «sin tarifa» en vez de
+                inventarse un número. */}
+            {!gratis && <CamposTarifa precioIn={modelo.precio_in} precioOut={modelo.precio_out} />}
           </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>

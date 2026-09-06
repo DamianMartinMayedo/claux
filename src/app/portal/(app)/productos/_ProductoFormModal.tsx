@@ -4,7 +4,7 @@ import { toastError, toastLoading } from '@/app/contexts/ToastContext'
 import { useState, useTransition, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { Plus, X, Loader2 } from 'lucide-react'
-import IaSparkle from '@/components/portal/ia/IaSparkle'
+import IaSparkle from '@/components/ia/IaSparkle'
 import FormHelp from '@/components/portal/FormHelp'
 import {
   guardarProducto,

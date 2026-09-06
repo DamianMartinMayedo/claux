@@ -38,8 +38,15 @@ const DEFAULT_CUPO     = 500
 // (`ultimoRecurso`), y si no hay ninguno activo, `model` es null y quien llama dice
 // que la IA no está configurada.
 
-/** En qué se gasta la bolsa interna. Mismo juego que el CHECK de `ia_uso_interno`. */
-export type OrigenIa = 'importador' | 'propuesta' | 'soporte' | 'relleno'
+/**
+ * En qué se gasta la bolsa interna. Mismo juego que el CHECK de `ia_uso_interno`
+ * (mig. 236). Es el ÁREA, no la función: varias funciones del catálogo
+ * (`./funciones`) comparten origen para que el panel de consumo se lea por
+ * áreas —«Importador», «Soporte»— y no como una lista de catorce filas.
+ */
+export type OrigenIa =
+  | 'importador' | 'propuesta' | 'soporte' | 'relleno'
+  | 'presupuesto' | 'parte' | 'cliente' | 'contabilidad'
 
 /**
  * Quién conduce la sesión. Es la única llave que necesita el resolutor: de ella

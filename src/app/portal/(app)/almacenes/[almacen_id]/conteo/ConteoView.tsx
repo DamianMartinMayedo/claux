@@ -19,7 +19,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AlertTriangle, Check, Save, Trash2, Upload } from 'lucide-react'
-import IaSparkle from '@/components/portal/ia/IaSparkle'
+import IaSparkle from '@/components/ia/IaSparkle'
 import { toastError, toastSuccess, toastWarning, toastLoading } from '@/app/contexts/ToastContext'
 import {
   guardarAvanceConteo, aplicarConteo, anularConteo, guardarCabeceraConteo,

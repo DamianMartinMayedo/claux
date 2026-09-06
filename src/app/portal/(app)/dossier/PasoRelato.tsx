@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import { Loader2, Save, Users, Plus, Trash2 } from 'lucide-react'
 import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { useIa } from '@/components/portal/ia/IaContext'
-import IaSparkle from '@/components/portal/ia/IaSparkle'
+import IaSparkle from '@/components/ia/IaSparkle'
 import { redactarSeccionDossier, redactarRelatoCompleto } from '@/app/actions/portal/ia'
 import {
   guardarSecciones, sugerirEquipoDesdeRrhh,

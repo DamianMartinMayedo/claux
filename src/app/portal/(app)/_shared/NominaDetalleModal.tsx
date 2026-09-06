@@ -10,7 +10,7 @@ import {
 import { revisarNominaIa } from '@/app/actions/portal/ia'
 import { useIa } from '@/components/portal/ia/IaContext'
 import { X } from 'lucide-react'
-import IaSparkle from '@/components/portal/ia/IaSparkle'
+import IaSparkle from '@/components/ia/IaSparkle'
 import { hoyEnTz } from '@/lib/fecha-tz'
 
 export function formatMonto(n: number): string {

@@ -8,6 +8,7 @@ import CampoPassword from '@/components/CampoPassword'
 import FormHelp from '@/components/portal/FormHelp'
 import ModalShell from '@/components/portal/ModalShell'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
+import CamposTarifa from './CamposTarifa'
 
 // Alta de un modelo de IA. Qué es obligatorio cambia según el proveedor:
 //   · OpenCode Zen (por defecto): basta el id. Endpoint y clave salen de la
@@ -50,7 +51,10 @@ export default function NuevoModeloIaModal() {
     }
 
     setLoading(true)
-    const r = await crearModeloIa({ id, nombre: ((fd.get('nombre') as string) ?? '').trim(), gratis, api_base, api_key, api_key_env })
+    const r = await crearModeloIa({
+      id, nombre: ((fd.get('nombre') as string) ?? '').trim(), gratis, api_base, api_key, api_key_env,
+      precioIn: (fd.get('precio_in') as string) ?? '', precioOut: (fd.get('precio_out') as string) ?? '',
+    })
     setLoading(false)
     if (!r.ok) { toastError(r.error); return }
     toastSuccess('Modelo añadido')
@@ -134,6 +138,10 @@ export default function NuevoModeloIaModal() {
             <input type="checkbox" checked={gratis} onChange={e => setGratis(e.target.checked)} />
             <span>Es un modelo gratis</span>
           </label>
+
+          {/* La tarifa es lo que convierte los tokens medidos en dinero (pestaña
+              Equipo). Opcional: sin ella el panel dice «sin tarifa». */}
+          {!gratis && <CamposTarifa />}
         </div>
         <div className="modal-footer">
           <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>

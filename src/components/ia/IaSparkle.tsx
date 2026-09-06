@@ -3,8 +3,12 @@ import { Sparkles } from 'lucide-react'
 
 // La estrellita de IA con el TRAZO en degradado de marca (primary → amber), el
 // mismo lenguaje visual de .ia-tp-icon y los titulares. Es la marca «esto es IA»
-// que identifica los botones gated por el addon. Cada instancia lleva su propio
-// <defs> con id único (useId) para que dos en la misma página no colisionen.
+// y la usan LAS DOS CARAS: en el portal identifica lo que gasta el addon, en el
+// admin lo que gasta nuestra bolsa interna. Por eso vive aquí y no en
+// `components/portal/ia/` —donde nació—: la IA del admin se ve igual que la del
+// portal a propósito, para que nadie tenga que aprender dos lenguajes visuales.
+// Cada instancia lleva su propio <defs> con id único (useId) para que dos en la
+// misma página no colisionen.
 export default function IaSparkle({ size = 13, strokeWidth = 2.5 }: { size?: number; strokeWidth?: number }) {
   const gradId = `iaspark-${useId().replace(/[^a-zA-Z0-9]/g, '')}`
   return (

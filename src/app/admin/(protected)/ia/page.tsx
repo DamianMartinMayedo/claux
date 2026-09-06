@@ -5,6 +5,8 @@ import { normalizarNivel } from '@/lib/niveles'
 import { elegirUltimoRecurso } from '@/lib/ia/modelo'
 import IaAdminClient, { type ModeloIa, type ConsumoCliente, type DocumentoUi } from './IaAdminClient'
 import { obtenerUsoInternoMes } from '@/lib/ia/uso'
+import { interpretarInterruptores, CLAVES_INTERRUPTORES } from '@/lib/ia/interruptores'
+import { tarifaDe } from '@/lib/ia/coste'
 import { mesEnTz } from '@/lib/fecha-tz'
 import { TOPE_VER_MAS } from '@/lib/listados'
 
@@ -25,7 +27,7 @@ export default async function AdminIaPage() {
       .order('activo', { ascending: false }).order('gratis').order('orden').order('nombre'),
     supabase.from('settings').select('key, value')
       .in('key', ['ia_model', 'ia_modelo_fallback_gratis', 'ia_cupo_conversaciones', 'ia_nombre_agente', 'ia_tono',
-                  'ia_model_interno', 'ia_cupo_interno_mes']),
+                  'ia_model_interno', 'ia_cupo_interno_mes', ...CLAVES_INTERRUPTORES]),
     supabase.from('settings').select('key, value').in('key', DOCUMENTOS_IA.map(d => d.key)),
     // Techo explícito: esta lista es la tabla de consumo de IA, y una fila que falte
     // es un cliente gastando sin aparecer en el reparto.
@@ -110,6 +112,15 @@ export default async function AdminIaPage() {
   // La bolsa interna: lo que gastamos NOSOTROS este mes, por origen (mig. 235).
   const interno = await obtenerUsoInternoMes()
 
+  // Los interruptores (mig. 236) y la tarifa con la que se pone en dinero lo que ya
+  // medimos en tokens. El modelo con el que se estima es el de HOY: `ia_uso_interno`
+  // guarda tokens, no con qué modelo se gastaron, así que un cambio de modelo a
+  // mitad de mes recalcula el mes entero. Por eso el panel dice «estimado» y con
+  // qué modelo, en vez de dar una cifra a secas que parecería una factura.
+  const { activa: iaActiva, apagadas: funcionesOff } = interpretarInterruptores(S)
+  const mInterno = modelos.find(m => m.id === (modeloInterno || principal))
+  const tarifaInterna = tarifaDe(mInterno)
+
   return (
     <IaAdminClient
       modelos={modelos}
@@ -123,6 +134,10 @@ export default async function AdminIaPage() {
       consumo={consumo}
       modeloInterno={modeloInterno}
       interno={interno}
+      iaActiva={iaActiva}
+      funcionesOff={funcionesOff}
+      tarifaInterna={tarifaInterna}
+      modeloInternoNombre={mInterno?.nombre ?? 'sin modelo'}
     />
   )
 }

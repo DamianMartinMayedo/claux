@@ -1,7 +1,7 @@
 'use client'
 
 import { useIa } from '@/components/portal/ia/IaContext'
-import IaSparkle from '@/components/portal/ia/IaSparkle'
+import IaSparkle from '@/components/ia/IaSparkle'
 import { abrirChatIa } from '@/components/portal/ia/abrir-chat'
 import SoporteContacto from './SoporteContacto'
 

@@ -5,7 +5,7 @@ import type { CSSProperties } from 'react'
 import { Loader2, Save, Copy, Check } from 'lucide-react'
 import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { useIa } from '@/components/portal/ia/IaContext'
-import IaSparkle from '@/components/portal/ia/IaSparkle'
+import IaSparkle from '@/components/ia/IaSparkle'
 import ImageUpload from '@/components/ImageUpload'
 import {
   guardarMarca, subirLogoDossier, quitarLogoDossier, usarLogoEmpresa,

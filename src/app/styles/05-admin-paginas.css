@@ -603,6 +603,38 @@ textarea:focus-visible {
 .ia-doc-desc  { font-size: var(--text-xs); color: var(--color-text-muted); }
 .ia-check        { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--color-text); cursor: pointer; }
 
+/* ── Pestaña «Equipo» de /admin/ia: los interruptores de la IA interna ───────
+   El general va arriba y se ve distinto del resto: no es una preferencia más, es
+   lo que decide si el resto de la pestaña hace algo. Lleva el mismo lavado de
+   marca que `.btn-ia` para que se lea como «esto es la IA», y en apagado se
+   apaga entero —el color se va— porque un interruptor que se ve igual encendido
+   que apagado no es un interruptor. */
+.ia-master {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-4);
+  flex-wrap: wrap;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--color-primary) 8%, var(--color-surface)) 0%,
+    color-mix(in srgb, var(--color-amber) 8%, var(--color-surface)) 100%);
+}
+.ia-master--off { background: var(--color-surface-2); }
+.ia-master-info  { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 18rem; }
+.ia-master-label { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-base); font-weight: 700; color: var(--color-text); }
+.ia-master-desc  { font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.45; }
+
+/* Las funciones, agrupadas por el área en la que aparecen: el equipo las busca
+   por dónde las usa («esto es del importador»), no por su nombre técnico. */
+.ia-fn-grupo       { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-4); }
+.ia-fn-grupo-title {
+  font-size: var(--text-xs); font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--color-text-faint);
+}
+/* Una función apagada por el interruptor general: sigue con su propio estado —al
+   volver a encender queda como estaba— pero se retira, porque ahora no hace nada. */
+.ia-doc-row.ia-fn-row--inerte { opacity: 0.5; }
+
 /* ── Soporte (admin): filtros y texto del mensaje ── */
 .soporte-mensaje-texto {
   white-space: pre-wrap; font-size: var(--text-sm); color: var(--color-text); line-height: 1.5;

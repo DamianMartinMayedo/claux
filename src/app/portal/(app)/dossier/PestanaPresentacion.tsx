@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import { ExternalLink, Copy, Check, Loader2, Globe, EyeOff, RefreshCw, AlertTriangle, Download } from 'lucide-react'
 import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
 import { useIa } from '@/components/portal/ia/IaContext'
-import IaSparkle from '@/components/portal/ia/IaSparkle'
+import IaSparkle from '@/components/ia/IaSparkle'
 import {
   publicarDossier, despublicarDossier, revocarEnlace, guardarTraduccionIngles,
   type DossierBasico,

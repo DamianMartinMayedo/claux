@@ -4,9 +4,10 @@
 // llama a `chat()` con `interno` a mano — se pasa por aquí y ya está, porque aquí
 // viven las tres cosas que se olvidan cuando cada uno se lo monta por su cuenta:
 //
-//   1. COMPROBAR la bolsa antes de gastar.
-//   2. MEDIR después, contra el origen que corresponda.
-//   3. AVISAR por la campana del admin al acercarse y al agotarse.
+//   1. COMPROBAR el interruptor (el general y el de esa función) antes de nada.
+//   2. COMPROBAR la bolsa antes de gastar.
+//   3. MEDIR después, contra el área que corresponda.
+//   4. AVISAR por la campana del admin al acercarse y al agotarse.
 //
 // TOPE DURO, y aquí está la diferencia con el cliente. Al cliente no se le corta a
 // mitad de conversación: su tope es blando y baja al modelo gratis (`resolverModelo`).
@@ -18,12 +19,28 @@
 // suya; si la conduce nuestro equipo desde /admin, la pagamos nosotros.
 
 import { chat, type IaMensaje, type IaResultado } from './provider'
-import type { OrigenIa } from './modelo'
 import { obtenerUsoInternoMes, registrarUsoInterno, type UsoInternoMes } from './uso'
 import { crearAvisoAdmin } from '@/lib/notificaciones/admin/crear'
+import { ETIQUETA_ORIGEN_FRASE, funcionIa, origenDe, type FnIa } from './funciones'
+import { funcionEncendida, leerInterruptores } from './interruptores'
 
 export type { OrigenIa } from './modelo'
+export type { FnIa } from './funciones'
 export type { UsoInternoMes } from './uso'
+
+/**
+ * Está apagada: el interruptor general o el de esa función. NO es lo mismo que la
+ * bolsa agotada y por eso es otro error — se apagó a mano, no se gastó, y el panel
+ * tiene que decir eso y no «vuelve el mes que viene».
+ */
+export class IaApagada extends Error {
+  constructor(public readonly fn: FnIa, public readonly general: boolean) {
+    super(general
+      ? 'La IA interna está apagada. Se enciende en Configuración → IA → Equipo.'
+      : `La función «${funcionIa(fn).label}» está apagada. Se enciende en Configuración → IA → Equipo.`)
+    this.name = 'IaApagada'
+  }
+}
 
 /** Se agotó la bolsa del mes. Quien llama la traduce a un mensaje del panel. */
 export class IaBolsaAgotada extends Error {
@@ -46,18 +63,21 @@ export interface OpcionesInternas {
   nuevaConversacion?: boolean
 }
 
-const ETIQUETA_ORIGEN: Record<OrigenIa, string> = {
-  importador: 'el importador',
-  propuesta:  'las propuestas',
-  soporte:    'soporte',
-  relleno:    'el relleno de textos',
-}
-
 /**
- * Una llamada de IA a cuenta de CLAUX. Lanza `IaBolsaAgotada` si el mes ya se
+ * Una llamada de IA a cuenta de CLAUX. Recibe la FUNCIÓN, no el área: de ella
+ * salen el interruptor que hay que mirar y el origen contra el que se mide, y así
+ * no puede pasar que una función nueva se mida bien y se apague mal.
+ *
+ * Lanza `IaApagada` si el interruptor está en off, `IaBolsaAgotada` si el mes ya se
  * gastó, y `IaNoConfigurada` si no hay modelo o key (igual que `chat`).
  */
-export async function chatInterno(origen: OrigenIa, opts: OpcionesInternas): Promise<IaResultado> {
+export async function chatInterno(fn: FnIa, opts: OpcionesInternas): Promise<IaResultado> {
+  // Primero el interruptor, y antes de mirar la bolsa: si está apagada no hay que
+  // consultar nada más, y el motivo que ve el equipo tiene que ser el de verdad.
+  const sw = await leerInterruptores()
+  if (!funcionEncendida(sw, fn)) throw new IaApagada(fn, !sw.activa)
+
+  const origen = origenDe(fn)
   const antes = await obtenerUsoInternoMes()
   if (antes.agotado) {
     await avisarBolsa(antes, true)
@@ -99,7 +119,7 @@ export async function estadoBolsaInterna(): Promise<UsoInternoMes> {
 // entidad es el período y el escalón distingue «se acerca» de «se agotó».
 async function avisarBolsa(uso: UsoInternoMes, agotado: boolean): Promise<void> {
   const reparto = uso.porOrigen.length
-    ? ` Se fue sobre todo en ${ETIQUETA_ORIGEN[uso.porOrigen[0].origen]}.`
+    ? ` Se fue sobre todo en ${ETIQUETA_ORIGEN_FRASE[uso.porOrigen[0].origen]}.`
     : ''
   await crearAvisoAdmin({
     tipo:   'ia_consumo_alto',
