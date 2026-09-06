@@ -151,14 +151,47 @@ const SIN_TECHO_OK = [
   /src\/app\/actions\/portal\/citas\.ts$/,
 ]
 
+/**
+ * Lo mismo, del lado del ADMIN. Hasta la revisión del admin este centinela solo
+ * miraba `actions/portal/`, así que las listas de CLAUX —clientes, cobros,
+ * presupuestos, propuestas, leads— estaban sin vigilar: seis de ellas cargaban sin
+ * techo ninguno y era PostgREST quien decidía cuántas filas devolver, en silencio.
+ *
+ * Las tablas son otras: aquí no hay inquilino, la lista es de TODOS los clientes.
+ * Un catálogo que edita el dueño (módulos, plantillas, el equipo de admins) no
+ * entra: su tamaño lo pone él y no se dispara solo.
+ */
+const TABLAS_QUE_CRECEN_ADMIN = new Set([
+  'clients', 'payments', 'presupuestos_instalacion', 'propuestas', 'diagnosticos',
+  'admin_notificaciones', 'soporte_mensajes', 'ia_uso', 'audit_log',
+  'propuesta_aperturas', 'propuesta_selecciones', 'client_users', 'firmas_documentos',
+  'uso_portal',
+])
+
+/**
+ * En el admin, `client_id` SÍ acota: los cobros de un cliente son una docena al año,
+ * no la tabla entera. Lo que no acota es un estado o una bandera — filtrar por
+ * `estado = 'pendiente'` deja crecer la lista igual, solo que más despacio.
+ */
+const NO_ACOTA_ADMIN = new Set([
+  'activo', 'activa', 'archivado', 'archivada', 'estado', 'es_prueba', 'leido', 'resuelta',
+])
+
+/** Dónde vive una consulta del admin: sus acciones y sus páginas de servidor. */
+const esAdmin = (archivo) =>
+  /^src\/app\/actions\/(?!portal\/)[^/]+\.ts$/.test(archivo)
+  || archivo.startsWith('src/app/actions/admin/')
+  || archivo.startsWith('src/app/admin/')
+
 function revisarSinTecho(archivo, src) {
-  if (!archivo.includes('actions/portal/')) return
+  const admin = esAdmin(archivo)
+  if (!admin && !archivo.includes('actions/portal/')) return
   if (SIN_TECHO_OK.some(rx => rx.test(archivo))) return
   const re = /\.from\(\s*'([^']+)'\s*\)\s*\n?\s*\.select\(([\s\S]{0,900}?)(?=\.from\(|\n\s*\]\)|\n\s*\)\s*$|;)/g
   let m
   while ((m = re.exec(src)) !== null) {
     const [todo, tabla] = m
-    if (!TABLAS_QUE_CRECEN.has(tabla)) continue
+    if (!(admin ? TABLAS_QUE_CRECEN_ADMIN : TABLAS_QUE_CRECEN).has(tabla)) continue
     // Acotada de cualquiera de las formas legítimas → no es una carga completa.
     if (/\.limit\(/.test(todo)) continue                       // tiene techo
     if (/\.(maybe)?[Ss]ingle\(\)/.test(todo)) continue          // una sola fila
@@ -172,10 +205,12 @@ function revisarSinTecho(archivo, src) {
     // hacían las consultas del monolito de RRHH. Un `.eq()` sobre cualquier otra columna
     // sí dice «esto es de este documento» y entonces no hay tabla entera que traer.
     const eqs = Array.from(todo.matchAll(/\.eq\(\s*'([^']+)'/g)).map(x => x[1])
-    if (eqs.some(c => !ALCANCE_DE_INQUILINO.has(c))) continue
+    if (eqs.some(c => !(admin ? NO_ACOTA_ADMIN : ALCANCE_DE_INQUILINO).has(c))) continue
     grito(archivo, lineaDe(src, m.index),
       `.from('${tabla}') sin techo, sin rango y sin lista de ids`,
-      'es la tabla entera del inquilino: con dos años de datos son miles de filas en 3G. Acota con rango + limiteDelFiltro y di el techo con <AvisoTope>')
+      admin
+        ? 'es la tabla entera de CLAUX, de todos los clientes a la vez. Sin `.limit()` el techo lo pone PostgREST por su cuenta y recorta sin decirlo: escríbelo (TOPE_VER_MAS de lib/listados)'
+        : 'es la tabla entera del inquilino: con dos años de datos son miles de filas en 3G. Acota con rango + limiteDelFiltro y di el techo con <AvisoTope>')
   }
 }
 

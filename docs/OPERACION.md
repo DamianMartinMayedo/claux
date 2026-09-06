@@ -50,6 +50,13 @@ de los fallos que caza da un error: todos devuelven un resultado creíble que es
   lista corta de tablas que crecen con el uso (líneas e ítems de nómina, incidencias,
   contratos, tickets y sesiones de caja, reservas), una lectura sin rango ni techo se lista.
   Era lo que hacía RRHH: traerse la historia entera del inquilino sin que nada lo dijera.
+  **Desde la revisión del admin, también del lado de CLAUX** (`actions/*.ts` que no son del
+  portal, `actions/admin/` y las páginas de `src/app/admin/`), con sus propias tablas —
+  clientes, cobros, presupuestos, propuestas, leads, bandeja de soporte, consumo de IA— y
+  otra regla: ahí `client_id` **sí** acota, porque los cobros de un cliente son una docena al
+  año; lo que no acota es un estado. Antes de mirarlo, seis cargas del admin no tenían techo
+  ninguno: lo ponía PostgREST por su cuenta, y una lista de clientes a la que le falta la
+  cola se lee igual de bien que una completa.
 - Una vista con rango cuya descarga no lo recibe: el desplegable dice «Todo el listado» y el
   fichero se lleva la historia entera.
 - Un `resumen` con una variable de estado en crudo: el desplegable imprime «PENDIENTE»,
@@ -127,24 +134,70 @@ Sin `.env.local` los cinco primeros se hacen igual y el cruce con el catálogo s
 NO hecho, en vez de callarse.
 
 ```bash
+npm run audit:css
+```
+
+Estilo compartido escondido en el parcial de una sola cara. Una clase que pinta las dos caras
+y vive en `06-portal.css` o en `05-admin-paginas.css` **sigue funcionando** —el CSS es un
+único bundle—, así que nada se rompe y nadie se entera: hasta que alguien retoca el portal y
+se lleva por delante una pantalla del admin que no sabía que existía. Lo compartido va a
+`03-components.css` (`skills/ui/SKILL.md` §0).
+
+```bash
+npm run audit:guards
+```
+
+Acciones del admin sin guarda de sesión. Una acción del admin ve los datos de **todos** los
+clientes, así que aquí no se distingue lectura de escritura: una lectura suelta filtra tanto
+como un `insert`. Resuelve ayudantes —una acción que llama a una función del mismo fichero
+que sí comprueba la sesión cuenta como guardada—, porque un grep a secas da falsos positivos
+en las once acciones de la bandeja de avisos, que resuelven la sesión así. Las dos entradas
+públicas a propósito (el formulario de diagnóstico de la web) van justificadas en su
+ALLOWLIST.
+
+```bash
+npm run audit:tablas
+```
+
+Tablas fuera del sistema (`skills/ui/SKILL.md` §tablas). Tres cosas que no se ven al copiar
+la tabla de al lado en el escritorio: el `data-label` de cada `<td>` —sin él, bajo 640px la
+fila se convierte en una tarjeta muda—, el menú `RowActions` cuando hay 2+ acciones, y las
+columnas ordenables en las tablas de listado (las que traen selección, paginación o barra de
+filtros; una tabla de líneas de una factura no ordena por columna, y por eso la señal es
+funcional y no el nombre del fichero).
+
+```bash
+npm run audit:constantes
+```
+
+Modelos de IA y claves de nivel nombrados y que **no existen**. El catálogo de modelos se
+edita desde `/admin` sin desplegar: un id escrito en el código envejece solo. Es el centinela
+que habría cazado el `DEFAULT_MODEL = 'deepseek-v4-flash-free'` que quedó apuntando a un
+modelo borrado. Mira también los AJUSTES que nombran un modelo (`settings.ia_model`, el
+respaldo gratis y, cuando exista, `niveles.ia_model`): tienen que estar en `ia_modelos` y
+activos, y el respaldo además marcado como gratis — uno de pago ahí es gasto sin tope. Las
+claves de módulo no se miran aquí: las cubre `audit:nivel`.
+
+```bash
 npm run audit
 ```
 
-**Los siete de una vez**, en paralelo y con la salida ordenada. Es el que hay que recordar:
-siete comandos sueltos que hay que acordarse de ejecutar no son una regla, son una nota.
-Rojo si falla cualquiera, pero todos llegan a correr — enterarte de los siete problemas de
+**Los once de una vez**, en paralelo y con la salida ordenada. Es el que hay que recordar:
+once comandos sueltos que hay que acordarse de ejecutar no son una regla, son una nota.
+Rojo si falla cualquiera, pero todos llegan a correr — enterarte de los once problemas de
 una vez es media hora menos que enterarte de uno por vuelta.
 
 `npx eslint <ficheros>` para lo tocado. El build de este proyecto es pesado: si el proceso
 muere con **exit 137** es la máquina quedándose sin memoria, no un fallo del código.
 
-**El proyecto vive dentro de iCloud Drive, y eso ensucia la verificación.** iCloud sincroniza
-también `.next` (que llega a ~15 GB) y, al hacerlo desde dos sitios, deja copias con el sufijo
-« 2» (`routes.d 2.ts`, `cache-life.d 3.ts`). TypeScript las compila igual, así que `tsc` escupe
-errores de **identificadores duplicados** que no existen en el código: `Duplicate identifier
-'LayoutProps'`, `TS6200` sobre `unstable_cache`… No busques el fallo en tu diff — si todos los
-errores vienen de rutas con « N» dentro de `.next`, ignóralos o borra la caché
-(`npm run fix-native` la borra de paso). El dev también va lento por lo mismo.
+**Si `tsc` habla de identificadores duplicados, mira la ruta antes que el diff.** El repo
+estuvo dentro de iCloud Drive hasta el **2026-08-28** (hoy vive en `~/dev/08_CLAUX`, fuera de
+la sincronización). iCloud sincronizaba también `.next` y dejaba copias con el sufijo « 2»
+(`routes.d 2.ts`, `cache-life.d 3.ts`) que TypeScript compilaba igual: `Duplicate identifier
+'LayoutProps'`, `TS6200` sobre `unstable_cache`… No debería volver a pasar, pero si aparece,
+el síntoma es inconfundible —todos los errores vienen de rutas con « N» dentro de `.next`— y
+se arregla borrando la caché (`npm run fix-native` la borra de paso). El dev lento de aquella
+etapa era lo mismo.
 
 ## Base de datos
 

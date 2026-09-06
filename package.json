@@ -16,6 +16,10 @@
     "audit:limites": "node scripts/audit-limites.mjs",
     "audit:nivel": "node scripts/audit-nivel.mjs",
     "audit:precios": "node scripts/audit-precios.mjs",
+    "audit:css": "node scripts/audit-css-dominios.mjs",
+    "audit:guards": "node scripts/audit-admin-guards.mjs",
+    "audit:tablas": "node scripts/audit-tablas.mjs",
+    "audit:constantes": "node scripts/audit-constantes.mjs",
     "audit": "node scripts/audit.mjs"
   },
   "dependencies": {

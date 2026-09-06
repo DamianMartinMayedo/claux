@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // ─────────────────────────────────────────────────────────────────────────────
-// Los siete centinelas de una vez.
+// Los once centinelas de una vez.
 //
 // POR QUÉ EXISTE. Hasta ahora eran comandos sueltos que había que acordarse de
 // ejecutar, y una regla que hay que recordar no es una regla: es una nota. Esto es
 // lo que se corre antes de desplegar (`docs/OPERACION.md`).
 //
 // Corren EN PARALELO y con la salida guardada, para imprimirlas siempre en el
-// mismo orden: siete salidas entrelazadas no se leen. Si uno falla, falla el
-// conjunto — pero todos llegan a ejecutarse, porque enterarte de los siete
+// mismo orden: once salidas entrelazadas no se leen. Si uno falla, falla el
+// conjunto — pero todos llegan a ejecutarse, porque enterarte de los once
 // problemas de una vez es media hora menos que enterarte de uno por vuelta.
 //
 // Uso:  npm run audit
@@ -24,6 +24,10 @@ const CENTINELAS = [
   ['limites',  'scripts/audit-limites.mjs',  'topes de nivel: declaración y aplicación'],
   ['nivel',    'scripts/audit-nivel.mjs',    'claves de módulo y precios del catálogo'],
   ['precios',  'scripts/audit-precios.mjs',  'importes de CLAUX cableados en el código'],
+  ['css',      'scripts/audit-css-dominios.mjs', 'estilo compartido escondido en el parcial de una cara'],
+  ['guards',   'scripts/audit-admin-guards.mjs', 'acciones del admin sin guarda de sesión'],
+  ['tablas',   'scripts/audit-tablas.mjs',   'tablas fuera del sistema (etiqueta móvil, menú de fila, orden)'],
+  ['constantes', 'scripts/audit-constantes.mjs', 'modelos de IA y niveles nombrados y que no existen'],
 ]
 
 const correr = (script) => new Promise(listo => {
