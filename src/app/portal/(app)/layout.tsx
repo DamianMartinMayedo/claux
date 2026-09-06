@@ -26,6 +26,7 @@ import { configAgente }      from '@/lib/ia/contexto'
 // día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
 import { hoyEnTz } from '@/lib/fecha-tz'
 import { accesoBloqueado, COLUMNAS_ACCESO } from '@/lib/clientes/ciclo-vida'
+import { leerCorreo } from '@/lib/settings'
 
 export default async function PortalAppLayout({ children }: { children: React.ReactNode }) {
   const session = await getPortalSession()
@@ -152,7 +153,7 @@ export default async function PortalAppLayout({ children }: { children: React.Re
         )}
         <PortalToastWrapper>
         {bloqueado
-          ? <BloqueadoScreen motivo={motivoBloqueo} />
+          ? <BloqueadoScreen motivo={motivoBloqueo} correo={await leerCorreo('email_contratacion')} />
           : <EmpresaColorProvider empresas={empresas}>
               <ConfiguradorProvider value={!!session.imp}>
                 <IaProvider value={{ tieneIa, nombreAgente }}>{children}</IaProvider>

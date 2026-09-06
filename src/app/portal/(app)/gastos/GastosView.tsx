@@ -458,7 +458,7 @@ function LiquidarModal({
                   <span className="text-sm-muted tes-nowrap">{formatFecha(l.fecha)}</span>
                   <span className="gc-liq-cuenta">{l.cuenta_nombre}</span>
                   <span className="gc-liq-monto">{formatMonto(l.monto)} {registro.moneda}</span>
-                  <button className="ter-action-btn ter-action-danger" title="Anular"
+                  <button className="icon-btn icon-btn-danger" title="Anular"
                     onClick={() => setAnularLiq(l)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
                 </div>
               ))}
@@ -1365,10 +1365,10 @@ export default function GastosView({ data, puedeEditar, gaveta, children }: {
                     <td data-label="Pendiente" className="col-num tes-monto-cell">{r.saldo_pendiente > 0.005 ? `${formatMonto(r.saldo_pendiente)} ${r.moneda}` : '—'}</td>
                     <td data-label="Estado"><span className={`badge ${ESTADO_BADGE[r.estado]}`}>{ESTADO_LABEL[r.estado]}</span></td>
                     <td className="col-actions">
-                      <div className="ter-actions">
+                      <div className="table-actions">
                         {/* Ver el resto de datos del registro sin salir de la lista.
                             Disponible también en solo-lectura: desplegar no escribe. */}
-                        <button type="button" className="ter-action-btn" title="Ver detalle"
+                        <button type="button" className="icon-btn" title="Ver detalle"
                           aria-label={`Ver detalle de ${r.concepto || r.descripcion}`} aria-expanded={abierto}
                           onClick={() => setDetalle(abierto ? null : r.registro_id)}>
                           <ChevronDown size={15} strokeWidth={2} className={abierto ? 'tes-chevron-abierto' : undefined} />

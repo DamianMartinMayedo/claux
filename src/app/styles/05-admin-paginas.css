@@ -2,19 +2,6 @@
    DETAIL PAGE — cliente detalle
    ═══════════════════════════════════════════════════ */
 
-/* Breadcrumb */
-.breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-  margin-bottom: var(--space-4);
-}
-.breadcrumb a { color: var(--color-text-muted); font-weight: 500; text-decoration: none; }
-.breadcrumb a:hover { color: var(--color-primary); }
-.breadcrumb-sep { width: 14px; height: 14px; flex-shrink: 0; }
-.breadcrumb-current { color: var(--color-text); font-weight: 600; }
 
 /* Detail header */
 .detail-header {
@@ -56,22 +43,6 @@
   flex-direction: column;
   padding: var(--space-1);
 }
-.dropdown-item {
-  display: block;
-  width: 100%;
-  text-align: left;
-  background: none;
-  border: none;
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--text-sm);
-  font-family: var(--font-body);
-  color: var(--color-text);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  transition: background var(--transition);
-}
-.dropdown-item:hover { background: var(--color-surface-offset); }
-.dropdown-item-danger { color: var(--color-error); }
 
 /* En móvil: ocultar los botones sueltos grandes y mostrar solo el dropdown con TODO */
 @media (max-width: 640px) {
@@ -80,25 +51,6 @@
   .detail-header-buttons > .header-action { display: none !important; }
   .detail-header-buttons > .detail-header-actions-mobile { display: block !important; }
   .detail-header { margin-bottom: var(--space-5); }
-}
-
-/* Action bar */
-.client-actions-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-  align-items: center;
-  padding: var(--space-5);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  margin-bottom: var(--space-6);
-}
-.client-actions-divider {
-  width: 1px;
-  height: 32px;
-  background: var(--color-border);
-  margin: 0;
 }
 
 /* Info banner (gracia, etc.)
@@ -150,12 +102,6 @@
   .detail-grid { grid-template-columns: 1fr; }
 }
 
-/* Detail section title */
-.detail-section-title {
-  font-size: var(--text-lg);
-  font-weight: 700;
-  margin-bottom: var(--space-5);
-}
 
 /* Subtítulo dentro de una tarjeta (bloques de la tarjeta de uso) */
 .detail-subsection-title {
@@ -238,64 +184,9 @@
    en la página; dentro del panel se sumaría al `gap`. */
 .cli-panel > .detail-grid { margin-bottom: 0; }
 
-/* Checkbox group */
-.checkbox-group {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  cursor: pointer;
-}
-.checkbox-group input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-}
-.checkbox-group .checkbox-label {
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--color-text);
-  cursor: pointer;
-}
 
-/* ── Portal entity detail: shared layout pattern ─────────────────────────── */
-.det-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--space-5); margin-bottom: var(--space-4); }
-.det-section-title { font-size: var(--text-base); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-muted); margin-bottom: var(--space-4); padding-bottom: var(--space-2); border-bottom: 1px solid var(--color-border); }
-/* Cabecera de sección con acción a la derecha (p. ej. título + switch de moneda) */
-.det-section-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-4); padding-bottom: var(--space-2); border-bottom: 1px solid var(--color-border); }
-.det-section-head .det-section-title { margin: 0; padding: 0; border: none; }
-.det-section-head .dash-moneda-switch { margin-bottom: 0; }
-.det-label { font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted); margin-bottom: var(--space-1); }
-.det-value { font-size: var(--text-sm); color: var(--color-text); }
-.det-value-pre { white-space: pre-wrap; line-height: 1.6; }
-.det-value-break { word-break: break-all; }
-.det-page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-2); }
-.det-title-group { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
-.det-page-title  { margin: 0; font-size: 22px; font-weight: 800; }
-.det-meta-row { margin-top: var(--space-1); font-size: var(--text-sm); color: var(--color-text-muted); display: flex; gap: var(--space-4); flex-wrap: wrap; align-items: center; }
-.det-meta-inline { display: inline-flex; align-items: center; gap: 4px; }
-.det-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
-/* En la cabecera de detalle el disparador ⋯ va al tamaño de los botones (no el mini
-   de las tablas), para alinearse con "Editar". */
-.det-actions .row-actions-trigger { width: auto; height: auto; padding: var(--space-3) var(--space-4); border-width: 1.5px; }
-.det-field-grid    { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--space-5); }
-.det-field-grid-sm { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-3); }
-.det-grid-4     { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-5); }
-.det-col-span-2 { grid-column: span 2; }
-.det-tab-body   { padding: var(--space-6) 0; }
-.det-empty      { padding: var(--space-12) 0; text-align: center; color: var(--color-text-faint); }
-.det-empty-icon { display: flex; justify-content: center; margin-bottom: var(--space-4); }
-.det-empty-title { font-size: var(--text-base); font-weight: 600; margin-bottom: var(--space-1); color: var(--color-text-muted); }
-.det-empty-text  { font-size: var(--text-sm); }
-.det-via-box    { border: 1px solid var(--color-border); border-radius: 10px; padding: 14px 18px; margin-bottom: var(--space-3); }
-.det-via-header { display: flex; align-items: center; gap: 10px; margin-bottom: var(--space-3); }
-.det-via-title  { font-weight: 700; font-size: var(--text-sm); color: var(--color-text); }
-.det-link-icon  { display: inline-flex; align-items: center; gap: 5px; color: var(--color-primary); text-decoration: none; font-size: var(--text-sm); font-weight: 600; }
-.link-primary   { color: var(--color-primary); text-decoration: none; }
-.code-id        { font-family: monospace; font-size: var(--text-xs); color: var(--color-text-faint); }
-.code-label     { font-family: monospace; color: var(--color-primary-text); font-weight: 600; }
-.det-stock-num  { font-size: 28px; font-weight: 800; }
-.det-stock-unit { font-size: var(--text-sm); font-weight: 500; margin-left: 6px; color: var(--color-text-muted); }
-.det-stock-alert { display: flex; align-items: center; gap: var(--space-1); font-size: var(--text-xs); color: var(--color-error); margin-top: var(--space-1); }
-/* Pestañas de fichas de detalle → componente canónico <Tabs> (.tabs/.tab). */
+/* Las fichas de detalle (.det-*) viven en 03-components.css: hoy las pinta el
+   portal y el admin las adoptará al normalizar sus pantallas de detalle. */
 
 /* ═══════════════════════════════════════════════════
    ACCESSIBILITY
@@ -463,12 +354,6 @@ textarea:focus-visible {
 /* ═══════════════════════════════════════════════════
    DASHBOARD BENTO + PRÓXIMOS A VENCER
    ═══════════════════════════════════════════════════ */
-.dashboard-bento-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-4);
-  align-items: start;
-}
 .dashboard-bento-cell {
   grid-column: 3 / 5;
   grid-row: 1;
@@ -490,7 +375,6 @@ textarea:focus-visible {
    las celdas en flujo natural (reset de grid-column/row para no crear pistas
    implícitas). La rejilla de detalle de 4 col baja a 2 y luego a 1. */
 @media (max-width: 768px) {
-  .dashboard-bento-row,
   .dashboard-bento-bottom { grid-template-columns: 1fr; }
   .dashboard-bento-cell,
   .dashboard-bento-bottom .dashboard-bento-cell { grid-column: auto; grid-row: auto; }
@@ -541,18 +425,6 @@ textarea:focus-visible {
 .pv-table th, .pv-table td {
   padding: var(--space-3) var(--space-5) !important;
 }
-.pv-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
-  padding: var(--space-8) var(--space-6);
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  text-align: center;
-}
-
 /* ═══════════════════════════════════════════════════
    NOTIFICACIONES PAGE
    ═══════════════════════════════════════════════════ */
@@ -563,27 +435,14 @@ textarea:focus-visible {
 .notif-alertas .grid-cols-2 > .notif-section { margin-bottom: 0; }
 /* La card de toggles (hija directa, tras el form) mantiene separación arriba. */
 .notif-alertas > .notif-section { margin-top: var(--space-5); }
-.notif-section {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  padding: var(--space-6);
-  margin-bottom: var(--space-5);
-  box-shadow: var(--shadow-sm);
-}
-.notif-section-header {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-4);
-  margin-bottom: var(--space-5);
-  padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--color-border);
-}
-.notif-section-icon {
-  width: 40px; height: 40px; border-radius: var(--radius-md);
-  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-}
-.notif-icon-active  { background: var(--color-amber-highlight); color: var(--color-amber-text); }
+/* Las tres son `.card` / `.card-header` / `.metric-icon` del sistema: aquí solo
+   queda lo que las diferencia. Antes estaban copiadas enteras —la tarjeta con sus
+   seis declaraciones, el icono con sus siete— y el ámbar era un SEGUNDO ámbar
+   (`--color-amber-highlight`) a un paso del de `metric-icon-amber`. */
+.notif-section        { margin-bottom: var(--space-5); }
+/* El icono va a la izquierda del título, no encima: fuera el margen inferior. */
+.notif-section-header { align-items: flex-start; justify-content: flex-start; gap: var(--space-4); }
+.notif-section-icon   { margin-bottom: 0; flex-shrink: 0; }
 .notif-section-title { font-size: var(--text-sm); font-weight: 600; color: var(--color-text); }
 .notif-section-sub   { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px; }
 
@@ -641,77 +500,11 @@ textarea:focus-visible {
   width: 100%; height: 420px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg);
 }
 
-/* ─── Actividad ──────────────────────────────────────── */
-.actividad-filters {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  flex-wrap: wrap;
-  padding: var(--space-4) var(--space-5);
-  border-bottom: 1px solid var(--color-border);
-}
-.actividad-filter-group {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-shrink: 0;
-}
-.actividad-filter-label {
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--color-text-muted);
-  white-space: nowrap;
-}
-.actividad-filter-pills {
-  display: flex;
-  gap: var(--space-1);
-  flex-wrap: wrap;
-}
-.actividad-pill {
-  padding: 3px 10px;
-  border-radius: 99px;
-  font-size: var(--text-xs);
-  font-weight: 500;
-  cursor: pointer;
-  border: 1px solid var(--color-border);
-  background: transparent;
-  color: var(--color-text-muted);
-  transition: all var(--transition);
-}
-.actividad-pill:hover {
-  background: var(--color-surface-offset);
-  color: var(--color-text);
-}
-.actividad-pill.active {
-  background: var(--color-primary-highlight);
-  border-color: var(--color-primary);
-  color: var(--color-primary-active);
-  font-weight: 600;
-}
-.actividad-entity-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border-radius: 99px;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  background: color-mix(in srgb, var(--badge-color) 12%, transparent);
-  color: var(--badge-color);
-  white-space: nowrap;
-}
-.actividad-footer {
-  padding: var(--space-3) var(--space-5);
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  border-top: 1px solid var(--color-border);
-}
-
 /* ═══════════════════════════════════════════════════
    ADMIN MÓDULOS — drag-and-drop
    ═══════════════════════════════════════════════════ */
 
 /* Catálogo: cabecera de acciones y columnas */
-.mod-cat-actions { display: flex; gap: var(--space-2); align-items: center; }
 .mod-col-drag { width: 36px; }
 
 /* Drag rows */
@@ -774,47 +567,22 @@ textarea:focus-visible {
 .dgn-header-actions { display: flex; gap: var(--space-2); align-items: center; }
 
 .dgn-need-cell { display: flex; align-items: center; gap: var(--space-3); }
-.dgn-need-icon {
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-  width: 36px; height: 36px;
-  border-radius: var(--radius-md);
-  background: var(--color-info-bg);
-  color: var(--color-primary);
-}
 .dgn-need-desc {
   font-size: var(--text-xs);
   color: var(--color-text-muted);
   margin-top: 2px;
 }
 
-/* Envoltorio de los módulos recomendados; las etiquetas son `.badge badge-neutral`, la
-   familia canónica, para que vayan sin fondo dentro de la tabla igual que la columna
-   Estado de la misma fila. */
-.dgn-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-
-.dgn-icono-row { display: flex; align-items: center; gap: var(--space-2); }
-.dgn-icono-preview {
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-  width: 38px; height: 38px;
-  border-radius: var(--radius-md);
-  background: var(--color-info-bg);
-  color: var(--color-primary);
-}
-.dgn-icono-row .input { flex: 1; }
-
-.dgn-empty {
-  text-align: center;
-  padding: var(--space-8);
-  color: var(--color-text-muted);
-  background: var(--color-surface);
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-lg);
-}
-
 /* Formularios de configuración (admin): separación vertical entre grupos */
 .config-form { display: flex; flex-direction: column; gap: var(--space-5); }
+/* Un segundo bloque dentro de un formulario de configuración: dos decisiones que se
+   toman en la misma pantalla pero no son la misma —la IA del cliente y la que
+   pagamos nosotros—. Lo que las separa es la línea, no un tamaño de letra distinto. */
+.config-subseccion { padding-top: var(--space-5); border-top: 1px solid var(--color-border); }
+
+/* Los tres textos del catálogo van juntos y con una cabecera común: la IA los
+   propone de una vez, no casilla por casilla. */
+.mod-textos { display: flex; flex-direction: column; gap: var(--space-4); }
 
 /* Panel de IA del admin (/admin/ia) */
 /* En una sola línea: la columna Estado tiene sitio de sobra a la derecha, y al envolver
@@ -836,8 +604,6 @@ textarea:focus-visible {
 .ia-check        { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--color-text); cursor: pointer; }
 
 /* ── Soporte (admin): filtros y texto del mensaje ── */
-.soporte-filtros     { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-3); }
-.soporte-filtros-end { justify-content: flex-end; }
 .soporte-mensaje-texto {
   white-space: pre-wrap; font-size: var(--text-sm); color: var(--color-text); line-height: 1.5;
   padding: var(--space-3) var(--space-4); background: var(--color-surface-2);
@@ -874,7 +640,15 @@ textarea:focus-visible {
   max-height: calc(100dvh - var(--header-h) - var(--space-8));
   overflow-y: auto;
 }
-.pres-resultado > .card > .btn { margin-top: var(--space-4); }
+/* Y dentro de esa tarjeta que scrollea, «Guardar» pegado a su fondo. El techo de altura de
+   arriba tiene un efecto que no se ve: con cinco fases, descuento y las dos columnas de
+   totales, el botón cae por debajo del corte, en un scroll interno que nadie sabe que
+   existe —la página de fuera sigue moviéndose, así que parece que no hay nada más—. */
+.pres-resultado > .card > .btn {
+  margin-top: var(--space-4);
+  position: sticky; bottom: 0;
+  box-shadow: var(--shadow-md);
+}
 /* La tarifa aplicada, arriba del desglose y editable: es el precio unitario que se está
    negociando y no se enseñaba en ninguna parte. */
 .pres-tarifa {
@@ -960,13 +734,6 @@ textarea:focus-visible {
    entienda por qué ese cliente pagó menos. */
 .pres-dto-motivo { font-style: normal; color: var(--color-text-faint); }
 
-/* ── Precios del presupuesto en Configuración ────────────────────────────────
-   Cabecera secundaria: el precio de la instalación es un pago único cotizado por horas, otra
-   cosa que la facturación recurrente, así que va en su propio bloque dentro de la pestaña. */
-.config-section-header-sub {
-  margin-top: var(--space-6); padding-top: var(--space-5);
-  border-top: 1px solid var(--color-divider);
-}
 .pp-bloque { display: flex; flex-direction: column; gap: var(--space-2); }
 
 /* ── Rejilla de precios ──────────────────────────────────────────────────────
@@ -1217,6 +984,10 @@ textarea:focus-visible {
   display: flex; align-items: baseline; justify-content: space-between;
   flex-wrap: wrap; gap: var(--space-3);
 }
+/* Cuando son dos —traer y redactar— van juntas y envuelven a la vez: separadas por
+   el `space-between` quedarían una en cada punta del título, como si fueran cosas
+   distintas, y son la misma decisión tomada de dos maneras. */
+.prp-card-acciones { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .prp-panel > .card > p + p { margin-top: var(--space-2); }
 .prp-panel > .card > * + .prp-grid,
 .prp-panel > .card > * + .prp-lineas,
@@ -1385,11 +1156,6 @@ textarea:focus-visible {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
   gap: var(--space-2);
 }
-.cap-sector-check {
-  display: flex; align-items: center; gap: var(--space-2);
-  font-size: var(--text-sm); color: var(--color-text); cursor: pointer;
-}
-
 /* ── Textos fijos de la propuesta (/admin/ventas/propuestas/textos) ─────────
    Grupos de tarjetas «título + cuerpo» que se añaden y se quitan. La ficha se
    enmarca porque son cuatro grupos seguidos y sin marco no se ve dónde acaba

@@ -9,6 +9,7 @@ import { registrarInteresModulo } from '@/app/actions/portal/soporte'
 import { useNotificacionesOpcional } from '@/components/portal/notificaciones/NotificacionesContext'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { MONEDAS_CLAUX, importeClaux, importesPorMoneda, totalPorMoneda } from '@/lib/moneda-claux'
+import { METODO_PAGO_LABEL } from '@/lib/billing'
 
 // La clave con la que «subir de nivel» viaja por el circuito de contratación.
 // Es la MISMA que usa el banner del dashboard (`OFERTA_NIVEL` de `@/lib/limites`),
@@ -24,12 +25,6 @@ const ESTADO_LABEL: Record<string, string> = {
   GRACIA:     'Prórroga',
   VENCIDO:    'Vencido',
   DESACTIVADO: 'Desactivado',
-}
-
-const METODO_LABEL: Record<string, string> = {
-  tropipay:      'TropiPay',
-  transferencia: 'Transferencia',
-  efectivo:      'Efectivo',
 }
 
 function fmt(dateStr: string | null | undefined) {
@@ -60,7 +55,7 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
     concepto: { label: 'Concepto', valor: p => p.concepto },
     estado:   { label: 'Estado',   valor: p => p.estado },
     monto:    { label: 'Monto',    valor: p => p.monto },
-    metodo:   { label: 'Método',   valor: p => METODO_LABEL[p.metodo] ?? p.metodo },
+    metodo:   { label: 'Método',   valor: p => METODO_PAGO_LABEL[p.metodo] ?? p.metodo },
   })
   const { pageItems, ...pag } = usePagination(ordPagos.filas)
 
@@ -387,7 +382,7 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
                       <span className="fac-monto">{imp(p.monto, p.moneda)}</span>
                     </td>
                     <td data-label="Método">
-                      <span className="fac-metodo">{METODO_LABEL[p.metodo] ?? p.metodo}</span>
+                      <span className="fac-metodo">{METODO_PAGO_LABEL[p.metodo] ?? p.metodo}</span>
                     </td>
                   </tr>
                 ))}

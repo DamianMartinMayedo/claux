@@ -408,7 +408,7 @@ function TabContratos({ data }: { data: ProductoDetalleData }) {
                     </span>
                   </td>
                   <td className="col-actions">
-                    <Link href="/portal/suscripciones" className="ter-action-btn"
+                    <Link href="/portal/suscripciones" className="icon-btn"
                       title="Ver en Suscripciones" aria-label="Ver en Suscripciones">
                       <ExternalLink size={15} strokeWidth={2} />
                     </Link>

@@ -13,9 +13,14 @@
 // ── POR QUÉ UN REGISTRO Y NO UN EXPORTADOR POR PANTALLA ───────────────────────
 // Todas las exportaciones hacen lo mismo: leer una tabla del tenant, ponerle
 // cabeceras legibles y volcarla. Escribirlo una vez por vista habría dado diez
-// copias que divergen — que es exactamente lo que ya pasó con el CSV, del que hay
-// cuatro generadores a mano en el repo, cada uno con su separador y uno de ellos
-// sin BOM. Aquí: una entrada por entidad, y añadir una tabla nueva son ~10 líneas.
+// copias que divergen — que es exactamente lo que ya pasó con el CSV, del que llegó a
+// haber cuatro generadores a mano, cada uno con su separador y uno de ellos sin BOM
+// (los dos del admin cayeron con su revisión; quedan los del importador, que escriben
+// un informe de errores y no un listado). Aquí: una entrada por entidad, y añadir una
+// tabla nueva son ~10 líneas.
+//
+// El admin tiene su propio registro gemelo en `tablas-admin.ts`: mismo motor y mismo
+// botón, distinto candado (allí la sección del equipo, aquí el módulo contratado).
 //
 // Las columnas se eligen a mano en vez de volcar `select *` a propósito: se
 // traducen a nombres que un humano entiende, se omiten los `client_id` (todas las

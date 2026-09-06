@@ -817,7 +817,7 @@ export default function ConteoView({ data, puedeEditar }: { data: ConteoDetalle;
       )}
 
       {!soloLectura && (
-        <div className="ter-toolbar cnt-toolbar">
+        <div className="filters-bar cnt-toolbar">
           <label className="ter-archivados-toggle">
             <input type="checkbox" checked={soloPendientes}
               onChange={e => { setSoloPendientes(e.target.checked); if (e.target.checked) setSoloSinCausa(false) }} />

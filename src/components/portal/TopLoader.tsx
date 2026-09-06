@@ -103,7 +103,7 @@ export default function TopLoader() {
       // Filas de tabla clicables: navegan por router.push en su onClick. Se ignora
       // el clic sobre controles internos (menús de acciones, botones, enlaces).
       const fila = t.closest('.table-row-clickable')
-      if (fila && !t.closest('button, a, input, select, [role="button"], .row-actions, .ter-action-btn')) {
+      if (fila && !t.closest('button, a, input, select, [role="button"], .row-actions, .icon-btn')) {
         begin()
       }
     }

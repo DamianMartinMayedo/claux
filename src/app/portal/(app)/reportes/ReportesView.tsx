@@ -558,7 +558,7 @@ export default function ReportesView({ data, asesores, gaveta }: {
                   gris del token, así que la fila no baila al cambiar de empresa. */}
               <span className="empresa-dot" style={empresaColorVar(colorOf(empresa))} />
               <select
-                id="rep-empresa" className="input ter-filter-select" value={empresa}
+                id="rep-empresa" className="input filtro-select" value={empresa}
                 onChange={e => { setEmpresa(e.target.value); navegar(aplicado.desde, aplicado.hasta, e.target.value) }}
               >
                 <option value="">Todas las empresas</option>
@@ -577,7 +577,7 @@ export default function ReportesView({ data, asesores, gaveta }: {
           <div className="filtros-campo">
             <label className="filtros-campo-rotulo" htmlFor="rep-ver">Ver en</label>
             <select
-              id="rep-ver" className="input ter-filter-select" value={data.ver}
+              id="rep-ver" className="input filtro-select" value={data.ver}
               onChange={e => cambiarVer(e.target.value || 'nativo')}
             >
               <option value="">Cada moneda</option>

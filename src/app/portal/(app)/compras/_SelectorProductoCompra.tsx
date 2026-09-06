@@ -60,9 +60,9 @@ export function SelectorProductoCompra({
         </div>
 
         <div className="modal-body">
-          <div className="ter-search-wrap">
+          <div className="filtro-search-wrap">
             <Search size={14} strokeWidth={2} />
-            <input className="ter-search" type="search" autoFocus
+            <input className="filtro-search" type="search" autoFocus
               aria-label="Buscar producto por código o nombre"
               placeholder="Código o nombre…"
               value={q} onChange={e => setQ(e.target.value)} />

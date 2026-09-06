@@ -793,7 +793,7 @@ function TablaFacturas({
                   {f.estado === 'BORRADOR' && !f.archivado && (
                     <button
                       type="button"
-                      className="ter-action-btn"
+                      className="icon-btn"
                       onClick={() => onEmitir(f)}
                       aria-label={`Emitir ${etiquetaNumero(f.numero)}`}
                       title="Emitir"

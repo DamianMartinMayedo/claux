@@ -70,10 +70,10 @@ export function SelectorArticulo({ productos, moneda, almacenId, onAnadir, onCer
         </div>
 
         <div className="modal-body">
-          <div className="ter-search-wrap">
+          <div className="filtro-search-wrap">
             <Search size={14} strokeWidth={2} />
             <input
-              className="ter-search"
+              className="filtro-search"
               type="search"
               autoFocus
               aria-label="Buscar artículo por código o nombre"

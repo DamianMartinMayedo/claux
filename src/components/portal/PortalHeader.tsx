@@ -146,7 +146,7 @@ export default function PortalHeader({ session, nombreEmpresa, empresas, verNoti
         <div className="portal-header-account" ref={ref}>
           <button
             type="button"
-            className={`portal-header-avatar${empresaUnica ? ' empresa-tinted' : ''}`}
+            className={`header-avatar-btn${empresaUnica ? ' empresa-tinted' : ''}`}
             style={empresaUnica ? empresaColorVar(empresaUnica.color) : undefined}
             onClick={() => setOpen(o => !o)}
             aria-haspopup="menu"
@@ -157,16 +157,16 @@ export default function PortalHeader({ session, nombreEmpresa, empresas, verNoti
           </button>
 
           {open && (
-            <div className="portal-account-menu" role="menu">
-              <div className="portal-account-menu-header">
-                <span className="portal-account-menu-empresa">{nombreEmpresa}</span>
-                <span className="portal-account-menu-email">{session.email}</span>
+            <div className="account-menu" role="menu">
+              <div className="account-menu-header">
+                <span className="account-menu-empresa">{nombreEmpresa}</span>
+                <span className="account-menu-email">{session.email}</span>
               </div>
-              <div className="portal-account-menu-list">
+              <div className="account-menu-list">
                 {grupos.map((g, gi) => (
-                  <div key={g.titulo} className="portal-account-menu-group">
-                    {gi > 0 && <div className="portal-account-menu-sep" />}
-                    <span className="portal-account-menu-group-label">{g.titulo}</span>
+                  <div key={g.titulo} className="account-menu-group">
+                    {gi > 0 && <div className="account-menu-sep" />}
+                    <span className="account-menu-group-label">{g.titulo}</span>
                     {g.items.map(o => {
                       const active = pathname === o.ruta || pathname.startsWith(o.ruta + '/')
                       return (
@@ -175,7 +175,7 @@ export default function PortalHeader({ session, nombreEmpresa, empresas, verNoti
                           href={o.ruta}
                           role="menuitem"
                           onClick={() => setOpen(false)}
-                          className={`portal-account-menu-item${active ? ' active' : ''}`}
+                          className={`account-menu-item${active ? ' active' : ''}`}
                         >
                           {ICONOS[o.ruta]}
                           <span>{o.label}</span>
@@ -184,11 +184,11 @@ export default function PortalHeader({ session, nombreEmpresa, empresas, verNoti
                     })}
                   </div>
                 ))}
-                <div className="portal-account-menu-sep" />
+                <div className="account-menu-sep" />
                 <button
                   type="button"
                   role="menuitem"
-                  className="portal-account-menu-item portal-account-menu-logout"
+                  className="account-menu-item account-menu-logout"
                   onClick={() => { setOpen(false); setShowLogoutDialog(true) }}
                 >
                   <LogOut size={16} strokeWidth={2} />

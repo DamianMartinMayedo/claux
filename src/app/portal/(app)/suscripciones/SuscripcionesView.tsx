@@ -910,7 +910,7 @@ function MesCard({ mes, atrasado, primario, tieneBase, excluidos, onToggle, onGe
                     </span>
                   </td>
                   <td className="col-actions">
-                    <Link href={`/portal/ventas/facturas/${f.factura_id}`} className="ter-action-btn"
+                    <Link href={`/portal/ventas/facturas/${f.factura_id}`} className="icon-btn"
                       title={`Ver la factura ${f.numero}`} aria-label={`Ver la factura ${f.numero}`}>
                       <ExternalLink size={15} strokeWidth={2} />
                     </Link>
@@ -1137,7 +1137,7 @@ function FacturacionPanel({ data, empresaInicial, puedeEditar }: {
 
       {/* Sin selector de mes: el calendario los enseña todos. Solo se elige empresa,
           porque cada factura pertenece a UNA. */}
-      <div className="ter-toolbar">
+      <div className="filters-bar">
         <EmpresaPills empresas={empresasPills} value={empresaId} onChange={elegirEmpresa} sinTodas />
       </div>
 

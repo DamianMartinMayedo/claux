@@ -10,10 +10,25 @@ import { X } from 'lucide-react'
 // `aria-labelledby` apuntando al título (un lector de pantalla anuncia de qué es
 // el diálogo). NO cierra al hacer clic fuera a propósito: son formularios, y un
 // clic despistado no puede tirar lo que llevas escrito.
+//
+// También bloquea el scroll del fondo mientras está abierto. Con un CONTADOR
+// y no con un booleano: cuando un modal abre otro encima, al cerrarse el de arriba
+// el de abajo sigue abierto, y un booleano habría devuelto el scroll al fondo con
+// el diálogo todavía en pantalla.
+let abiertos = 0
+
 export default function ModalShell({
-  title, onClose, size, children,
+  title, subtitle, onClose, size, children,
 }: {
   title: React.ReactNode
+  /**
+   * La línea que dice SOBRE QUÉ es este diálogo: el pago y el cliente, la factura,
+   * el trabajador. La mitad de los modales del admin la tenían escrita a mano bajo
+   * el `<h2>`; aquí es un dato del componente para que salga siempre igual y para
+   * que el lector de pantalla la anuncie con el título (va dentro del elemento al
+   * que apunta `aria-labelledby`).
+   */
+  subtitle?: React.ReactNode
   onClose: () => void
   /** Clase de ancho ya existente: 'modal-lg' | 'modal-md' | 'modal-sm' | 'modal-520'… */
   size?: string
@@ -21,6 +36,11 @@ export default function ModalShell({
 }) {
   const titleId = useId()
   const modalRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (abiertos++ === 0) document.body.style.overflow = 'hidden'
+    return () => { if (--abiertos === 0) document.body.style.overflow = '' }
+  }, [])
 
   useEffect(() => {
     const previo = document.activeElement as HTMLElement | null
@@ -74,7 +94,10 @@ export default function ModalShell({
         aria-labelledby={titleId}
       >
         <div className="modal-header">
-          <h2 className="modal-title" id={titleId}>{title}</h2>
+          <div id={titleId}>
+            <h2 className="modal-title">{title}</h2>
+            {subtitle && <p className="modal-subtitle">{subtitle}</p>}
+          </div>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Cerrar">
             <X size={20} strokeWidth={2} />
           </button>

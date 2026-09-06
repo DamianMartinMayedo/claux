@@ -494,7 +494,7 @@ function CobrosFacturaCard({ cobros, numero, tienePermiso }: { cobros: CobrosFac
               <span className="gc-liq-cuenta">{l.cuenta_nombre}</span>
               <span className="gc-liq-monto">{formatearMoneda(l.monto, cobros.moneda)}</span>
               {tienePermiso && (
-                <button className="ter-action-btn ter-action-danger" title="Anular cobro"
+                <button className="icon-btn icon-btn-danger" title="Anular cobro"
                   onClick={() => setAnularLiq(l)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
               )}
             </div>

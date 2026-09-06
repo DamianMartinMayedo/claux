@@ -286,7 +286,7 @@ export function DocumentoLineasEditor({
                 <div className="ven-col-del">
                   <button
                     type="button"
-                    className="ter-action-btn ter-action-danger"
+                    className="icon-btn icon-btn-danger"
                     onClick={() => removeLinea(i)}
                     aria-label={`Eliminar la línea ${i + 1}`}
                     title="Eliminar línea"
@@ -368,7 +368,7 @@ export function DocumentoLineasEditor({
                 </div>
                 <button
                   type="button"
-                  className="ter-action-btn ter-action-danger"
+                  className="icon-btn icon-btn-danger"
                   onClick={() => removeAjuste(i)}
                   title="Eliminar ajuste"
                 >

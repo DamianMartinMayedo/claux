@@ -693,8 +693,8 @@ export default function MovimientosView({
                           : <span className="badge badge-neutral">{m.origen === 'COMPRA' ? 'Compra' : 'Venta'}</span>}
                       </td>
                       <td className="col-actions">
-                        <div className="ter-actions">
-                          <button type="button" className="ter-action-btn" title="Ver detalle"
+                        <div className="table-actions">
+                          <button type="button" className="icon-btn" title="Ver detalle"
                             aria-label="Ver detalle del movimiento" aria-expanded={abierto}
                             onClick={() => setDetalle(abierto ? null : m.movimiento_id)}>
                             <ChevronDown size={15} strokeWidth={2} className={abierto ? 'tes-chevron-abierto' : undefined} />

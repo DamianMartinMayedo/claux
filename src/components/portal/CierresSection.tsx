@@ -127,8 +127,8 @@ export default function CierresSection({ cierres, iaActiva, compartidas }: {
                   <td data-label="Fechas"><strong>{c.fecha_desde === c.fecha_hasta ? fmt(c.fecha_desde) : `${fmt(c.fecha_desde)} – ${fmt(c.fecha_hasta)}`}</strong></td>
                   <td data-label="Motivo" className="text-sm-muted cell-truncate">{c.motivo ?? '—'}</td>
                   <td className="col-actions">
-                    <div className="ter-actions">
-                      <button className="ter-action-btn ter-action-danger" title="Eliminar"
+                    <div className="table-actions">
+                      <button className="icon-btn icon-btn-danger" title="Eliminar"
                         onClick={() => setConfirmarBorrado(c)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
                     </div>
                   </td>

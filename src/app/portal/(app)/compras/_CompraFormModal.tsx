@@ -367,7 +367,7 @@ export function CompraFormModal({
                         </div>
                         <div className="ven-col-num ven-total-cell" data-label="Total">{fmt(l.cantidad * l.costo_unitario, moneda)}</div>
                         <div className="ven-col-del">
-                          <button type="button" className="ter-action-btn ter-action-danger"
+                          <button type="button" className="icon-btn icon-btn-danger"
                             onClick={() => removeLinea(i)}
                             aria-label={`Eliminar la línea ${i + 1}`} title="Eliminar línea">
                             <Trash2 size={13} strokeWidth={2} />

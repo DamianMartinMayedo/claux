@@ -335,7 +335,7 @@ function ConfigNominaPanel({ data, puedeEditar }: { data: NominaPageData; puedeE
         </div>
       )}
 
-      <div className="ter-toolbar">
+      <div className="filters-bar">
         <p className="text-sm-muted">
           Cómo calcula la nómina cada una de tus empresas. Cambiarlo <strong>no altera las
           nóminas ya hechas</strong>: solo las que generes a partir de ahora.
@@ -393,7 +393,7 @@ function ConfigNominaPanel({ data, puedeEditar }: { data: NominaPageData; puedeE
                               aria-label={`Día de pago de la nómina de ${emp.nombre}`} />
                           </td>
                           <td className="col-actions">
-                            <div className="ter-actions">
+                            <div className="table-actions">
                               <button type="submit" form={`cfg-${emp.empresa_id}`}
                                 className="btn btn-primary btn-sm" disabled={isPending}>
                                 {isPending ? <span className="spinner spinner-sm" /> : 'Guardar'}
@@ -418,7 +418,7 @@ function ConfigNominaPanel({ data, puedeEditar }: { data: NominaPageData; puedeE
                           </td>
                           <td className="col-actions">
                             {puedeEditar && (
-                              <button className="ter-action-btn" title="Cambiar"
+                              <button className="icon-btn" title="Cambiar"
                                 aria-label={`Cambiar la configuración de ${emp.nombre}`}
                                 onClick={() => setEditando(emp.empresa_id)}>
                                 <Pencil size={14} strokeWidth={2} />
@@ -502,7 +502,7 @@ function MapeoGastosPanel({ data, puedeEditar }: { data: NominaPageData; puedeEd
       <div className="card-header">
         <h2 className="card-title">Reparto del coste de la nómina</h2>
       </div>
-      <div className="ter-toolbar">
+      <div className="filters-bar">
         <p className="text-sm-muted">
           A qué categoría de gasto va cada concepto cuando confirmas una nómina. En blanco,
           se usa la categoría que crea CLAUX. <strong>Las retenciones no están aquí</strong>:
@@ -542,7 +542,7 @@ function MapeoGastosPanel({ data, puedeEditar }: { data: NominaPageData; puedeEd
                     </div>
                   ))}
                 </div>
-                <div className="ter-actions">
+                <div className="table-actions">
                   <button type="submit" className="btn btn-primary btn-sm" disabled={isPending}>
                     {isPending ? <span className="spinner spinner-sm" /> : 'Guardar reparto'}
                   </button>

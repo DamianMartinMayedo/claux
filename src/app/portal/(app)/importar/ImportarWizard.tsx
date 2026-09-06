@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { toastError, toastSuccess, toastLoading } from '@/app/contexts/ToastContext'
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, AlertTriangle, Download, FileSpreadsheet, Save, Undo2 } from 'lucide-react'
+import { toastError, toastSuccess, toastWarning, toastLoading } from '@/app/contexts/ToastContext'
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, AlertTriangle, Download, FileSpreadsheet, Save, Sparkles, Undo2 } from 'lucide-react'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { formatearImporte, fusionarTotales } from '@/lib/importador/util'
 import { aBase64 } from '@/lib/subir-archivo'
@@ -15,6 +15,7 @@ import {
   deshacerLoteImport, listarPlantillasImport, guardarPlantillaImport, cargarPlantillaImport,
   plantillaImport, crearMigracionLiangApp, ajustarMigracionLiangApp,
   deshacerMigracionLiangApp, plantillaFacturasLiangApp, estadoLoteImport,
+  sugerirMapeoIa,
 } from '@/app/actions/portal/importar'
 import {
   AyudaLiangApp, CuadreLiangApp, FacturasLiangApp, FichasLiangApp, GruposLiangApp,
@@ -534,6 +535,9 @@ export default function ImportarWizard({ entidadesPermitidas }: { entidadesPermi
   const [paso, setPaso]         = useState<Paso>('entidad')
   const [cargando, setCargando] = useState(false)
   const [progreso, setProgreso] = useState<{ hechas: number; total: number } | null>(null)
+  // La IA del emparejado va aparte de `cargando`: mientras piensa, el resto del
+  // paso sigue usable (se puede mapear a mano, o cambiar la política).
+  const [iaPensando, setIaPensando] = useState(false)
 
   // ── Migración desde LiangApp ──
   // Los cinco pasos son los mismos (plan, D6). `mig` es lo único que decide si
@@ -575,6 +579,8 @@ export default function ImportarWizard({ entidadesPermitidas }: { entidadesPermi
   const [columnas, setColumnas]   = useState<Record<string, string>>({})
   const [globales, setGlobales]   = useState<Record<string, string>>({})
   const [politica, setPolitica]   = useState<Politica>('SALTAR')
+  /** Campos que siguen sin columna. Es lo que la IA puede rellenar. */
+  const sinMapear = campos.filter(c => !(columnas[c.campo] ?? '').trim()).length
 
   const [resultado, setResultado] = useState<Resultado | null>(null)
   // Decisiones sobre los nombres que el archivo no emparejó. Viajan en el mapeo,
@@ -1013,6 +1019,47 @@ export default function ImportarWizard({ entidadesPermitidas }: { entidadesPermi
       toastError('No se ha podido cargar la plantilla. Vuelve a intentarlo.')
     } finally {
       await ld.dismiss()
+    }
+  }
+
+  /**
+   * Emparejar con IA los campos que se quedaron sin columna. Corre a cuenta de
+   * CLAUX (bolsa interna): el asistente solo existe en modo configuración, así
+   * que quien está delante es del equipo.
+   *
+   * Solo rellena huecos —lo emparejado a mano no se pisa— y no valida ni aplica
+   * nada: deja los desplegables puestos para que una persona los repase.
+   */
+  async function emparejarConIa() {
+    if (!loteId) return
+    const ld = toastLoading('Leyendo el archivo…')
+    setIaPensando(true)
+    try {
+      const res = await sugerirMapeoIa(loteId)
+      await ld.dismiss()
+      if (!res.ok || !res.columnas) { toastError(res.error ?? 'No se pudo emparejar.'); return }
+      const propuesto = res.columnas
+      let puestos = 0
+      setColumnas(prev => {
+        const next = { ...prev }
+        for (const c of campos) {
+          if ((next[c.campo] ?? '').trim()) continue
+          const col = propuesto[c.campo]
+          // Una columna ya asignada a otro campo no se reutiliza: el archivo no
+          // trae la misma columna dos veces.
+          if (!col || Object.values(next).includes(col)) continue
+          next[c.campo] = col
+          puestos++
+        }
+        return next
+      })
+      if (puestos === 0) toastWarning('La IA no encontró columna para los campos que faltan. Hazlo a mano.')
+      else toastSuccess(`${puestos} campo(s) emparejado(s). Repásalos antes de validar.`)
+    } catch {
+      toastError('No se ha podido emparejar. Vuelve a intentarlo.')
+    } finally {
+      await ld.dismiss()
+      setIaPensando(false)
     }
   }
 
@@ -1735,6 +1782,20 @@ export default function ImportarWizard({ entidadesPermitidas }: { entidadesPermi
                 </button>
               </div>
             </div>
+          </div>
+
+          {/* Emparejar lo que el nombre de la cabecera no delata («Fec.», «IMPORTE
+              CUP», «Prov.»). Solo toca los campos SIN columna: lo ya emparejado
+              —a mano o con una plantilla guardada— no se pisa, y todo sigue
+              siendo un desplegable que se puede corregir. */}
+          <div className="imprt-map-head">
+            <span className="text-xs-muted">{sinMapear} campo(s) sin columna</span>
+            <button type="button" className="btn btn-secondary btn-sm"
+              onClick={emparejarConIa} disabled={cargando || iaPensando || sinMapear === 0}>
+              {iaPensando
+                ? <><span className="spinner spinner-sm" /> Emparejando…</>
+                : <><Sparkles size={15} strokeWidth={2} /> Emparejar con IA</>}
+            </button>
           </div>
 
           <div className="imprt-mapa">

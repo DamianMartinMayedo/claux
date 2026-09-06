@@ -6,7 +6,6 @@ import { pedirReactivacion } from '@/app/actions/portal/soporte'
 import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import type { MotivoBloqueo } from '@/lib/clientes/ciclo-vida'
 
-const CORREO = 'contacto@claux.es'
 
 // El texto apunta al BOTÓN, no al correo: la renovación es de un clic y sin escribir
 // nada, y decir «escríbenos» de entrada mandaba al camino más largo de los dos.
@@ -42,7 +41,10 @@ const MENSAJES: Record<MotivoBloqueo, { titulo: string; texto: string }> = {
  * para quien prefiera escribir por su cuenta — es el final del embudo de cobro y no puede
  * depender de que un clic funcione.
  */
-export default function BloqueadoScreen({ motivo }: { motivo: MotivoBloqueo }) {
+// `correo` llega por prop y no tecleado aquí: es el buzón de contratación de
+// `settings`, y esto es un componente de cliente que no puede leerlo. El layout
+// solo lo consulta cuando hay bloqueo, así que no cuesta nada al resto.
+export default function BloqueadoScreen({ motivo, correo }: { motivo: MotivoBloqueo; correo: string }) {
   const [pedido, setPedido] = useState(false)
   const [enviando, startTransition] = useTransition()
 
@@ -54,7 +56,7 @@ export default function BloqueadoScreen({ motivo }: { motivo: MotivoBloqueo }) {
     startTransition(async () => {
       const r = await pedirReactivacion()
       await ld.dismiss()
-      if (!r.ok) { toastError(r.error ?? 'No se pudo enviar. Escríbenos a ' + CORREO); return }
+      if (!r.ok) { toastError(r.error ?? 'No se pudo enviar. Escríbenos a ' + correo); return }
       setPedido(true)
       toastSuccess(r.yaPedido
         ? 'Ya teníamos tu petición de renovación. Te contactamos.'
@@ -88,7 +90,7 @@ export default function BloqueadoScreen({ motivo }: { motivo: MotivoBloqueo }) {
           otra cosa. Con «Contactar con CLAUX» arriba y «o escríbenos» debajo parecían la
           misma cosa dos veces, y el dueño se paraba a elegir entre dos caminos iguales. */}
       <p className="bloqueado-texto">
-        ¿Otra cosa? Escríbenos a <a href={`mailto:${CORREO}`} className="link-primary">{CORREO}</a>.
+        ¿Otra cosa? Escríbenos a <a href={`mailto:${correo}`} className="link-primary">{correo}</a>.
       </p>
     </div>
   )

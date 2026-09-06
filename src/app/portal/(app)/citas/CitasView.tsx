@@ -597,7 +597,7 @@ function AusenciasRecurso({ recurso, etiquetaRec, onCambio }: {
                   <td data-label="Hasta">{formatFecha(a.fecha_hasta)}</td>
                   <td data-label="Motivo" className="text-sm-muted">{a.motivo ?? '—'}</td>
                   <td className="col-actions">
-                    <button type="button" className="ter-action-btn" aria-label="Eliminar ausencia"
+                    <button type="button" className="icon-btn" aria-label="Eliminar ausencia"
                       onClick={() => setBorrar(a)} disabled={isPending}>
                       <Trash2 size={15} strokeWidth={2} />
                     </button>

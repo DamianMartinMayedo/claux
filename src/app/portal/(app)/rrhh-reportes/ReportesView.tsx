@@ -250,14 +250,14 @@ export default function ReportesView({ data, anio }: { data: ReportesRrhhData; a
         )}
       </div>
 
-      <div className="ter-toolbar">
+      <div className="filters-bar">
         <EmpresaPills
           empresas={empresasFiltro}
           value={filtroEmpresa}
           onChange={v => navegar({ empresa: v })}
           todasLabel="Todas"
         />
-        <select className="input ter-filter-select" value={anio}
+        <select className="input filtro-select" value={anio}
           aria-label="Año del informe"
           onChange={e => navegar({ anio: e.target.value })}>
           {data.anios.map(a => <option key={a} value={a}>Año {a}</option>)}
@@ -267,7 +267,7 @@ export default function ReportesView({ data, anio }: { data: ReportesRrhhData; a
             que paga en CUP y en USD veía las dos cifras concatenadas y no tenía forma de
             obtener un total. */}
         {data.monedas.length > 1 && (
-          <select className="input ter-filter-select" value={data.ver}
+          <select className="input filtro-select" value={data.ver}
             aria-label="Moneda en la que ver el informe"
             onChange={e => navegar({ ver: e.target.value })}>
             <option value="">Cada moneda</option>

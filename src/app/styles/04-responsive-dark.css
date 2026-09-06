@@ -77,11 +77,6 @@
   }
 }
 
-/* Header del admin: en móvil estrecho, el avatar basta; el nombre/rol se ocultan
-   para no competir con la hamburguesa y el logo. */
-@media (max-width: 480px) {
-  .admin-header .header-user-info { display: none; }
-}
 @media (prefers-reduced-motion: reduce) {
   .admin-sidebar { transition: none; }
 }
@@ -365,14 +360,14 @@
   .input,
   select.input,
   .nav-item,
-  .portal-account-menu-item,
+  .account-menu-item,
   .row-actions-item {
     min-height: 44px;
   }
   .btn-sm { min-height: 38px; }
   .theme-toggle-btn,
   .mobile-nav-toggle,
-  .ter-action-btn { min-width: 44px; min-height: 44px; }
+  .icon-btn { min-width: 44px; min-height: 44px; }
 }
 
 /* ═══════════════════════════════════════════════════

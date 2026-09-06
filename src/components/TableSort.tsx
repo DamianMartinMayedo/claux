@@ -23,8 +23,17 @@
 // Los VACÍOS van siempre al final, en las dos direcciones: un hueco no es «lo más
 // pequeño», es la ausencia del dato, y arrastrarlo arriba al invertir el orden
 // esconde justo lo que se estaba mirando.
+//
+// LAS COLUMNAS NO SE MUEVEN AL ORDENAR. Una `<table>` normal (`table-layout: auto`)
+// mide sus columnas con las filas que hay PINTADAS, y en un listado paginado ordenar
+// cambia qué filas son: el navegador vuelve a medir y las columnas saltan a izquierda
+// y derecha justo cuando la vista está buscando una fila. Por eso, en el clic de la
+// cabecera y ANTES de reordenar, se fija el ancho que la tabla tiene en ese momento y
+// se pasa a `table-layout: fixed`. Se suelta solo cuando el ancho tiene que volver a
+// calcularse de verdad: al cambiar el conjunto de filas (un filtro) o el tamaño de la
+// ventana. En móvil no se toca nada: ahí la tabla se pinta como tarjetas.
 
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 export type Dir = 'asc' | 'desc'
 export type ValorOrden = string | number | boolean | Date | null | undefined
@@ -45,6 +54,9 @@ export interface Orden<T> {
   dir: Dir
   columnas: ColumnasOrden<T>
   alternar: (clave: string) => void
+  /** Congela los anchos de la tabla que contiene a `desde`. Lo llama `ThOrden`
+   *  antes de reordenar; no hace falta usarlo a mano. */
+  congelar: (desde: HTMLElement) => void
 }
 
 function esVacio(v: ValorOrden): boolean {
@@ -95,6 +107,43 @@ export function useOrden<T>(
     })
   }, [filas, estado, columnas])
 
+  // La tabla cuyos anchos están congelados (null = ninguna).
+  const tablaRef = useRef<HTMLTableElement | null>(null)
+
+  const soltar = useCallback(() => {
+    const t = tablaRef.current
+    if (!t) return
+    tablaRef.current = null
+    t.style.tableLayout = ''
+    for (const c of Array.from(t.tHead?.rows[0]?.cells ?? [])) c.style.width = ''
+  }, [])
+
+  // Cambió el conjunto de filas (un filtro, un alta, un borrado): los anchos de
+  // antes ya no describen estos datos, así que se recalculan. Ordenar y pasar de
+  // página NO entran aquí: ahí el conjunto es el mismo y las columnas se quedan.
+  useEffect(() => { soltar() }, [filas.length, soltar])
+  useEffect(() => {
+    window.addEventListener('resize', soltar)
+    return () => { window.removeEventListener('resize', soltar); soltar() }
+  }, [soltar])
+
+  const congelar = useCallback((desde: HTMLElement) => {
+    // Por debajo de 640px la tabla es una lista de tarjetas (04-responsive): no
+    // hay columnas que fijar, y fijarlas estropearía el ancho de la tarjeta.
+    if (!window.matchMedia('(min-width: 641px)').matches) return
+    const t = desde.closest('table')
+    const fila = t?.tHead?.rows[0]
+    // Solo la PRIMERA fila de cabecera: es de la que `table-layout: fixed` toma
+    // los anchos. Si el botón vive en una segunda fila, mejor no tocar nada.
+    if (!t || !fila || !fila.contains(desde) || tablaRef.current === t) return
+    const celdas = Array.from(fila.cells)
+    const anchos = celdas.map(c => c.getBoundingClientRect().width)
+    if (anchos.some(a => a <= 0)) return
+    celdas.forEach((c, i) => { c.style.width = `${anchos[i]}px` })
+    t.style.tableLayout = 'fixed'
+    tablaRef.current = t
+  }, [])
+
   function alternar(clave: string) {
     setEstado(prev => {
       if (!prev || prev.clave !== clave) {
@@ -107,7 +156,7 @@ export function useOrden<T>(
     })
   }
 
-  return { filas: ordenadas, clave: estado?.clave ?? null, dir: estado?.dir ?? 'asc', columnas, alternar }
+  return { filas: ordenadas, clave: estado?.clave ?? null, dir: estado?.dir ?? 'asc', columnas, alternar, congelar }
 }
 
 /**
@@ -136,7 +185,8 @@ export function ThOrden<T>({
       className={`th-sort${activo ? ' th-sort-activo' : ''}${className ? ` ${className}` : ''}`}
       aria-sort={dir ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
     >
-      <button type="button" className="th-sort-btn" onClick={() => orden.alternar(clave)}
+      <button type="button" className="th-sort-btn"
+        onClick={e => { orden.congelar(e.currentTarget); orden.alternar(clave) }}
         title={title} aria-label={`Ordenar por ${col?.label ?? clave}`}>
         <span>{children ?? col?.label}</span>
         <svg className="th-sort-ind" width="12" height="12" viewBox="0 0 24 24" fill="none"

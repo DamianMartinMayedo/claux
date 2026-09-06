@@ -8,7 +8,8 @@
 // El destino real de estos ficheros es **Excel en español**, no un parser. Con
 // las opciones por defecto de un CSV "de manual" (coma, sin BOM) el resultado es
 // un fichero que se abre con todo en una sola columna y los acentos rotos. Ya
-// pasó: `admin/clientes` exporta así hoy.
+// pasó: `admin/clientes` y `admin/pagos` exportaban así, con su propio generador
+// a mano; desde la revisión del admin pasan por aquí como todo lo demás.
 //
 //  · **BOM UTF-8** al principio. Sin él Excel asume la codificación del sistema y
 //    «Suministros» sale como «SuministrosÂ». Es un fallo que solo se ve al abrir.

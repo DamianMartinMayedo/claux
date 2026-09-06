@@ -250,10 +250,10 @@ export default function RangoBusqueda({
       )}
 
       {!sinBuscador && (
-        <form className="ter-search-wrap" onSubmit={e => { e.preventDefault(); navegar({ q: texto.trim() || null }) }}>
+        <form className="filtro-search-wrap" onSubmit={e => { e.preventDefault(); navegar({ q: texto.trim() || null }) }}>
           <Search size={14} strokeWidth={2} />
           <input
-            className="ter-search"
+            className="filtro-search"
             type="search"
             value={texto}
             aria-label={placeholder}

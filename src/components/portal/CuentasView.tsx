@@ -158,7 +158,7 @@ function PagoModal({
                   <span className="text-sm-muted tes-nowrap">{formatFecha(l.fecha)}</span>
                   <span className="gc-liq-cuenta">{l.cuenta_nombre}</span>
                   <span className="gc-liq-monto">{formatMonto(l.monto)} {doc.moneda}</span>
-                  <button className="ter-action-btn ter-action-danger" title="Anular"
+                  <button className="icon-btn icon-btn-danger" title="Anular"
                     onClick={() => setAnularLiq(l)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
                 </div>
               ))}
@@ -429,8 +429,8 @@ export default function CuentasView({ data, puedeEditar }: { data: CuentasPageDa
                     <td data-label="Total" className="col-num tes-monto-cell">{formatMonto(d.monto)} {d.moneda}</td>
                     <td data-label="Pendiente" className="col-num tes-monto-cell">{formatMonto(d.saldo)} {d.moneda}</td>
                     <td className="col-actions">
-                      <div className="ter-actions">
-                        <button type="button" className="ter-action-btn" title="Ver detalle"
+                      <div className="table-actions">
+                        <button type="button" className="icon-btn" title="Ver detalle"
                           aria-label={`Ver detalle de ${d.numero}`} aria-expanded={abierto}
                           onClick={() => setDetalle(abierto ? null : d.doc_id)}>
                           <ChevronDown size={15} strokeWidth={2} className={abierto ? 'tes-chevron-abierto' : undefined} />

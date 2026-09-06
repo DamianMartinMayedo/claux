@@ -903,7 +903,7 @@ function ConceptosSection({
                     </td>
                     <td className="col-actions">
                       {puedeEditar && (
-                        <button className="ter-action-btn ter-action-danger" title="Quitar la excepción"
+                        <button className="icon-btn icon-btn-danger" title="Quitar la excepción"
                           aria-label={`Quitar la excepción de ${c.nombre}`}
                           onClick={() => setDelId(c)} disabled={isPending}>
                           <Trash2 size={14} strokeWidth={2} />
@@ -1199,10 +1199,10 @@ export default function EmpleadoDetalleView({ detalle, puedeEditar }: { detalle:
                     </td>
                     <td className="col-actions">
                       {puedeEditar && (
-                        <div className="ter-actions">
-                          <button className="ter-action-btn" title="Editar contrato"
+                        <div className="table-actions">
+                          <button className="icon-btn" title="Editar contrato"
                             onClick={() => setEditContrato(c)} disabled={isPending}><Pencil size={14} strokeWidth={2} /></button>
-                          <button className="ter-action-btn ter-action-danger" title="Eliminar contrato"
+                          <button className="icon-btn icon-btn-danger" title="Eliminar contrato"
                             onClick={() => setDelContrato(c)} disabled={isPending}><Trash2 size={14} strokeWidth={2} /></button>
                         </div>
                       )}

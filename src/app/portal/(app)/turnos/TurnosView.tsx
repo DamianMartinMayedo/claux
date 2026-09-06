@@ -813,9 +813,9 @@ export default function TurnosView({ data, puedeEditar, children }: { data: Turn
         </PrerequisitoAviso>
       )}
 
-      <div className="ter-toolbar">
+      <div className="filters-bar">
         {data.empresas.length > 1 && (
-          <select className="input ter-filter-select" value={empresaId}
+          <select className="input filtro-select" value={empresaId}
             aria-label="Empresa del cuadrante"
             onChange={e => navegar({ empresa: e.target.value })}>
             {data.empresas.map(e => <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>)}
@@ -897,11 +897,11 @@ export default function TurnosView({ data, puedeEditar, children }: { data: Turn
               onClick={() => navPeriodo(1)} disabled={!ancla}><ChevronRight size={16} strokeWidth={2} /></button>
           </div>
           <div className="turno-preview-controls">
-            <form className={`ter-search-wrap${vistaCuadrante === 'persona' ? '' : ' turno-search-placeholder'}`}
+            <form className={`filtro-search-wrap${vistaCuadrante === 'persona' ? '' : ' turno-search-placeholder'}`}
               aria-hidden={vistaCuadrante !== 'persona'} onSubmit={e => e.preventDefault()}>
                 <div className="turno-search-field">
                   <Search size={16} strokeWidth={2} />
-                  <input className="ter-search" type="search" value={textoBusqueda}
+                  <input className="filtro-search" type="search" value={textoBusqueda}
                     placeholder="Buscar trabajador…" aria-label="Buscar trabajador en Por persona"
                     disabled={vistaCuadrante !== 'persona'}
                     onChange={e => buscarTrabajador(e.target.value)} />

@@ -529,7 +529,7 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
                       </td>
                       {!soloLectura && (
                         <td className="col-actions">
-                          <div className="ter-actions">
+                          <div className="table-actions">
                             <button
                               className="btn btn-secondary btn-xs"
                               onClick={() => abrirEditar(u)}

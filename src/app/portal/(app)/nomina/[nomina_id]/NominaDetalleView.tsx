@@ -703,7 +703,7 @@ export default function NominaDetalleView({ detalle, tienePermiso }: { detalle: 
       </div>
 
       {puedeEditar && (
-        <div className="ter-toolbar">
+        <div className="filters-bar">
           <button type="button" className="btn btn-secondary btn-sm" onClick={() => setModalAgregar(true)}>
             <Plus size={14} strokeWidth={2.5} /> Incidencias de un trabajador
           </button>
@@ -812,7 +812,7 @@ export default function NominaDetalleView({ detalle, tienePermiso }: { detalle: 
                       <td data-label="Retenciones" className="col-num tes-monto-cell">{formatMonto(l.deducciones)}</td>
                       <td data-label="Neto" className="col-num tes-monto-cell">{formatMonto(l.neto)}</td>
                       <td className="col-actions">
-                        <button type="button" className="ter-action-btn" title="Ver desglose"
+                        <button type="button" className="icon-btn" title="Ver desglose"
                           aria-label={`Ver desglose de ${l.empleado_nombre}`}
                           onClick={() => setExpandido(expandido === l.linea_id ? null : l.linea_id)}>
                           <ChevronDown size={15} strokeWidth={2}

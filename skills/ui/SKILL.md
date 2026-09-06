@@ -35,6 +35,10 @@ Los parciales:
 
 **Localiza una clase antes de crear**: `grep -rn "nombre-aproximado" src/app/styles/`. El sistema ya tiene botones, inputs, navegación, tablas, modales, badges, cards, alertas y estados.
 
+**Una clase que pinta las DOS caras no vive en el parcial de una** (`05-admin-paginas.css` es del admin, `06-portal.css` es del portal). Sigue funcionando —el CSS es un único bundle, así que nada se rompe y nadie se entera—, hasta que alguien retoca «su» parcial y se lleva por delante una pantalla de la otra cara que no sabía que existía. Lo compartido va a `03-components.css`. Lo vigila **`npm run audit:css`**.
+
+Y al revés: **si el admin necesita algo que el portal ya tiene, usa la clase del portal**, no una copia con otro nombre. El admin puede tener clases propias para lo que solo existe ahí; lo que no puede es reinventar la tarjeta, el icono de métrica o el estado vacío con un segundo ámbar a un paso del primero.
+
 ## 1. Regla nº1 — prohibido el estilo inline
 
 Nunca escribas `style={{ ... }}` en JSX ni `style=""` en HTML. Sin excepciones de comodidad ("es solo un margen") — esa es exactamente la vía por la que el sistema se degrada.
@@ -91,9 +95,21 @@ Toda tabla usa el sistema base `.table` + `.table-wrapper` de `03-components.css
 
 **Filas clickables** (tabla con detalle): `<tr className="table-row-clickable" onClick={() => router.push(...)}>`; el `<Link>` del nombre lleva `onClick={(e) => e.stopPropagation()}`.
 
+**Dónde se pincha — la fila o el nombre.** No se decide por vista, se decide por lo que ES la fila:
+
+| La fila es… | Qué se pincha | Ejemplos |
+|---|---|---|
+| Una **entidad con ficha propia**, y entrar es la acción obvia | La **fila entera** (`table-row-clickable`) | clientes, presupuestos, propuestas, hilos de soporte |
+| Un **registro** de algo que pasó, sin ficha propia | **Solo el nombre**, enlazado a la ficha de su entidad; la fila no lleva a ningún sitio | pagos, actividad, solicitudes |
+| Una **fila de configuración** que se edita en sitio | **Nada**: manda `RowActions` | módulos, niveles, necesidades del diagnóstico |
+
+Con dos condiciones: la fila clicable **no se traga** el clic de sus controles (checkbox, `RowActions`, enlaces — `stopPropagation` en la celda de acciones), y siempre hay una vía de teclado equivalente.
+
 **Color de empresa** (tablas multi-empresa): `<tr className="… row-empresa-accent" style={empresaColorVar(colorOf(id))}>` (única excepción al no-inline: custom property de runtime). Acento lateral izquierdo; en tarjeta pasa a `border-left`. No añadas más color que ese acento.
 
-**Columnas ordenables — un solo sistema (`src/components/TableSort.tsx`).** Toda tabla de listado del portal ordena por columna con `useOrden` + `<ThOrden>`; no escribas tu propio `sort` ni tu propia flecha.
+**Columnas ordenables — un solo sistema (`src/components/TableSort.tsx`).** Toda tabla de listado —del portal y del admin— ordena por columna con `useOrden` + `<ThOrden>`; no escribas tu propio `sort` ni tu propia flecha. La excepción es la tabla cuyo **orden es el dato** (las que se reordenan a mano y guardan esa secuencia): ahí una columna ordenable pelearía con ella.
+
+**`npm run audit:tablas`** comprueba las tres que no se ven al copiar la tabla de al lado en el escritorio: `data-label` en cada `<td>` del cuerpo, `RowActions` con 2+ acciones, y `ThOrden` en las tablas de listado (las reconoce por la señal funcional: selección, paginación o barra de filtros).
 
 ```tsx
 // Ordenar va ANTES de paginar: al revés se ordenaría solo la página visible.
@@ -108,6 +124,8 @@ const { pageItems, ...pag } = usePagination(ord.filas)
 ```
 
 `valor` devuelve el dato que se compara (texto, número, fecha ISO o booleano), **no** el JSX de la celda: se ordena por el dato, no por cómo se pinta. Sin `children`, el `<th>` muestra `label`; el `className` de alineación (`col-num`, `col-center`) va en el `ThOrden`, igual que en un `<th>`. Tres estados por columna: ascendente → descendente → sin ordenar. Los vacíos caen siempre al final, se ordene como se ordene.
+
+**Ordenar no mueve las columnas.** Al pulsar la cabecera, `ThOrden` congela el ancho que la tabla tiene en ese momento (`table-layout: fixed`) antes de reordenar: sin eso, el navegador vuelve a medir con las filas de la nueva página y las columnas saltan a izquierda y derecha. Se suelta solo cuando cambia el conjunto de filas (un filtro) o el tamaño de la ventana, y en móvil no se aplica —ahí la tabla es una lista de tarjetas—. No hay nada que poner en la vista: va dentro de `useOrden`.
 
 **No se ordenan** (déjalas como `<th>`, con un comentario si no es obvio): las columnas cuyo valor es una cifra **por moneda** (no hay un número que comparar), las tablas cuyo orden lo fija el dueño a mano (catálogo, categorías) y las líneas de un documento (factura, compra, nómina), donde el orden ES el documento.
 
@@ -132,7 +150,7 @@ Toda pestaña interna usa **`<Tabs>`** (`src/components/Tabs.tsx`) + clases `.ta
 
 ## 3.3 Filtros — un solo sistema, y una sola declaración
 
-Todo listado del portal filtra con **`<Filtros>`** (`src/components/portal/Filtros.tsx`), que recibe una **declaración** (`src/lib/filtros.ts`). De esa única declaración salen **tres cosas** que antes se escribían por separado: la barra, el `FiltroExport` de la descarga y el texto de «lo que vas a descargar». Escribirlas a mano es cómo la pantalla y el fichero acabaron diciendo cosas distintas (un desplegable imprimía un UUID; pedir «Sin categoría» descargaba todo el catálogo). Vista de referencia: `gastos/GastosView.tsx` + su `page.tsx` + `actions/portal/gastos.ts`.
+Todo listado **de las dos caras** —portal y admin— filtra con **`<Filtros>`** (`src/components/portal/Filtros.tsx`), que recibe una **declaración** (`src/lib/filtros.ts`). De esa única declaración salen **tres cosas** que antes se escribían por separado: la barra, el `FiltroExport` de la descarga y el texto de «lo que vas a descargar». Escribirlas a mano es cómo la pantalla y el fichero acabaron diciendo cosas distintas (un desplegable imprimía un UUID; pedir «Sin categoría» descargaba todo el catálogo). Vista de referencia: `gastos/GastosView.tsx` + su `page.tsx` + `actions/portal/gastos.ts`; en el admin, `clientes/ClientesTabla.tsx`. La declaración admite las claves de los DOS registros de descarga (`FiltroExport` del portal y `FiltroAdmin` del admin), y el botón de descarga entra por `acciones` para que viva en la barra y no en una fila propia encima de la tabla.
 
 Reglas:
 
@@ -145,7 +163,7 @@ Reglas:
 - **Las píldoras solo si son POCAS.** `<Filtros>` degrada `widget: 'pastillas'` a `<select>` por encima de **4 opciones** — con seis empresas dejan de ser un atajo y se comen la fila. Lo decide el componente, así que la vista no tiene que saber cuántas empresas tiene el cliente. El `count` de una opción **solo se pinta en píldoras**.
 - Cada filtro declara su **`rotulo`** corto («Categoría», «Proveedor»): es lo que se pinta encima del control en el panel. No se deduce del `label` — singularizar en español es adivinar.
 - Techo de un listado ⇒ **`<AvisoTope>`**, que dice cuántas faltan y las trae. Nunca «acota el rango».
-- Pastilla de filtro: **`.filter-pill`** (con `.filter-pill-count` si el número es información, como los tramos de CxC/CxP). `.rango-pill` es la del rango, dentro de `RangoBusqueda`. **`.cxx-chip`, `.actividad-filter-pills`, `.dgn-chips` y `.soporte-filtros` son legado a converger**, no a imitar.
+- Pastilla de filtro: **`.filter-pill`** (con `.filter-pill-count` si el número es información, como los tramos de CxC/CxP). `.rango-pill` es la del rango, dentro de `RangoBusqueda`. **`.cxx-chip` es legado a converger**, no a imitar (las demás familias sueltas —las del admin— murieron con su revisión).
 - Mismo aspecto ⇒ mismo comportamiento. Una caja de búsqueda no puede exigir Enter en una pantalla y filtrar al teclear en otra.
 - **Todo selector de TERCERO dice de qué empresa es. Sin excepción.** `third_parties` es por empresa, así que el mismo proveedor real tiene una ficha por cada empresa que le compra: una lista plana enseña «CLAUDIA» tres veces, idénticas. Y agrupar por **nombre** para quitar el duplicado es peor — fusiona tres fichas y filtrar por ella enseña las deudas de las tres sin decirlo. En un **filtro**, `opcionesTercero()` de `lib/filtros.ts` (id como valor, empresa como `<optgroup>`); en un **formulario**, se elige la empresa primero y la lista se acota a ella (`_CompraFormModal`, `_ProductoFormModal`). **Nunca** comparar terceros por nombre, ni en pantalla ni en la descarga.
 - Al tocar filtros o descargas: **`npm run audit:filtros`** en verde.
@@ -223,8 +241,8 @@ Todo `<input>` con `<label for>` asociado por `id`. Todo botón de solo icono co
 1. ¿Cero `style={{` nuevos en el diff? (excepción: custom property de runtime documentada).
 2. ¿Cero hex/px/ms hardcodeados nuevos? ¿Todo por token?
 3. ¿Cero clases utilitarias de Tailwind?
-4. ¿Clases nuevas en el parcial de su dominio (§0), con prefijo de componente?
-5. Si hay tabla: ¿`col-*` en `th`+`td`, `data-label` en cada `td`, `RowActions` si 2+ acciones?
+4. ¿Clases nuevas en el parcial de su dominio (§0), con prefijo de componente? ¿Nada compartido escondido en el parcial de una sola cara — `npm run audit:css` en verde?
+5. Si hay tabla: ¿`col-*` en `th`+`td`, `data-label` en cada `td`, `RowActions` si 2+ acciones, `ThOrden` si es un listado, y decidido **qué se pincha** (§3)? `npm run audit:tablas` en verde.
 5b. Si hay filtros: ¿una sola declaración con `<Filtros>` (§3.3), estado en la URL, y `npm run audit:filtros` en verde?
 6. ¿Probado en dark mode y en móvil 360 px?
 7. ¿Estados de carga, doble-submit y feedback cubiertos si hay acciones?

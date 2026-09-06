@@ -25,15 +25,6 @@
 }
 .portal-header-left  { display: flex; align-items: center; gap: var(--space-4); }
 .portal-header-right { display: flex; align-items: center; gap: var(--space-3); }
-.theme-toggle-btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 36px; height: 36px; border-radius: var(--radius-md);
-  border: 1px solid var(--color-border); background: transparent;
-  color: var(--color-text-muted); cursor: pointer;
-  transition: all var(--transition);
-}
-.theme-toggle-btn:hover { background: var(--color-surface-2); color: var(--color-text); border-color: var(--color-border-strong); }
-.theme-toggle-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 .portal-logo {
   display: inline-flex;
   align-items: center;
@@ -42,122 +33,15 @@
 /* Menú de cuenta: único elemento de la derecha. Avatar con las iniciales del
    negocio en un acento distinto del principal (índigo), abre un desplegable. */
 .portal-header-account { position: relative; }
-.portal-header-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-full);
-  background: var(--color-indigo-bg);
-  color: var(--color-indigo);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--text-xs);
-  font-weight: 700;
-  flex-shrink: 0;
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition: var(--transition);
-}
-.portal-header-avatar:hover { border-color: var(--color-indigo); }
-.portal-header-avatar:focus-visible {
-  outline: 2px solid var(--color-indigo);
-  outline-offset: 2px;
-}
+/* La forma la pone `.header-avatar-btn` (03-components.css), compartida con el
+   admin. Aquí solo queda lo que es del portal: el color de la empresa. */
 /* Cuenta de una sola empresa: el avatar adopta el color de esa empresa. */
-.portal-header-avatar.empresa-tinted {
+.header-avatar-btn.empresa-tinted {
   background: var(--empresa-color, var(--color-indigo-bg));
   color: #fff;
 }
-.portal-header-avatar.empresa-tinted:hover { border-color: var(--empresa-color, var(--color-indigo)); }
+.header-avatar-btn.empresa-tinted:hover { border-color: var(--empresa-color, var(--color-indigo)); }
 
-.portal-account-menu {
-  position: absolute;
-  top: calc(100% + var(--space-2));
-  right: 0;
-  min-width: 232px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  padding: var(--space-2);
-  z-index: 200;
-}
-.portal-account-menu-header {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-2) var(--space-3) var(--space-3);
-  border-bottom: 1px solid var(--color-border);
-  margin-bottom: var(--space-2);
-}
-.portal-account-menu-empresa {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: var(--text-sm);
-  color: var(--color-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.portal-account-menu-email {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.portal-account-menu-list { display: flex; flex-direction: column; gap: var(--space-1); }
-.portal-account-menu-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--color-text);
-  transition: var(--transition);
-}
-.portal-account-menu-item:hover { background: var(--color-surface-offset); color: var(--color-text); }
-.portal-account-menu-item.active {
-  background: var(--color-info-bg);
-  color: var(--color-primary-active);
-  font-weight: 600;
-}
-.portal-account-menu-item svg { color: var(--color-text-muted); flex-shrink: 0; }
-.portal-account-menu-item.active svg { color: var(--color-primary-active); }
-
-/* Grupos del menú de cuenta: título tenue + separador entre bloques y antes de
-   «Cerrar sesión». */
-.portal-account-menu-group { display: flex; flex-direction: column; gap: var(--space-1); }
-.portal-account-menu-group-label {
-  font-size: var(--text-xs);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--color-text-faint);
-  padding: var(--space-1) var(--space-3);
-}
-.portal-account-menu-sep {
-  height: 1px;
-  background: var(--color-border);
-  margin: var(--space-2) calc(-1 * var(--space-2));
-}
-.portal-account-menu-item:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: -2px;
-}
-/* «Cerrar sesión»: mismo item, en tono de peligro (es un botón, no un enlace). */
-.portal-account-menu-logout {
-  width: 100%;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  text-align: left;
-  color: var(--color-error);
-}
-.portal-account-menu-logout svg { color: var(--color-error); }
-.portal-account-menu-logout:hover { background: var(--color-error-bg); color: var(--color-error); }
 
 /* ── Sidebar ── */
 .portal-sidebar {
@@ -443,9 +327,6 @@
 .emp-logo-checkbox   { width: 16px; height: 16px; cursor: pointer; }
 .emp-plan-count      { margin-left: var(--space-3); color: var(--color-text-muted); }
 
-/* Utilitario requerido */
-.required { color: var(--color-error); margin-left: 2px; }
-.input-hint { font-size: var(--text-xs); color: var(--color-text-muted); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    IDENTIDAD DE EMPRESA (color) — componentes reutilizables
@@ -565,14 +446,6 @@
 .mon-badge-neutral { background: var(--color-surface-2);  color: var(--color-text-muted); }
 .mon-badge-warn    { background: var(--color-warning-bg); color: var(--color-warning); }
 
-/* Estado vacío */
-.mon-empty {
-  display: flex; flex-direction: column; align-items: center;
-  gap: var(--space-3); padding: var(--space-8) var(--space-5);
-  color: var(--color-text-muted); text-align: center; font-size: var(--text-sm);
-}
-.mon-empty svg { opacity: .25; }
-
 /* Tabla de tasas */
 .mon-par        { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); }
 .mon-par-arrow  { color: var(--color-text-muted); font-size: var(--text-xs); }
@@ -668,9 +541,6 @@
   .mon-elim-side + .mon-elim-side { border-left: none; padding-left: 0; }
 }
 
-/* Footer del modal de editar: el botón eliminar a la izquierda y las acciones a la
-   derecha (el wrap lo pone ya el `.modal-footer` base). */
-.modal-footer-actions  { display: flex; gap: var(--space-3); margin-left: auto; }
 
 /* `.btn-xs` vive ahora en `03-components.css`, con el resto de la familia de botones: lo usa
    también el admin (la estimación del alta de cliente) y una variante compartida no puede
@@ -1228,119 +1098,7 @@
    MÓDULO TERCEROS  (reemplaza bloque anterior)
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Toolbar ─────────────────────────────────────────────────────────────── */
-.ter-toolbar {
-  display: flex; align-items: center;
-  gap: var(--space-3); flex-wrap: wrap;
-  margin-bottom: var(--space-4);
-}
 
-/* ── Rango de fechas + buscador de un listado (RangoBusqueda) ──
-   Los presets de un LISTADO son ventanas abiertas hasta hoy («Este mes» = del día 1 a hoy).
-   Reportes usa tramos CERRADOS y los nombra por su nombre propio («Julio», «2.º trimestre»)
-   justamente para que no se confundan: no comparten vocabulario, y decir que sí lo hacían
-   costó cifras que no cuadraban entre las dos pantallas. */
-/* `flex: 0 1 26rem` y NO `1 1 100%`: reclamaba la fila entera porque el rango eran nueve
-   píldoras y no cabía nada más. Con el rango en un botón, el buscador comparte línea con las
-   píldoras de empresa y con «Filtros (N)» — que es todo el punto del cambio.
-   Tres decisiones, y las tres se pagaron antes:
-   · `nowrap`: es un contenedor que envuelve DENTRO de otro que envuelve. Con base 18rem no
-     le cabían el botón («Últimos 3 meses» son 11rem y no encoge) más el buscador (13.75rem
-     de mínimo), así que en una franja de anchos la barra entera cabía en una línea pero la
-     caja de búsqueda caía debajo del botón, y el resto de controles quedaba flotando a media
-     altura entre las dos. Lo que se rompe ahora es la BARRA, con controles enteros.
-   · base `26rem`: lo que miden los dos juntos, para que quepan sin depender del sobrante.
-   · `grow: 1`: el hueco libre se lo queda el BUSCADOR. Se probó con `grow: 0` —el sobrante
-     al final de la fila, los controles como un bloque a la izquierda— y con los desplegables
-     ya dentro de «Filtros» la fila cabe entera de sobra: el hueco quedaba de adorno al final
-     mientras la caja de búsqueda, que es lo que más se usa, seguía pequeña. Se lo lleva
-     quien lo aprovecha. */
-.rango-busqueda {
-  display: flex; align-items: center; flex-wrap: nowrap;
-  gap: var(--space-2); flex: 1 1 26rem; min-width: 0;
-}
-/* Acotado a la barra: `.ter-search-wrap` lo usan también los selectores de artículo y las
-   vistas de Citas/Reservas, donde el `min-width: 220px` sí es lo que quieren. Aquí es lo que
-   forzaba el salto de línea, así que aquí encoge. */
-.rango-busqueda .ter-search-wrap { flex: 1 1 12rem; min-width: 8rem; }
-/* Sin buscador, el rango solo ocupa lo suyo: así el filtro que la vista ponga al lado
-   (el estado en Compras) queda en la MISMA línea y no suelto debajo. Va DESPUÉS de
-   `.rango-busqueda` a propósito: misma especificidad, gana el orden, y así no hace falta un
-   `!important` que luego nadie sabe por qué está. */
-.rango-busqueda-compacto { flex: 0 1 auto; }
-/* ── El rango es UN botón, no nueve píldoras ─────────────────────────────────
-   Se ofrecían los presets como una fila de píldoras: en un cliente con tres empresas eran
-   nueve de los trece controles de la barra, para el filtro que menos se toca (tiene defecto
-   de 3 meses). Y en móvil envolvían a tres líneas siempre. Ahora la etiqueta del botón DICE
-   el rango aplicado, que antes había que deducirlo de cuál estaba encendida. */
-.rango-wrap { position: relative; display: inline-flex; flex-shrink: 0; }
-.rango-boton {
-  display: inline-flex; align-items: center; gap: var(--space-2);
-  height: var(--h-filtro); padding: 0 var(--space-3);
-  border: 1px solid var(--color-border); border-radius: var(--radius-full);
-  background: var(--color-surface); color: var(--color-text);
-  font-size: var(--text-xs); font-weight: 600; cursor: pointer; white-space: nowrap;
-  transition: background var(--transition), border-color var(--transition);
-}
-.rango-boton:hover { border-color: var(--color-border-strong); background: var(--color-surface-offset); }
-.rango-boton[aria-expanded="true"] {
-  border-color: var(--color-primary); background: var(--color-primary-subtle);
-  color: var(--color-primary-text);
-}
-.rango-boton-txt { font-variant-numeric: tabular-nums; }
-
-/* La capa que cierra al pulsar fuera. Sin ella el panel solo se cierra con su propio botón,
-   y en móvil eso es una trampa. */
-.rango-panel-overlay { position: fixed; inset: 0; z-index: 40; }
-.rango-panel {
-  position: absolute; top: calc(100% + var(--space-2)); left: 0; z-index: 41;
-  min-width: 14rem;
-  display: flex; flex-direction: column; gap: var(--space-2);
-  padding: var(--space-2);
-  background: var(--color-surface); border: 1px solid var(--color-border);
-  border-radius: var(--radius-md); box-shadow: var(--shadow-lg);
-}
-.rango-opciones { display: flex; flex-direction: column; }
-.rango-opcion {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
-  padding: var(--space-2) var(--space-2);
-  border: 0; border-radius: var(--radius-sm); background: none;
-  color: var(--color-text); font-size: var(--text-sm); text-align: left;
-  cursor: pointer; transition: background var(--transition);
-}
-.rango-opcion:hover  { background: var(--color-surface-offset); }
-.rango-opcion.active { color: var(--color-primary-text); font-weight: 600; }
-/* Las fechas a mano, separadas de los presets: son la otra forma de responder lo mismo. */
-.rango-fechas {
-  display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2);
-  padding-top: var(--space-2); border-top: 1px solid var(--color-border);
-  font-size: var(--text-xs); color: var(--color-text-muted);
-}
-/* A TODO EL ANCHO del panel, y apiladas. Estaban a `8.5rem` en dos columnas: descontando el
-   padding de `.input` y el borde quedaban ~101px de contenido para `dd/mm/aaaa` MÁS el icono
-   del calendario nativo, así que la fecha salía cortada («01/08/202») con el icono encima.
-   Un campo de fecha no encoge por debajo de lo que ocupa su formato, y ese ancho lo pone el
-   navegador: la única salida es darle el ancho, no negociarlo. */
-.rango-fecha-campo { display: flex; flex-direction: column; gap: 2px; flex: 1 1 100%; }
-.rango-fechas input { width: 100%; height: var(--h-filtro); padding-block: 0; }
-.rango-fechas .btn { width: 100%; justify-content: center; flex-shrink: 0; }
-
-/* En móvil el panel ocupa el ancho: anclado a la izquierda con 14rem de mínimo se sale de un
-   teléfono en cuanto el botón no está pegado al borde. Las fechas ya van a todo el ancho en
-   la base, así que aquí no hay nada que repetir. */
-@media (max-width: 640px) {
-  /* Aquí SÍ envuelve: el botón de rango pasa a ancho completo y el buscador va debajo, que
-     es lo que se quiere en un teléfono. El `nowrap` de la base es para la fila de
-     escritorio, donde partir el par era el desajuste. */
-  .rango-busqueda { flex-wrap: wrap; }
-  .rango-wrap { width: 100%; }
-  .rango-boton { width: 100%; justify-content: space-between; }
-  .rango-panel { left: 0; right: 0; min-width: 0; }
-}
-/* El botón de limpiar la búsqueda: mismo tratamiento en todas las listas y en el
-   buscador de Turnos (`.turno-search-clear`) — un chip circular opaco que se apoya
-   DENTRO del input. Antes era un icono suelto sin fondo y se leía como que salía
-   fuera del campo. Fuente única más abajo, agrupada con `.turno-search-clear`. */
 /* El aviso de «hay más filas de las que caben»: no es un error, es un límite —y
    lleva dentro la forma de superarlo, que es lo que le faltaba. */
 .listado-tope {
@@ -1352,32 +1110,6 @@
 .gc-stat-alcance {
   font-style: normal; font-weight: 400;
   color: var(--color-text-faint);
-}
-.ter-search-wrap {
-  position: relative; flex: 1; min-width: 220px;
-}
-.ter-search-wrap svg {
-  position: absolute; left: 10px; top: 50%;
-  transform: translateY(-50%);
-  color: var(--color-text-muted); pointer-events: none;
-}
-.ter-search {
-  width: 100%; height: var(--h-filtro); padding: 0 var(--space-8) 0 34px;
-  border: 1px solid var(--color-border); border-radius: var(--radius-md);
-  background: var(--color-surface); color: var(--color-text);
-  font-size: var(--text-sm); outline: none; transition: border-color var(--transition);
-}
-.ter-search::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
-.ter-search:focus { border-color: var(--color-primary); }
-.ter-search::placeholder { color: var(--color-text-muted); }
-.ter-filter-select {
-  max-width: 200px; height: var(--h-filtro); padding: 0 10px; font-size: var(--text-sm);
-}
-/* En móvil la barra de filtros pasa a cuadrícula de 2: la búsqueda ocupa toda la
-   fila y los filtros (fechas, selects) caen de dos en dos. */
-@media (max-width: 640px) {
-  .ter-search-wrap { flex: 1 1 100%; min-width: 0; }
-  .ter-filter-select { max-width: none; flex: 1 1 calc(50% - var(--space-2)); }
 }
 /* `.ter-archivados-toggle` vive ahora junto a `.filtro-toggle` en `03-components.css`: eran
    la misma cosa con dos tokens de color distintos, conviviendo en la misma fila de filtros. */
@@ -1410,20 +1142,6 @@
 .via-badge-intl    { background: var(--color-warning-bg); color: var(--color-warning); }
 .via-badge-ef      { background: var(--color-surface-2);  color: var(--color-text-muted); }
 .via-badge-moneda  { margin-left: var(--space-1); padding-left: var(--space-1); border-left: 1px solid currentColor; opacity: .7; }
-
-/* Acciones en fila */
-.ter-actions    { display: flex; align-items: center; gap: var(--space-1); justify-content: flex-end; }
-.ter-action-btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 30px; height: 30px;
-  border: none; border-radius: var(--radius-md); background: transparent;
-  color: var(--color-text-muted); cursor: pointer; transition: background var(--transition), color var(--transition);
-  text-decoration: none;
-}
-.ter-action-btn:hover                     { background: var(--color-surface-2); color: var(--color-text); }
-.ter-action-btn.ter-action-danger:hover   { background: var(--color-error-bg); color: var(--color-error); }
-.ter-action-btn.ter-action-restore:hover  { background: var(--color-success-bg); color: var(--color-success); }
-.ter-action-btn.ter-action-money:hover    { background: var(--color-primary-subtle); color: var(--color-primary-text); }
 
 
 
@@ -2040,7 +1758,7 @@
      empresa cortado y el botón del período sin sitio para decir el período. */
   .rep-barra { gap: var(--space-3); }
   .rep-barra .filtros-campo { width: 100%; }
-  .rep-barra .ter-filter-select { max-width: none; flex: 1 1 auto; width: 100%; }
+  .rep-barra .filtro-select { max-width: none; flex: 1 1 auto; width: 100%; }
   /* El panel al ancho del botón, como en los listados: los 18rem de escritorio se
      salen de un teléfono. */
   .rep-barra .rango-panel { min-width: 0; }
@@ -2508,17 +2226,6 @@
   position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
   color: var(--color-text-muted); pointer-events: none;
 }
-.rango-limpiar,
-.turno-search-clear {
-  position: absolute; z-index: 2; top: 50%; right: var(--space-2);
-  display: inline-flex; align-items: center; justify-content: center;
-  width: var(--space-6); height: var(--space-6); padding: 0;
-  border: 0; border-radius: var(--radius-full); background: var(--color-surface);
-  color: var(--color-text-faint); cursor: pointer; transform: translateY(-50%);
-  transition: background var(--transition), color var(--transition);
-}
-.rango-limpiar:hover,
-.turno-search-clear:hover { background: var(--color-surface-offset); color: var(--color-text); }
 .turno-persona-wrap { padding-top: var(--space-2); }
 
 /* ── Cuadrante · navegación de período (‹ agosto 2026 › · Hoy) ── */
@@ -3606,12 +3313,6 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .ia-uso-compact-head { display: inline-flex; align-items: center; gap: var(--space-2); font-weight: 600; color: var(--color-text); font-size: var(--text-sm); }
 .ia-uso-compact-stat { color: var(--color-text-muted); font-size: var(--text-sm); }
 
-/* Tarjetas de uso (admin: ficha de cliente) */
-.ia-uso-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-3); margin-top: var(--space-4); }
-.ia-uso-item { background: var(--color-surface-2); border-radius: var(--radius-md); padding: var(--space-3); }
-.ia-uso-num  { font-size: var(--text-xl); font-weight: 700; color: var(--color-text); }
-.ia-uso-num.ia-uso-warn { color: var(--color-warning); }
-.ia-uso-lbl  { font-size: var(--text-xs); color: var(--color-text-muted); }
 
 /* ── Catálogo QR ── */
 .cat-filtros { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-5); }
@@ -4514,313 +4215,9 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
    fila, chip de ámbito y responsive. Lo que se comparte con el modal «Enviar al
    asesor» de Reportes es .env-asesor-add, arriba. */
 
-/* ═══════════════════════════════════════════════════
-   NOTIFICACIONES — campana, panel y centro (.ntf-*)
-   ═══════════════════════════════════════════════════
-   La severidad, el badge y los popups son genéricos y viven en
-   03-components.css.
-
-   COMPARTIDO con el panel interno: la campana del admin (AvisosCampana) usa
-   estas mismas clases y `.theme-toggle-btn` de arriba, porque un aviso debe
-   leerse igual en los dos paneles. Nada de aquí depende de un selector del
-   portal —solo de tokens y de `--header-h`—, así que funciona en ambos shells.
-   Por dominio le tocaría 03-components.css; se queda aquí para no mover 100
-   líneas de CSS que el portal ya tiene probadas. Si crece, ese es el sitio.
-
-   En el portal solo la ve el rol admin_empresa (la bandeja es del negocio); en
-   el admin, quien tenga permiso de la sección del aviso. */
-
-.ntf-campana { position: relative; }
-/* Extiende .theme-toggle-btn (mismo tamaño y trato que el resto de la cabecera);
-   `relative` para que el badge se ancle al botón, no a la cabecera. */
-.ntf-campana-btn { position: relative; }
-
-/* ── Panel desplegable de la campana ────────────────
-   Mismo anclaje que .portal-account-menu, que es su vecino en la cabecera. */
-.ntf-panel {
-  position: absolute;
-  top: calc(100% + var(--space-2));
-  right: 0;
-  width: min(340px, calc(100vw - var(--space-6)));
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  z-index: 200;
-  overflow: hidden;
-}
-.ntf-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--color-border);
-}
-.ntf-panel-titulo {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: var(--text-sm);
-  color: var(--color-text);
-}
-.ntf-panel-accion {
-  border: 0;
-  background: none;
-  padding: 0;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--color-primary-text);
-  cursor: pointer;
-}
-.ntf-panel-accion:hover { text-decoration: underline; }
-.ntf-panel-lista { max-height: 380px; overflow-y: auto; }
-
-/* En móvil el panel se ancla a la VENTANA, no a la campana.
-   `right: 0` funciona en escritorio porque sobra sitio a la izquierda, pero la
-   campana no es el último botón de la cabecera (tiene el tema y el avatar a su
-   derecha): a partir de ~440px de ancho, 340px de panel colgando de ahí se
-   salen por la izquierda y el contenido queda cortado. Fijándolo a la ventana
-   con márgenes iguales, no depende de dónde esté su disparador.
-   Va en este archivo y no en 04-responsive: 06 carga después y necesita ganar
-   la cascada sobre la regla base de arriba. */
-@media (max-width: 640px) {
-  .ntf-panel {
-    position: fixed;
-    top: calc(var(--header-h) + var(--space-2));
-    left: var(--space-3);
-    right: var(--space-3);
-    width: auto;
-    /* Que nunca se salga por abajo tampoco: la lista scrollea por dentro. */
-    max-height: calc(100dvh - var(--header-h) - var(--space-6));
-    display: flex;
-    flex-direction: column;
-  }
-  .ntf-panel-lista { max-height: none; flex: 1; min-height: 0; }
-  /* Cabecera y pie no encogen: solo la lista cede altura. */
-  .ntf-panel-header, .ntf-panel-pie { flex-shrink: 0; }
-}
-
-.ntf-item {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  width: 100%;
-  padding: var(--space-3) var(--space-4);
-  border: 0;
-  border-bottom: 1px solid var(--color-divider);
-  background: none;
-  text-align: left;
-  cursor: pointer;
-  transition: background var(--transition);
-}
-.ntf-item:last-child { border-bottom: 0; }
-.ntf-item:hover { background: var(--color-surface-offset); }
-/* Sin leer: NO se tiñe el fondo. Cuando casi todo está sin leer —que es lo
-   normal tras el barrido del cron— la lista entera se volvía crema y el matiz
-   dejaba de significar nada, además de ensuciar la tarjeta. Lo no leído se
-   marca con un punto en primary y el título en negrita. */
-.ntf-item-linea {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-}
-.ntf-punto {
-  flex-shrink: 0;
-  width: 7px;
-  height: 7px;
-  border-radius: var(--radius-full);
-  background: var(--color-primary);
-}
-.ntf-item-cuerpo { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.ntf-item-titulo {
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--color-text);
-  line-height: 1.35;
-}
-.ntf-item-nueva .ntf-item-titulo { font-weight: 600; }
-.ntf-tiempo { font-size: var(--text-xs); color: var(--color-text-faint); }
-
-.ntf-vacio {
-  padding: var(--space-6) var(--space-4);
-  text-align: center;
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-}
-.ntf-panel-pie {
-  display: block;
-  padding: var(--space-3);
-  border-top: 1px solid var(--color-border);
-  text-align: center;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--color-primary-text);
-  text-decoration: none;
-}
-.ntf-panel-pie:hover { background: var(--color-surface-offset); }
-
-/* ── Centro de notificaciones (/portal/notificaciones) ── */
-.ntf-filtros {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin-bottom: var(--space-4);
-}
-.ntf-filtros-grupo { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.ntf-filtros-acciones { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
-/* Barra de «Deshacer» tras archivar (bandeja compartida: el archivado no puede
-   ser irreversible ni silencioso). */
-.ntf-deshacer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-  margin-bottom: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-2);
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-}
-.ntf-deshacer > button { flex-shrink: 0; }
-/* La casilla se alinea con el icono de severidad, no con el texto. */
-.ntf-fila-check { flex-shrink: 0; margin-top: var(--space-2); }
-.ntf-filtro {
-  padding: var(--space-1) var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-full);
-  background: transparent;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: var(--transition);
-}
-.ntf-filtro:hover:not(:disabled) { border-color: var(--color-border-strong); color: var(--color-text); }
-.ntf-filtro.active {
-  background: var(--color-info-bg);
-  border-color: var(--color-primary-text);
-  color: var(--color-primary-text);
-}
-.ntf-filtro:disabled { opacity: .6; cursor: default; }
-
-.ntf-lista { list-style: none; margin: 0; padding: 0; }
-.ntf-fila {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  padding: var(--space-3) 0;
-  border-bottom: 1px solid var(--color-divider);
-}
-.ntf-fila:last-child { border-bottom: 0; }
-.ntf-fila-cuerpo {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 0;
-  border: 0;
-  background: none;
-  text-align: left;
-  cursor: pointer;
-}
-.ntf-fila-texto { font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.45; }
-.ntf-fila-archivar {
-  flex-shrink: 0;
-  display: inline-flex;
-  padding: var(--space-2);
-  border: 0;
-  border-radius: var(--radius-md);
-  background: none;
-  color: var(--color-text-faint);
-  cursor: pointer;
-  transition: var(--transition);
-}
-.ntf-fila-archivar:hover { background: var(--color-surface-offset); color: var(--color-text); }
-
-.ntf-vacio-bloque {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-8) var(--space-4);
-  color: var(--color-text-faint);
-  text-align: center;
-  font-size: var(--text-sm);
-}
-
-/* ── Preferencias ─────────────────────────────────── */
-.ntf-prefs-intro {
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-  line-height: 1.5;
-  margin-bottom: var(--space-5);
-}
-/* Con ~20 tipos, la lista plana era imposible de recorrer: se agrupan por
-   categoría y cada grupo se pliega. Cerrados por defecto. */
-.ntf-prefs-grupo { border-bottom: 1px solid var(--color-border); }
-.ntf-prefs-cabecera {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-3) 0;
-}
-.ntf-prefs-toggle {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex: 1;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  cursor: pointer;
-  text-align: left;
-}
-.ntf-prefs-titulo {
-  font-size: var(--text-sm);
-  font-weight: 700;
-  color: var(--color-text);
-}
-.ntf-prefs-conteo { font-size: var(--text-xs); color: var(--color-text-faint); }
-.ntf-chevron {
-  flex-shrink: 0;
-  color: var(--color-text-muted);
-  transition: transform var(--transition);
-}
-.ntf-chevron.abierto { transform: rotate(180deg); }
-@media (prefers-reduced-motion: reduce) {
-  .ntf-chevron { transition: none; }
-}
-.ntf-prefs-grupo .ntf-prefs { padding-bottom: var(--space-2); }
-.ntf-prefs { list-style: none; margin: 0; padding: 0; }
-.ntf-pref {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-4) 0;
-  border-bottom: 1px solid var(--color-divider);
-}
-.ntf-pref:last-child { border-bottom: 0; }
-.ntf-pref-texto { display: flex; flex-direction: column; gap: 2px; flex: 1 1 16rem; min-width: 0; }
-.ntf-pref-etiqueta { font-size: var(--text-sm); font-weight: 600; color: var(--color-text); }
-.ntf-pref-desc { font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.4; }
-.ntf-pref-controles {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-shrink: 0;
-}
-.ntf-pref-select { width: auto; min-width: 11rem; }
+/* Las notificaciones (.ntf-*) viven en 03-components.css: las pintan las dos
+   caras —la campana del admin usa las mismas clases— y ninguna regla depende
+   de un selector del portal. */
 
 /* ── Suscripciones (módulo Servicios) ── */
 
@@ -5066,6 +4463,14 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .imprt-drop span   { font-size: var(--text-xs); }
 .imprt-drop-input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }
 
+/* La cabecera del mapa: cuántos campos quedan sueltos y el atajo para emparejarlos.
+   Va PEGADA al mapa (sin el margen de arriba) para que se lea como su título y no
+   como un bloque aparte. */
+.imprt-map-head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  flex-wrap: wrap; margin-top: var(--space-4);
+}
+.imprt-map-head + .imprt-mapa { margin-top: var(--space-2); }
 .imprt-mapa { margin-top: var(--space-4); }
 .imprt-map-row {
   display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); align-items: center;

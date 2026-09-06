@@ -25,7 +25,7 @@
 // viene— empezaba a cuatro alturas del principio de la pantalla.
 // ────────────────────────────────────────────────────────────────────────────
 
-import { useEffect, useRef, useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition, type ReactNode } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { SlidersHorizontal, X } from 'lucide-react'
 import RangoBusqueda from './RangoBusqueda'
@@ -60,10 +60,19 @@ interface Props {
    * filtros y el del buscador/rango.
    */
   onCargando?: (v: boolean) => void
+  /**
+   * Lo que va al final de la fila, pegado a la derecha: hoy el menú de descarga.
+   *
+   * Va AQUÍ y no suelto encima de la tabla porque `<Filtros>` pinta la barra entera; un
+   * botón fuera se lleva su propia línea. Y va con la declaración a mano —de ella salen el
+   * `filtro` y el `resumen` del fichero—, así que tiene que vivir donde vive la declaración.
+   */
+  acciones?: ReactNode
 }
 
 export default function Filtros({
   filtros, rango, q, placeholder, presets, hayMas = false, visibles = 2, onCargando,
+  acciones,
 }: Props) {
   const router = useRouter()
   const params = useSearchParams()
@@ -228,7 +237,7 @@ export default function Filtros({
       ? [...new Set(opciones.map(o => o.grupo ?? ''))]
       : null
     return (
-      <select key={String(f.clave)} className="input ter-filter-select" aria-label={rotuloDe(f)}
+      <select key={String(f.clave)} className="input filtro-select" aria-label={rotuloDe(f)}
         value={f.valor} onChange={e => cambiar(f, e.target.value)}>
         <option value="">{f.label}</option>
         {grupos
@@ -248,7 +257,7 @@ export default function Filtros({
 
   return (
     <>
-      <div className="ter-toolbar">
+      <div className="filters-bar">
         {/* Sin `rango` pero con `q` queda solo el buscador: CxC/CxP no llevan fechas a
             propósito —una deuda vieja no puede desaparecer por un filtro que el dueño no ha
             puesto— pero sí buscan por documento o tercero. */}
@@ -306,6 +315,8 @@ export default function Filtros({
             )}
           </div>
         )}
+
+        {acciones && <div className="filtros-acciones">{acciones}</div>}
       </div>
 
       {/* Lo que hay puesto, con su «×». Es la misma frase que el menú de descarga anuncia

@@ -218,7 +218,7 @@ export default function PasoRelato({
                           aria-label="Nombre" onChange={e => setFila(i, 'nombre', e.target.value)} />
                         <input className="input" value={f.puesto} maxLength={80} placeholder="Puesto"
                           aria-label="Puesto" onChange={e => setFila(i, 'puesto', e.target.value)} />
-                        <button type="button" className="ter-action-btn" onClick={() => quitarFila(i)} aria-label="Quitar persona">
+                        <button type="button" className="icon-btn" onClick={() => quitarFila(i)} aria-label="Quitar persona">
                           <Trash2 size={15} strokeWidth={2} />
                         </button>
                       </div>

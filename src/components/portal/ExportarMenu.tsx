@@ -2,14 +2,20 @@
 
 // ────────────────────────────────────────────────────────────────────────────
 // «Descarga lo que estás viendo», en Excel o CSV. ES EL ÚNICO BOTÓN DE DESCARGA de un
-// listado del portal: hubo otro exclusivo de la sesión de configuración y se eliminó
-// por redundante (hacía lo mismo, peor y solo en CSV).
+// listado, en las DOS caras: hubo otro exclusivo de la sesión de configuración y se
+// eliminó por redundante (hacía lo mismo, peor y solo en CSV), y el admin tenía dos CSV
+// escritos a mano —clientes y pagos— separados por comas, que en Excel español se abrían
+// con todas las columnas metidas en una.
 //
-// Todo pasa por el registro de columnas de `lib/exportar/tablas.ts` y el generador de
-// `lib/exportar/csv.ts`: si se añade una columna, sale en los dos formatos y en todos
-// los listados. Ese era el punto de tener un registro y no un exportador por pantalla —
-// en el repo llegó a haber cuatro generadores de CSV a mano, cada uno con su separador
-// y uno sin BOM.
+// Vive en `components/portal/` como el resto de la librería que el admin comparte
+// (`ModalShell`, `RowActions`, `FilterPills`): la carpeta dice de dónde salió, no quién
+// puede usarlo. Lo único que cambia entre caras es el CANDADO, y va en `ambito`.
+//
+// Todo pasa por el registro de columnas de su ámbito —`lib/exportar/tablas.ts` para el
+// portal, `tablas-admin.ts` para el admin— y el generador de `lib/exportar/csv.ts`: si
+// se añade una columna, sale en los dos formatos y en todos los listados. Ese era el
+// punto de tener un registro y no un exportador por pantalla — en el repo llegó a haber
+// cuatro generadores de CSV a mano, cada uno con su separador y uno sin BOM.
 //
 // **Se descarga TODO lo que cae en el filtro, no lo que hay pintado**: el listado
 // pagina para no traerse la historia entera a la pantalla, pero «descargar las facturas
@@ -27,16 +33,34 @@ import { useSearchParams } from 'next/navigation'
 import { Download } from 'lucide-react'
 import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import { exportarListado } from '@/app/actions/portal/exportar'
+import { exportarListadoAdmin } from '@/app/actions/admin/exportar'
 import { descargarBase64, descargarBlob, CSV_MIME, XLSX_MIME } from '@/lib/exportar/descargar'
 import { fmtFechaEs } from '@/lib/date-utils'
 import { presetDeFechas, PRESETS_RANGO, type PresetRango } from '@/lib/listados'
 import type { FiltroExport } from '@/lib/exportar/tablas'
+import type { FiltroAdmin } from '@/lib/exportar/tablas-admin'
+
+/**
+ * Los filtros que este botón sabe llevar, sirvan al registro del portal o al del admin.
+ * Es la intersección de los dos a propósito: así el mismo objeto vale para las dos
+ * acciones sin castear, y una vista no puede mandar por error un filtro que su lado no
+ * entiende (lo ignoraría en silencio y el fichero no se parecería a la pantalla).
+ */
+type FiltroMenu = FiltroExport & Pick<FiltroAdmin, 'client_id' | 'metodo' | 'concepto' | 'archivados' | 'entidad'>
 
 interface Props {
-  /** Clave del registro de `lib/exportar/tablas.ts` (facturas, gastos_cobros…). */
+  /**
+   * De qué lado sale el listado, y con ello QUÉ CANDADO se le aplica: en el portal, el
+   * módulo contratado por el cliente (`lib/exportar/tablas.ts`); en el admin, la sección
+   * del equipo (`lib/exportar/tablas-admin.ts`). Es la única diferencia entre los dos, y
+   * por eso el botón es uno solo: dos componentes iguales habrían divergido al primer
+   * arreglo, que es lo que ya pasó con los cuatro generadores de CSV a mano.
+   */
+  ambito?: 'portal' | 'admin'
+  /** Clave del registro de tablas del ámbito (facturas, gastos_cobros, clientes…). */
   clave?: string
   /** Los filtros TAL COMO están aplicados en la pantalla. */
-  filtro?: FiltroExport
+  filtro?: FiltroMenu
   /**
    * Los filtros NO temporales, en palabras del dueño: `['Empresa 1', 'Vencidas']`. Los
    * escribe la vista porque es la única que sabe traducir los suyos («VENCIDA» →
@@ -53,7 +77,7 @@ interface Props {
    * que dice qué se lleva. La `etiqueta` la pone la vista y no el registro porque
    * `tablas.ts` arrastra acciones de servidor: no se importa desde el navegador.
    */
-  opciones?: { clave: string; etiqueta: string; filtro?: FiltroExport; resumen?: string[]; detalle?: string }[]
+  opciones?: { clave: string; etiqueta: string; filtro?: FiltroMenu; resumen?: string[]; detalle?: string }[]
   /**
    * Texto del botón. Por defecto «Descargar», que es lo correcto cuando en la pantalla
    * solo hay uno. Cuando una pantalla ofrece DOS descargas distintas, no pueden llamarse
@@ -110,7 +134,7 @@ interface Props {
  * en `RangoBusqueda`: así el desplegable y la barra de filtros no pueden decir cosas
  * distintas.
  */
-function chipPeriodo(filtro?: FiltroExport, presetUrl?: string | null): string {
+function chipPeriodo(filtro?: FiltroMenu, presetUrl?: string | null): string {
   const desde = filtro?.desde ?? ''
   const hasta = filtro?.hasta ?? ''
   // El preset ELEGIDO manda sobre el deducido, igual que en la píldora: sin esto, un rango
@@ -128,6 +152,7 @@ function chipPeriodo(filtro?: FiltroExport, presetUrl?: string | null): string {
 }
 
 export default function ExportarMenu({
+  ambito = 'portal',
   clave, filtro, resumen, detalle, opciones, etiquetaBoton = 'Descargar', pequeno, pdf,
   sinCsv, sinPeriodo,
 }: Props) {
@@ -154,12 +179,14 @@ export default function ExportarMenu({
     return () => document.removeEventListener('mousedown', fuera)
   }, [abierto])
 
-  function descargar(tabla: { clave: string; filtro?: FiltroExport }, formato: 'csv' | 'xlsx') {
+  function descargar(tabla: { clave: string; filtro?: FiltroMenu }, formato: 'csv' | 'xlsx') {
     setAbierto(false)
     // El toast de carga se crea ANTES de la transición: dentro no llega a pintarse.
     const ld = toastLoading(formato === 'csv' ? 'Preparando el CSV…' : 'Preparando el Excel…')
     startTransition(async () => {
-      const res = await exportarListado(tabla.clave, tabla.filtro ?? {}, formato)
+      const res = ambito === 'admin'
+        ? await exportarListadoAdmin(tabla.clave, tabla.filtro ?? {}, formato)
+        : await exportarListado(tabla.clave, tabla.filtro ?? {}, formato)
       await ld.dismiss()
       if (!res.ok) { toastError(res.error ?? 'No se pudo exportar.'); return }
 

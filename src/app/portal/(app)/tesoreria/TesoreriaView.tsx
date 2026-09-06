@@ -1484,10 +1484,10 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
                       {m.tipo === 'INGRESO' ? '+' : '−'}{formatMonto(Number(m.monto))} {m.moneda}
                     </td>
                     <td className="col-actions">
-                      <div className="ter-actions">
+                      <div className="table-actions">
                         {/* Ver el resto de datos de la operación, sin salir de la lista. Disponible
                             también en solo-lectura: desplegar no escribe nada. */}
-                        <button type="button" className="ter-action-btn" title="Ver detalle"
+                        <button type="button" className="icon-btn" title="Ver detalle"
                           aria-label={`Ver detalle de ${m.concepto}`} aria-expanded={abierto}
                           onClick={() => setMovDetalle(abierto ? null : m.movimiento_id)}>
                           <ChevronDown size={15} strokeWidth={2} className={abierto ? 'tes-chevron-abierto' : undefined} />
@@ -1497,11 +1497,11 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
                               el borrado, y por lo mismo — un movimiento de cobro/pago es el
                               reflejo de un documento y se corrige desde él. */}
                           {m.origen === 'MANUAL' && !m.transfer_grupo && (
-                            <button className="ter-action-btn" title="Editar"
+                            <button className="icon-btn" title="Editar"
                               aria-label={`Editar ${m.concepto}`}
                               onClick={() => setEditMov(m)} disabled={isPending}><Pencil size={14} /></button>
                           )}
-                          <button className="ter-action-btn ter-action-danger" title="Eliminar"
+                          <button className="icon-btn icon-btn-danger" title="Eliminar"
                             aria-label={`Eliminar ${m.concepto}`}
                             onClick={() => setConfirmMov(m)} disabled={isPending}><Trash2 size={14} /></button>
                         </>)}
