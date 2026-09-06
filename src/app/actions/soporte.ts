@@ -11,8 +11,13 @@ import { revalidatePath } from 'next/cache'
 import { renderPlantilla } from '@/lib/email/render'
 import { enviarEmail, tipoEmailActivo } from '@/lib/email/enviar'
 import { leerCorreo } from '@/lib/settings'
-import { borradorSoporte } from '@/lib/ia/equipo'
-import { IaBolsaAgotada } from '@/lib/ia/interna'
+import {
+  borradorSoporte, proponerFaqs,
+  type FaqPropuesta, type PrioridadSoporte, type TipoSoporte,
+} from '@/lib/ia/equipo'
+import { IA_SIN_RESPUESTA, selloIa, type PropuestaIa } from '@/lib/ia/propuesta'
+import { clasificarMensaje } from '@/lib/soporte/clasificar'
+import { IaApagada, IaBolsaAgotada } from '@/lib/ia/interna'
 
 // Guard: el admin debe estar autenticado (o bypass en dev). Los datos se leen/escriben
 // con service_role, igual que el resto de la plataforma.
@@ -42,6 +47,17 @@ export interface MensajeSoporte {
    * es una OPORTUNIDAD DE VENTA, no una incidencia, y se atiende distinto.
    */
   modulo_clave:   string | null
+  /**
+   * La clasificación (mig. 237): de qué va, qué es y cuánto corre. La pone la IA
+   * al entrar el mensaje y se corrige a mano. Nula en los de antes de la 237 y en
+   * los que llegaron con la IA apagada — la bandeja funciona igual sin ella.
+   */
+  tema:           string | null
+  tipo:           TipoSoporte | null
+  prioridad:      PrioridadSoporte | null
+  resumen:        string | null
+  /** `true` mientras la etiqueta sea la que puso la IA; se apaga al corregirla. */
+  clasificado_ia: boolean
 }
 
 export async function listarMensajesSoporte(): Promise<MensajeSoporte[]> {
@@ -51,7 +67,9 @@ export async function listarMensajesSoporte(): Promise<MensajeSoporte[]> {
 
   const { data: msgs } = await db
     .from('soporte_mensajes')
-    .select('id, client_id, user_id, email, asunto, mensaje, estado, respuesta, respuesta_at, created_at, modulo_clave')
+    // En UNA cadena literal: partirla con `+` deja al tipado de PostgREST sin
+    // saber qué columnas vuelven y la fila entera se convierte en un error.
+    .select('id, client_id, user_id, email, asunto, mensaje, estado, respuesta, respuesta_at, created_at, modulo_clave, tema, tipo, prioridad, resumen, clasificado_ia')
     .order('created_at', { ascending: false })
     // TECHO EXPLÍCITO: la bandeja no se pagina, así que crece con cada mensaje que
     // escribe cualquier cliente. Escrito aquí, el día que la cifra se acerque se ve
@@ -370,6 +388,110 @@ export async function eliminarFaq(id: number): Promise<{ ok: boolean }> {
   return { ok: true }
 }
 
+// ── La pregunta frecuente que falta (Fase 6) ─────────────────────────────────
+//
+// «¿Qué estamos contestando una y otra vez?». La IA lee lo YA RESPONDIDO, ve qué
+// se repite y redacta la entrada; el panel la enseña y una persona marca las que
+// valen. Lo que se guarda nace OCULTO: publicar una respuesta que verán todos los
+// clientes es una decisión, no un lote.
+//
+// Ampliaciones fuera: llevan `modulo_clave` y son una venta, no una incidencia.
+// De ellas no sale una pregunta frecuente, sale una llamada.
+
+/** Mensajes respondidos que se miran. Es media bandeja y cabe en una llamada. */
+const RESUELTOS_A_MIRAR = 40
+
+export async function proponerFaqsIa(): Promise<
+  { ok: true; propuesta: PropuestaIa<FaqPropuesta> } | { ok: false; error: string; reintentar?: boolean }
+> {
+  await requirePermiso('soporte')
+  if (!(await adminAutenticado())) return { ok: false, error: 'No autorizado.' }
+
+  const db = createAdminClient()
+  const [{ data: msgs }, { data: faqs }, { data: catalogo }] = await Promise.all([
+    db.from('soporte_mensajes')
+      .select('id, tema, asunto, mensaje, respuesta')
+      .not('respuesta', 'is', null)
+      .is('modulo_clave', null)
+      .order('respuesta_at', { ascending: false, nullsFirst: false })
+      .limit(RESUELTOS_A_MIRAR),
+    // Las ocultas también: una propuesta ya guardada y sin publicar no se vuelve
+    // a proponer cada vez que se pulsa el botón.
+    db.from('soporte_faq').select('modulo_clave, pregunta'),
+    db.from('modulos_catalogo').select('clave, nombre').eq('activo', true).order('orden'),
+  ])
+
+  const mensajes = (msgs ?? []) as {
+    id: number; tema: string | null; asunto: string; mensaje: string; respuesta: string
+  }[]
+  if (mensajes.length < 2) {
+    return { ok: false, error: 'Aún no hay mensajes respondidos suficientes para ver qué se repite.' }
+  }
+
+  try {
+    const propuesta = await proponerFaqs({
+      mensajes,
+      faqs:    (faqs ?? []) as { modulo_clave: string; pregunta: string }[],
+      modulos: (catalogo ?? []) as { clave: string; nombre: string }[],
+    })
+    if (!propuesta) return { ok: false, error: IA_SIN_RESPUESTA, reintentar: true }
+    return { ok: true, propuesta }
+  } catch (e) {
+    if (e instanceof IaBolsaAgotada || e instanceof IaApagada) return { ok: false, error: e.message }
+    throw e
+  }
+}
+
+/**
+ * Guarda las entradas marcadas. Es la primera función del admin que ESCRIBE lo que
+ * propuso la IA, y cumple el contrato entero: la persona vio el texto, marcó lo que
+ * valía, y el registro de actividad dice que vino de IA y cuántas de cuántas se
+ * aplicaron (`selloIa`).
+ */
+export async function guardarFaqsIa(args: {
+  entradas: FaqPropuesta[]
+  /** Cuántas proponía la tanda: sin el total, «3 aplicadas» no dice nada. */
+  propuestas: number
+}): Promise<{ ok: boolean; guardadas?: number; error?: string }> {
+  const ctx = await requirePermiso('soporte')
+  if (!(await adminAutenticado())) return { ok: false, error: 'No autorizado.' }
+
+  const db = createAdminClient()
+  const { data: catalogo } = await db.from('modulos_catalogo').select('clave').eq('activo', true)
+  const claves = new Set([...((catalogo ?? []) as { clave: string }[]).map(c => c.clave), 'general'])
+
+  const filas = (args.entradas ?? [])
+    .map(e => ({
+      // Un módulo que ya no está en el catálogo dejaría la pregunta en una sección
+      // que no existe: al cajón de las generales, que es donde se ve.
+      modulo_clave: claves.has(e.modulo_clave) ? e.modulo_clave : 'general',
+      pregunta:     (e.pregunta ?? '').trim(),
+      respuesta:    (e.respuesta ?? '').trim(),
+      orden:        0,
+      activo:       false,
+    }))
+    .filter(f => f.pregunta && f.respuesta)
+  if (!filas.length) return { ok: false, error: 'No hay nada que guardar.' }
+
+  const { data, error } = await db.from('soporte_faq').insert(filas).select('id')
+  if (error) return { ok: false, error: 'No se pudieron guardar las preguntas.' }
+
+  const ids = ((data ?? []) as { id: number }[]).map(r => r.id)
+  const sello = selloIa('soporte_faq', filas.length, args.propuestas)
+  for (let i = 0; i < filas.length; i++) {
+    await logActividad(db, {
+      user_email:  ctx.email,
+      entity:      'faq',
+      entity_id:   ids[i] != null ? String(ids[i]) : null,
+      action:      'crear',
+      description: `${sello} — oculta: ${filas[i].pregunta}`,
+    })
+  }
+
+  revalidatePath('/admin/soporte')
+  return { ok: true, guardadas: filas.length }
+}
+
 // ── Responder un mensaje de soporte ──────────────────────────────────────────
 // Guarda la respuesta en el propio mensaje, lo marca RESUELTO y envía un email
 // al cliente (from soporte@, Reply-To: soporte@) con el texto del admin dentro
@@ -434,7 +556,7 @@ export async function responderMensajeSoporte(
 // Consume la bolsa interna de CLAUX, no la del cliente.
 export async function borradorRespuestaIa(
   id: number,
-): Promise<{ ok: boolean; texto?: string; error?: string }> {
+): Promise<{ ok: boolean; texto?: string; error?: string; reintentar?: boolean }> {
   await requirePermiso('soporte')
   if (!(await adminAutenticado())) return { ok: false, error: 'No autorizado.' }
 
@@ -444,7 +566,7 @@ export async function borradorRespuestaIa(
     // `nombre_empresa` NO está aquí: vive en `clients` y se trae aparte, igual
     // que en `listarMensajesSoporte`. Pedirla en este select tumba la consulta
     // entera y el mensaje se vuelve «no encontrado».
-    .select('client_id, asunto, mensaje, modulo_clave')
+    .select('client_id, asunto, mensaje, modulo_clave, tema')
     .eq('id', id)
     .maybeSingle()
   if (!msg) return { ok: false, error: 'Mensaje no encontrado.' }
@@ -454,7 +576,13 @@ export async function borradorRespuestaIa(
 
   // Las FAQ del módulo del que va el mensaje y las generales: son la única
   // fuente de verdad que le damos: sin ellas se inventa la plataforma.
-  const claves = ['general', ...(msg.modulo_clave ? [msg.modulo_clave] : [])]
+  //
+  // De qué va lo dice `tema` (la clasificación de la mig. 237). Antes solo se
+  // miraba `modulo_clave`, que los mensajes de soporte NO llevan —es la marca de
+  // la solicitud de ampliación—, así que el borrador veía siempre las generales
+  // y solo esas. `modulo_clave` sigue detrás para los de contratación.
+  const de = msg.tema && msg.tema !== 'general' ? msg.tema : msg.modulo_clave
+  const claves = ['general', ...(de ? [de] : [])]
   const [{ data: faqs }, { data: modulo }] = await Promise.all([
     db.from('soporte_faq')
       .select('pregunta, respuesta')
@@ -474,10 +602,72 @@ export async function borradorRespuestaIa(
       faqs:        (faqs ?? []) as { pregunta: string; respuesta: string }[],
       moduloVenta: (modulo as { nombre?: string } | null)?.nombre ?? msg.modulo_clave,
     })
-    if (!texto) return { ok: false, error: 'La IA no está disponible ahora mismo.' }
+    if (!texto) return { ok: false, error: IA_SIN_RESPUESTA, reintentar: true }
     return { ok: true, texto }
   } catch (e) {
-    if (e instanceof IaBolsaAgotada) return { ok: false, error: e.message }
+    // Bolsa agotada e interruptor apagado se dicen tal cual: no son averías y el
+    // mensaje explica qué hacer. Lo demás sube y sale como error de verdad.
+    if (e instanceof IaBolsaAgotada || e instanceof IaApagada) return { ok: false, error: e.message }
     throw e
   }
+}
+
+// ── La clasificación de un mensaje (mig. 237) ────────────────────────────────
+//
+// La escribe sola la IA al entrar el mensaje (`lib/soporte/clasificar.ts`, desde
+// el portal). Aquí quedan las dos puertas del admin: clasificar uno viejo —los de
+// antes de la 237 no tienen etiqueta— y corregir a mano lo que la IA puso mal.
+
+export async function clasificarMensajeIa(
+  id: number,
+): Promise<{ ok: boolean; error?: string; reintentar?: boolean }> {
+  await requirePermiso('soporte')
+  if (!(await adminAutenticado())) return { ok: false, error: 'No autorizado.' }
+
+  const db = createAdminClient()
+  const { data: msg } = await db
+    .from('soporte_mensajes')
+    .select('asunto, mensaje')
+    .eq('id', id)
+    .maybeSingle()
+  if (!msg) return { ok: false, error: 'Mensaje no encontrado.' }
+
+  try {
+    const r = await clasificarMensaje({ id, asunto: msg.asunto, mensaje: msg.mensaje })
+    if (!r) return { ok: false, error: IA_SIN_RESPUESTA, reintentar: true }
+  } catch (e) {
+    if (e instanceof IaBolsaAgotada || e instanceof IaApagada) return { ok: false, error: e.message }
+    throw e
+  }
+  revalidatePath('/admin/soporte')
+  return { ok: true }
+}
+
+export async function guardarClasificacionMensaje(args: {
+  id:        number
+  tema:      string
+  tipo:      TipoSoporte | ''
+  prioridad: PrioridadSoporte | ''
+}): Promise<{ ok: boolean; error?: string }> {
+  await requirePermiso('soporte')
+  if (!(await adminAutenticado())) return { ok: false, error: 'No autorizado.' }
+
+  const tipo = ['duda', 'fallo', 'peticion'].includes(args.tipo) ? args.tipo : null
+  const prioridad = ['alta', 'media', 'baja'].includes(args.prioridad) ? args.prioridad : null
+
+  const { error } = await createAdminClient()
+    .from('soporte_mensajes')
+    .update({
+      tema:      (args.tema || '').trim() || null,
+      tipo,
+      prioridad,
+      // Corregida a mano deja de ser de la IA: el sello dice quién responde de la
+      // etiqueta, y a partir de aquí responde una persona.
+      clasificado_ia: false,
+    })
+    .eq('id', args.id)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/admin/soporte')
+  return { ok: true }
 }

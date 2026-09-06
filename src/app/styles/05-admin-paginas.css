@@ -871,6 +871,15 @@ textarea:focus-visible {
 .sop-asunto > .badge { flex-shrink: 0; }
 .sop-asunto-texto { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* ── Soporte: la clasificación del mensaje (mig. 237) ────────────────────────
+   Tema, tipo y urgencia caben en una línea y se leen juntos: son la misma
+   pregunta —«¿de qué va y cuánto corre?»— partida en tres. En pantalla estrecha
+   se apilan, que es donde el ancho manda. */
+.sop-clasif { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
+@media (max-width: 560px) { .sop-clasif { grid-template-columns: 1fr; } }
+/* El sello de quién puso la etiqueta, junto al título del bloque. */
+.sop-clasif-sello { display: inline-flex; align-items: center; gap: var(--space-1); }
+
 /* ── Documentos legales en la ficha del cliente ── */
 .doc-cli-nombre { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--color-text); }
 .doc-cli-nombre svg { color: var(--color-text-muted); flex-shrink: 0; }

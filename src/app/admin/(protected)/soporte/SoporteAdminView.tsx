@@ -5,9 +5,14 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useToast } from '@/app/contexts/ToastContext'
 import {
   actualizarEstadoMensaje, guardarFaq, eliminarFaq, responderMensajeSoporte, borradorRespuestaIa,
+  clasificarMensajeIa, guardarClasificacionMensaje, proponerFaqsIa, guardarFaqsIa,
   type MensajeSoporte, type FaqAdmin,
 } from '@/app/actions/soporte'
-import { Eye, Mail, Plus, Pencil, Sparkles, Trash2 } from 'lucide-react'
+import type { FaqPropuesta, PrioridadSoporte, TipoSoporte } from '@/lib/ia/equipo'
+import type { LineaPropuesta, PropuestaIa } from '@/lib/ia/propuesta'
+import { Eye, Mail, Plus, Pencil, Trash2 } from 'lucide-react'
+import IaSparkle from '@/components/ia/IaSparkle'
+import PanelPropuestaIa from '@/components/ia/PanelPropuestaIa'
 import { RowActions } from '@/components/portal/RowActions'
 import ModalShell from '@/components/portal/ModalShell'
 import { ConfirmDialog } from '@/components/portal/Dialog'
@@ -38,10 +43,23 @@ const ESTADO_PRIORIDAD: Record<Estado, number> = { NUEVO: 0, LEIDO: 1, RESUELTO:
 const OPCIONES_ESTADO = (['NUEVO', 'LEIDO', 'RESUELTO'] as const)
   .map(e => ({ valor: e, label: ESTADO_LABEL[e] }))
 
+// ── La clasificación del mensaje (mig. 237) ──
+// La pone la IA al entrar y se corrige a mano. Un mensaje sin clasificar no es un
+// error: son los de antes, y los que llegaron con la función apagada.
+const PRIO_LABEL: Record<PrioridadSoporte, string> = { alta: 'Urgente', media: 'Normal', baja: 'Puede esperar' }
+const PRIO_BADGE: Record<PrioridadSoporte, string> = { alta: 'badge-error', media: 'badge-warning', baja: 'badge-neutral' }
+/** Lo urgente arriba y lo que no tiene etiqueta al final: sin dato no hay urgencia. */
+const PRIO_ORDEN: Record<string, number> = { alta: 0, media: 1, baja: 2 }
+const TIPO_LABEL: Record<TipoSoporte, string> = { duda: 'Duda', fallo: 'Fallo', peticion: 'Petición' }
+
 type Props = {
   mensajes: MensajeSoporte[]
   faqs:     FaqAdmin[]
   catalogo: { clave: string; nombre: string }[]
+  /** ¿Están encendidas las funciones de IA de esta pantalla? (/admin/ia) */
+  iaBorrador?:   boolean
+  iaClasificar?: boolean
+  iaFaq?:        boolean
 }
 
 function fmtFecha(s: string): string {
@@ -53,11 +71,14 @@ function fmtFecha(s: string): string {
 const COLUMNAS_MSG: ColumnasOrden<MensajeSoporte> = {
   cliente: { label: 'Cliente', valor: m => m.nombre_empresa },
   asunto:  { label: 'Asunto',  valor: m => m.asunto },
+  prioridad: { label: 'Prioridad', valor: m => PRIO_ORDEN[m.prioridad ?? ''] ?? 3 },
   estado:  { label: 'Estado',  valor: m => ESTADO_PRIORIDAD[m.estado] },
   fecha:   { label: 'Fecha',   valor: m => m.created_at },
 }
 
-export default function SoporteAdminView({ mensajes, faqs, catalogo }: Props) {
+export default function SoporteAdminView({
+  mensajes, faqs, catalogo, iaBorrador = false, iaClasificar = false, iaFaq = false,
+}: Props) {
   const router = useRouter()
   const { success: toastOk, error: toastErr } = useToast()
   const [tab, setTab] = useState<'mensajes' | 'faq'>('mensajes')
@@ -114,15 +135,32 @@ export default function SoporteAdminView({ mensajes, faqs, catalogo }: Props) {
     })
   }, [mensajes, filtro, busqueda])
 
-  // Lo pendiente arriba y, dentro de cada estado, lo más reciente primero: el
-  // `sort` es estable y las filas llegan del servidor por fecha descendente.
-  const ordenMsg = useOrden(msgFiltrados, COLUMNAS_MSG, { clave: 'estado', dir: 'asc' })
+  // Lo pendiente arriba, dentro de cada estado lo urgente, y a igual urgencia lo
+  // más reciente: los tres `sort` son estables y se aplican del criterio más débil
+  // al más fuerte —las filas llegan del servidor por fecha descendente, aquí se
+  // ordenan por prioridad y la tabla remata por estado—. Sin la prioridad de por
+  // medio, clasificar el mensaje al entrar no serviría para trabajar la bandeja.
+  const msgPorUrgencia = useMemo(
+    () => [...msgFiltrados].sort((a, b) => (PRIO_ORDEN[a.prioridad ?? ''] ?? 3) - (PRIO_ORDEN[b.prioridad ?? ''] ?? 3)),
+    [msgFiltrados],
+  )
+  const ordenMsg = useOrden(msgPorUrgencia, COLUMNAS_MSG, { clave: 'estado', dir: 'asc' })
   const { pageItems: msgItems, ...msgPag } = usePagination(ordenMsg.filas)
 
   // ── FAQ ──
   const [faqModal,   setFaqModal]   = useState<FaqAdmin | 'nuevo' | null>(null)
   const [saving,     setSaving]     = useState(false)
   const [confirmDel, setConfirmDel] = useState<FaqAdmin | null>(null)
+
+  // Lo que la IA propone añadir. `abierto` aparte de `propuesta` para que el panel
+  // se vea desde que se pulsa —con sus puntos de espera— y no aparezca de golpe
+  // cuando ya está la respuesta.
+  const [faqAbierto,   setFaqAbierto]   = useState(false)
+  const [faqPropuesta, setFaqPropuesta] = useState<PropuestaIa<FaqPropuesta> | null>(null)
+  const [faqPensando,  setFaqPensando]  = useState(false)
+  const [faqError,     setFaqError]     = useState<string | null>(null)
+  const [faqReintento, setFaqReintento] = useState(false)
+  const [faqAplicando, setFaqAplicando] = useState(false)
   const [borrando,   setBorrando]   = useState(false)
 
   // El módulo se ordena por su NOMBRE, que es lo que se ve, y no por la clave.
@@ -177,6 +215,39 @@ export default function SoporteAdminView({ mensajes, faqs, catalogo }: Props) {
     toastOk('Borrador listo. Revísalo antes de enviarlo.')
   }
 
+  // ── La clasificación: corregirla a mano o pedirla para uno viejo ──
+  // Los mensajes de antes de la mig. 237 no tienen etiqueta, y los que llegaron
+  // con la función apagada tampoco. El botón la pide para ESE mensaje.
+  const [clasifPensando, setClasifPensando] = useState(false)
+  const [clasifGuardando, setClasifGuardando] = useState(false)
+
+  async function handleClasificarIa() {
+    if (!verMsg) return
+    setClasifPensando(true)
+    const res = await clasificarMensajeIa(verMsg.id)
+    setClasifPensando(false)
+    if (!res.ok) { toastErr(res.error ?? 'No se pudo clasificar.'); return }
+    toastOk('Mensaje clasificado. Revísalo.')
+    setVerMsg(null)
+    router.refresh()
+  }
+
+  async function handleGuardarClasificacion() {
+    if (!verMsg) return
+    setClasifGuardando(true)
+    const res = await guardarClasificacionMensaje({
+      id:        verMsg.id,
+      tema:      verMsg.tema ?? '',
+      tipo:      verMsg.tipo ?? '',
+      prioridad: verMsg.prioridad ?? '',
+    })
+    setClasifGuardando(false)
+    if (!res.ok) { toastErr(res.error ?? 'No se pudo guardar.'); return }
+    toastOk('Clasificación guardada')
+    setVerMsg(v => (v ? { ...v, clasificado_ia: false } : v))
+    router.refresh()
+  }
+
   async function handleGuardarFaq(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setSaving(true)
@@ -185,6 +256,33 @@ export default function SoporteAdminView({ mensajes, faqs, catalogo }: Props) {
     if (!res.ok) { toastErr(res.error ?? 'Error al guardar.'); return }
     toastOk('Pregunta guardada')
     setFaqModal(null)
+    router.refresh()
+  }
+
+  async function handleFaqsIa() {
+    setFaqAbierto(true)
+    setFaqPropuesta(null)
+    setFaqError(null)
+    setFaqReintento(false)
+    setFaqPensando(true)
+    const res = await proponerFaqsIa()
+    setFaqPensando(false)
+    if (!res.ok) { setFaqError(res.error); setFaqReintento(!!res.reintentar); return }
+    setFaqPropuesta(res.propuesta)
+  }
+
+  async function handleGuardarFaqsIa(lineas: LineaPropuesta<FaqPropuesta>[]) {
+    if (!faqPropuesta) return
+    setFaqAplicando(true)
+    const res = await guardarFaqsIa({
+      entradas:   lineas.map(l => l.valor),
+      propuestas: faqPropuesta.lineas.length,
+    })
+    setFaqAplicando(false)
+    if (!res.ok) { toastErr(res.error ?? 'No se pudieron guardar.'); return }
+    toastOk(res.guardadas === 1 ? 'Pregunta guardada, oculta' : `${res.guardadas} preguntas guardadas, ocultas`)
+    setFaqAbierto(false)
+    setFaqPropuesta(null)
     router.refresh()
   }
 
@@ -248,6 +346,7 @@ export default function SoporteAdminView({ mensajes, faqs, catalogo }: Props) {
                     <tr>
                       <ThOrden orden={ordenMsg} clave="cliente">Cliente</ThOrden>
                       <ThOrden orden={ordenMsg} clave="asunto">Asunto</ThOrden>
+                      <ThOrden orden={ordenMsg} clave="prioridad">Prioridad</ThOrden>
                       <ThOrden orden={ordenMsg} clave="estado">Estado</ThOrden>
                       <ThOrden orden={ordenMsg} clave="fecha">Fecha</ThOrden>
                       <th className="col-actions"></th>
@@ -267,6 +366,18 @@ export default function SoporteAdminView({ mensajes, faqs, catalogo }: Props) {
                             {m.modulo_clave && <span className="badge badge-success">Contratación</span>}
                             <span className="sop-asunto-texto">{m.asunto}</span>
                           </div>
+                          {/* Lo que pide, en una línea: la bandeja se lee sin abrir
+                              cada mensaje, que es para lo que se clasifica. */}
+                          {m.resumen && <div className="text-xs-muted cell-clamp">{m.resumen}</div>}
+                        </td>
+                        {/* Sin etiqueta no se inventa una urgencia: se dice que no la tiene. */}
+                        <td data-label="Prioridad">
+                          {m.prioridad
+                            ? <span className={`badge ${PRIO_BADGE[m.prioridad]}`}>{PRIO_LABEL[m.prioridad]}</span>
+                            : <span className="table-muted">—</span>}
+                          {m.tema && m.tema !== 'general' && (
+                            <div className="text-xs-muted">{modLabel.get(m.tema) ?? m.tema}</div>
+                          )}
                         </td>
                         <td data-label="Estado"><span className={`badge ${ESTADO_BADGE[m.estado]}`}>{ESTADO_LABEL[m.estado]}</span></td>
                         <td data-label="Fecha" className="table-muted">{fmtFecha(m.created_at)}</td>
@@ -292,10 +403,29 @@ export default function SoporteAdminView({ mensajes, faqs, catalogo }: Props) {
       {tab === 'faq' && (
         <>
           <div className="filters-bar filters-bar-end">
+            {iaFaq && (
+              <button className="btn btn-ia btn-sm" disabled={faqPensando} onClick={handleFaqsIa}>
+                <IaSparkle size={14} /> {faqPensando ? 'Leyendo lo respondido…' : '¿Qué pregunta falta?'}
+              </button>
+            )}
             <button className="btn btn-primary btn-sm" onClick={() => setFaqModal('nuevo')}>
               <Plus size={14} /> Nueva pregunta
             </button>
           </div>
+
+          {faqAbierto && (
+            <PanelPropuestaIa
+              titulo="Preguntas que faltan"
+              propuesta={faqPropuesta}
+              cargando={faqPensando}
+              error={faqError}
+              aplicando={faqAplicando}
+              verbo="Guardar"
+              onAplicar={handleGuardarFaqsIa}
+              onReintentar={faqReintento ? handleFaqsIa : undefined}
+              onCerrar={() => { setFaqAbierto(false); setFaqPropuesta(null); setFaqError(null) }}
+            />
+          )}
 
           <div className="card card-table">
             {faqs.length === 0 ? (
@@ -377,6 +507,65 @@ export default function SoporteAdminView({ mensajes, faqs, catalogo }: Props) {
               <p className="soporte-mensaje-texto">{verMsg.mensaje}</p>
             </div>
 
+            {/* ── La clasificación ──
+                De qué va, qué es y cuánto corre. La escribe la IA al entrar el
+                mensaje y se corrige aquí: lo que decide una persona manda, y al
+                guardarlo deja de llevar el sello de la máquina. */}
+            <div className="input-group">
+              <div className="input-group-head">
+                <label>Clasificación</label>
+                {verMsg.clasificado_ia
+                  ? <span className="text-xs-muted sop-clasif-sello"><IaSparkle size={12} /> La puso la IA</span>
+                  : iaClasificar && !verMsg.tipo && (
+                    <button
+                      type="button" className="btn btn-ia btn-sm"
+                      disabled={clasifPensando} onClick={handleClasificarIa}
+                    >
+                      <IaSparkle size={14} /> {clasifPensando ? 'Clasificando…' : 'Clasificar con IA'}
+                    </button>
+                  )}
+              </div>
+              <div className="sop-clasif">
+                <select
+                  className="input" aria-label="Tema" value={verMsg.tema ?? ''}
+                  onChange={e => setVerMsg(v => (v ? { ...v, tema: e.target.value || null } : v))}
+                >
+                  <option value="">Sin tema</option>
+                  <option value="general">General</option>
+                  {catalogo.map(c => <option key={c.clave} value={c.clave}>{c.nombre}</option>)}
+                </select>
+                <select
+                  className="input" aria-label="Tipo" value={verMsg.tipo ?? ''}
+                  onChange={e => setVerMsg(v => (v ? { ...v, tipo: (e.target.value || null) as TipoSoporte | null } : v))}
+                >
+                  <option value="">Sin tipo</option>
+                  {(['duda', 'fallo', 'peticion'] as const).map(t => (
+                    <option key={t} value={t}>{TIPO_LABEL[t]}</option>
+                  ))}
+                </select>
+                <select
+                  className="input" aria-label="Prioridad" value={verMsg.prioridad ?? ''}
+                  onChange={e => setVerMsg(v => (v ? { ...v, prioridad: (e.target.value || null) as PrioridadSoporte | null } : v))}
+                >
+                  <option value="">Sin prioridad</option>
+                  {(['alta', 'media', 'baja'] as const).map(pr => (
+                    <option key={pr} value={pr}>{PRIO_LABEL[pr]}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="input-group-head mt-2">
+                <span className="input-hint">
+                  {verMsg.resumen || 'Sirve para ordenar la bandeja y para que el borrador busque las preguntas frecuentes del módulo correcto.'}
+                </span>
+                <button
+                  type="button" className="btn btn-secondary btn-sm"
+                  disabled={clasifGuardando} onClick={handleGuardarClasificacion}
+                >
+                  {clasifGuardando ? 'Guardando…' : 'Guardar clasificación'}
+                </button>
+              </div>
+            </div>
+
             {verMsg.respuesta ? (
               <div className="input-group">
                 <label>Tu respuesta{verMsg.respuesta_at ? ` · ${fmtFecha(verMsg.respuesta_at)}` : ''}</label>
@@ -386,15 +575,17 @@ export default function SoporteAdminView({ mensajes, faqs, catalogo }: Props) {
               <div className="input-group">
                 <div className="input-group-head">
                   <label>Responder por email</label>
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    disabled={iaPensando || !!respuestaTexto.trim()}
-                    onClick={handleBorradorIa}
-                  >
-                    {iaPensando
-                      ? <><span className="spinner spinner-sm" /> Redactando…</>
-                      : <><Sparkles size={14} strokeWidth={2} /> Borrador con IA</>}
-                  </button>
+                  {iaBorrador && (
+                    <button
+                      className="btn btn-ia btn-sm"
+                      disabled={iaPensando || !!respuestaTexto.trim()}
+                      onClick={handleBorradorIa}
+                    >
+                      {iaPensando
+                        ? <><span className="spinner spinner-sm" /> Redactando…</>
+                        : <><IaSparkle size={14} /> Borrador con IA</>}
+                    </button>
+                  )}
                 </div>
                 <textarea
                   className="input"

@@ -8,6 +8,7 @@ import { avisarAmpliacionSolicitada, avisarSoporteNuevo } from '@/lib/notificaci
 import { enviarEmail } from '@/lib/email/enviar'
 import { envolverEmail, textoAHtml } from '@/lib/email/layout'
 import { leerCorreo } from '@/lib/settings'
+import { clasificarMensaje } from '@/lib/soporte/clasificar'
 
 export interface Faq {
   id:           number
@@ -295,6 +296,20 @@ export async function enviarMensajeSoporte(
     tipo:     'aviso_soporte',
     clientId: session.client_id,
   }))
+
+  // La IA etiqueta el mensaje (módulo, tipo, urgencia y resumen) DESPUÉS de
+  // contestarle al cliente: no tiene por qué esperar a que un modelo piense, y
+  // menos con la conexión de Cuba. Si falla o está apagada, la fila se queda sin
+  // etiqueta y la bandeja funciona como siempre — por eso no se propaga nada.
+  // Solo los mensajes de soporte: la solicitud de ampliación ya nace marcada como
+  // lo que es (`modulo_clave`) y clasificarla la sacaría del embudo de ventas.
+  after(async () => {
+    try {
+      await clasificarMensaje({ id: fila.id as number, asunto, mensaje })
+    } catch {
+      /* etiquetar es un extra: que falle no puede ensuciar el envío del cliente */
+    }
+  })
 
   return { ok: true }
 }
