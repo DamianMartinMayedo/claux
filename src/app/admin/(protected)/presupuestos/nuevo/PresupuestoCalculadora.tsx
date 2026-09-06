@@ -7,7 +7,7 @@ import { useToast } from '@/app/contexts/ToastContext'
 import { calcularInstalacion } from '@/lib/presupuesto/calculo'
 import { importeCiclo } from '@/lib/billing'
 import {
-  FORMATOS, FASES_INSTALACION,
+  FORMATOS, FASES_INSTALACION, VOLUMENES_DEFECTO,
   dimensionesApretadas, nivelMinimoPorVolumenes,
   type FormatoDatos, type ParametrosPresupuesto,
 } from '@/lib/presupuesto/config'
@@ -17,16 +17,32 @@ import { MONEDAS_CLAUX, SIMBOLO_CLAUX, importeClaux, type MonedaClaux } from '@/
 import {
   crearPresupuesto,
   actualizarPresupuesto,
+  revisarPresupuestoIa,
+  sugerirEntradasLeadIa,
+  type CrearPresupuestoInput,
   type ModuloPresupuesto,
   type Comercial,
   type MigracionInput,
 } from '@/app/actions/presupuestos'
+import IaSparkle from '@/components/ia/IaSparkle'
+import PanelDiagnosticoIa, { type LineaDiagnostico } from '@/components/ia/PanelDiagnosticoIa'
+import PanelPropuestaIa from '@/components/ia/PanelPropuestaIa'
+import type { LineaPropuesta, PropuestaIa } from '@/lib/ia/propuesta'
+import type { EntradaLead } from '@/lib/ia/equipo'
 
 const GRUPOS: { label: string; tipo: string }[] = [
   { label: 'Módulos',         tipo: 'modulo' },
   { label: 'Funcionalidades', tipo: 'funcionalidad' },
   { label: 'Addons',          tipo: 'addon' },
 ]
+
+// Cuánto importa un aviso del revisor, dicho como se dice aquí. La IA declara la
+// gravedad; la palabra la ponemos nosotros, que es la que lee el comercial.
+const MARCA_GRAVEDAD: Record<'alta' | 'media' | 'baja', string> = {
+  alta:  'Importante',
+  media: 'Revisar',
+  baja:  'Detalle',
+}
 
 // Toda esta pantalla habla en UNA moneda, la del presupuesto: no se convierte nada
 // entre ellas, ni la cuota ni la tarifa/hora (mig. 225).
@@ -43,6 +59,8 @@ type Prefill = {
   nivel: Nivel | null
   /** En qué moneda se cotiza. Del cliente si es una ampliación; si no, dólares. */
   moneda?: MonedaClaux | null
+  /** Lo que el lead respondió en el paso de tamaño, para poder leerlo aquí. */
+  leadDeclarado?: { etiqueta: string; banda: string }[]
   // Campos que solo trae el modo edición, para reconstruir el snapshot completo del borrador
   // guardado. En alta van sin definir y caen a los valores por defecto de siempre.
   formato?: FormatoDatos | null
@@ -65,6 +83,8 @@ export default function PresupuestoCalculadora({
   descuentoAnualPct,
   prefill,
   editarId,
+  iaLead = false,
+  iaRevisor = false,
 }: {
   modulos: ModuloPresupuesto[]
   comerciales: Comercial[]
@@ -81,6 +101,10 @@ export default function PresupuestoCalculadora({
   prefill: Prefill
   /** Si viene, se está EDITANDO ese presupuesto (borrador) en vez de creando uno. */
   editarId?: number | null
+  /** ¿Está encendida la función de IA que rellena desde el lead? (/admin/ia) */
+  iaLead?: boolean
+  /** ¿Y la que revisa el borrador antes de emitirlo? */
+  iaRevisor?: boolean
 }) {
   const { error: toastError } = useToast()
   const editando = editarId != null
@@ -97,9 +121,9 @@ export default function PresupuestoCalculadora({
   // Los volúmenes se guardan como números; el input trabaja con texto. En edición se
   // restauran los del snapshot; en alta arrancan con una empresa/moneda/cuenta.
   const [vol, setVol] = useState<Record<string, string>>(
-    prefill.volumenes
-      ? Object.fromEntries(Object.entries(prefill.volumenes).map(([k, v]) => [k, String(v)]))
-      : { empresas: '1', monedas: '1', cuentas_tesoreria: '1' },
+    Object.fromEntries(
+      Object.entries(prefill.volumenes ?? VOLUMENES_DEFECTO).map(([k, v]) => [k, String(v)]),
+    ),
   )
 
   // La palanca comercial: la tarifa/hora arranca en la base configurada y se puede pactar
@@ -194,11 +218,47 @@ export default function PresupuestoCalculadora({
     setVol(prev => ({ ...prev, [key]: value }))
   }
 
-  async function handleGuardar() {
-    if (!nombreNegocio.trim()) { toastError('El nombre del negocio es obligatorio.'); return }
-    setLoading(true)
+  // ── La IA que lee el diagnóstico del lead ──
+  // Rellena ENTRADAS: volúmenes y módulos. El nivel y el precio siguen saliendo del
+  // motor con lo que quede aplicado, así que aquí no hay ninguna cifra de dinero
+  // decidida por una máquina. Sin lead detrás no se enseña: no habría qué leer.
+  const [propLead, setPropLead]         = useState<PropuestaIa<EntradaLead> | null>(null)
+  const [leadPensando, setLeadPensando] = useState(false)
+  const [leadError, setLeadError]       = useState<string | null>(null)
+  const [leadReintento, setLeadReintento] = useState(false)
+
+  async function rellenarDesdeLead() {
+    if (!prefill.diagnosticoId) return
+    setPropLead(null); setLeadError(null); setLeadReintento(false); setLeadPensando(true)
+    const r = await sugerirEntradasLeadIa({
+      leadId:    prefill.diagnosticoId,
+      modulos:   modulosSel,
+      volumenes: volNum,
+      // Todas las líneas de las fases que se cotizan, no solo las que están a la
+      // vista: así puede proponer «marca Inventario» Y sus productos de una vez. Un
+      // volumen de un módulo sin marcar no mueve el precio (el cálculo filtra por
+      // módulo) y aparece ya puesto si se marca.
+      lineas:    parametros.lineas.filter(l => enFase(l.fase)).map(l => l.clave),
+    })
+    setLeadPensando(false)
+    if (r.ok) setPropLead(r.propuesta)
+    else { setLeadError(r.error); setLeadReintento(!!r.reintentar) }
+  }
+
+  function aplicarEntradasLead(lineas: LineaPropuesta<EntradaLead>[]) {
+    const valores = lineas.map(l => l.valor)
+    const vols = valores.filter((v): v is Extract<EntradaLead, { tipo: 'volumen' }> => v.tipo === 'volumen')
+    const mods = valores.filter((v): v is Extract<EntradaLead, { tipo: 'modulo' }>  => v.tipo === 'modulo')
+    if (vols.length) setVol(prev => ({ ...prev, ...Object.fromEntries(vols.map(v => [v.clave, String(v.valor)])) }))
+    if (mods.length) setModulosSel(prev => [...new Set([...prev, ...mods.map(m => m.clave)])])
+    setPropLead(null)
+  }
+
+  // El borrador tal como se guardaría. Lo arman guardar Y el revisor: si el
+  // revisor mirase otra cosa, avisaría de un presupuesto que no es el que se emite.
+  function construirInput(): CrearPresupuestoInput {
     const comercialNombre = comerciales.find(c => c.email === comercialEmail)?.nombre
-    const input = {
+    return {
       diagnosticoId:     prefill.diagnosticoId,
       clientId:          prefill.clientId,
       comercialEmail,
@@ -223,6 +283,35 @@ export default function PresupuestoCalculadora({
         horasManual: migHoras ? Number(migHoras) : null,
       },
     }
+  }
+
+  // ── El revisor de antes de emitir ──
+  // La única de la casa que no escribe: devuelve avisos y se cierra. Aquí quien
+  // decide el precio es quien vende, y un aviso que se aplicara solo sería una
+  // cifra cambiada por una máquina.
+  const [revision, setRevision]   = useState<LineaDiagnostico[] | null>(null)
+  const [revPensando, setRevPensando] = useState(false)
+  const [revError, setRevError]   = useState<string | null>(null)
+  const [revReintento, setRevReintento] = useState(false)
+
+  async function revisarAntesDeEmitir() {
+    setRevision(null); setRevError(null); setRevReintento(false); setRevPensando(true)
+    const r = await revisarPresupuestoIa(construirInput())
+    setRevPensando(false)
+    if (!r.ok) { setRevError(r.error); setRevReintento(!!r.reintentar); return }
+    setRevision(r.revision.avisos.map(a => ({
+      clave:   a.clave,
+      marca:   MARCA_GRAVEDAD[a.gravedad],
+      titulo:  a.titulo,
+      detalle: a.arreglo,
+      apoyo:   a.apoyo,
+    })))
+  }
+
+  async function handleGuardar() {
+    if (!nombreNegocio.trim()) { toastError('El nombre del negocio es obligatorio.'); return }
+    setLoading(true)
+    const input = construirInput()
     const r = editando
       ? await actualizarPresupuesto(editarId, input)
       : await crearPresupuesto(input)
@@ -295,6 +384,41 @@ export default function PresupuestoCalculadora({
                 instalación.
               </div>
             )}
+            {/* Lo que el lead contestó, delante. Son bandas de nivel («Hasta 100
+                personas»), así que no son el volumen a cotizar, pero acotan por arriba
+                y hoy se perdían en el embudo. El botón lee el resto del diagnóstico
+                —sector, cómo lo lleva hoy, qué pidió— y propone los números.
+                Mismo botón y mismo panel que la IA del portal, a propósito. */}
+            {prefill.diagnosticoId && (
+              <div className="input-group">
+                <div className="input-group-head">
+                  <span className="text-xs-muted">
+                    Del diagnóstico del lead
+                    {prefill.leadDeclarado?.length
+                      ? ` · ${prefill.leadDeclarado.map(d => `${d.etiqueta}: ${d.banda}`).join(' · ')}`
+                      : ''}
+                  </span>
+                  {iaLead && !propLead && !leadPensando && (
+                    <button type="button" className="btn btn-ia btn-sm"
+                      onClick={rellenarDesdeLead} disabled={loading}>
+                      <IaSparkle size={14} /> Rellenar desde el lead
+                    </button>
+                  )}
+                </div>
+                {(propLead || leadPensando || leadError) && (
+                  <PanelPropuestaIa
+                    titulo="Del diagnóstico del lead"
+                    propuesta={propLead}
+                    cargando={leadPensando}
+                    error={leadError}
+                    onReintentar={leadReintento ? rellenarDesdeLead : undefined}
+                    onAplicar={aplicarEntradasLead}
+                    onCerrar={() => { setPropLead(null); setLeadError(null) }}
+                  />
+                )}
+              </div>
+            )}
+
             <div className="input-group">
               <label htmlFor="p-negocio">Nombre del negocio <span className="required">*</span></label>
               <input id="p-negocio" className="input" value={nombreNegocio} onChange={e => setNombreNegocio(e.target.value)} />
@@ -441,6 +565,9 @@ export default function PresupuestoCalculadora({
           {[...camposFase1, ...lineasFase2].length > 0 && (
           <div className="card">
             <p className="mod-list-label">Datos de volumen</p>
+            {!editando && prefill.diagnosticoId && prefill.volumenes && (
+              <p className="input-hint">Del lead viene el mínimo que declaró: ajústalo al número real.</p>
+            )}
             <div className="grid-cols-2">
               {[...camposFase1, ...lineasFase2].map(l => (
                 <div key={l.clave} className="input-group">
@@ -626,6 +753,29 @@ export default function PresupuestoCalculadora({
                 </>
               )}
             </div>
+
+            {(revision || revPensando || revError) && (
+              <PanelDiagnosticoIa
+                titulo="Antes de emitir"
+                lineas={revision}
+                cargando={revPensando}
+                error={revError}
+                cargandoTexto="Comparando con lo ya cerrado…"
+                vacio="No ve nada que objetar en este presupuesto."
+                descargo="Generado por IA a partir de tus presupuestos cerrados · el precio lo decides tú."
+                onReintentar={revReintento ? revisarAntesDeEmitir : undefined}
+                onCerrar={() => { setRevision(null); setRevError(null) }}
+              />
+            )}
+
+            {iaRevisor && (
+              <button
+                type="button" className="btn btn-ia btn-full" disabled={revPensando || loading}
+                onClick={revisarAntesDeEmitir}
+              >
+                <IaSparkle size={14} /> {revPensando ? 'Revisando…' : 'Revisar antes de emitir'}
+              </button>
+            )}
 
             <button className="btn btn-primary btn-full" disabled={loading} onClick={handleGuardar}>
               {loading

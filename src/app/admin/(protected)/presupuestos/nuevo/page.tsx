@@ -2,6 +2,10 @@ import { requireAccesoPagina } from '@/lib/admin-guard'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { listarModulosParaPresupuesto, listarComerciales } from '@/app/actions/presupuestos'
 import { cargarParametros } from '@/lib/presupuesto/parametros'
+import { VOLUMENES_DEFECTO, volumenesDesdeTamano } from '@/lib/presupuesto/config'
+import { obtenerCatalogoPublico } from '@/lib/publico/catalogo'
+import { tamanoComoTexto, volumenesDeclarados } from '@/lib/publico/tamano'
+import { estadoFuncionesIa } from '@/lib/ia/interruptores'
 import { normalizarNivel, type Nivel } from '@/lib/niveles'
 import { normalizarMonedaClaux, type MonedaClaux } from '@/lib/moneda-claux'
 import { nombresDeNiveles, limitesDeNiveles } from '@/lib/niveles-server'
@@ -21,12 +25,13 @@ export default async function NuevoPresupuestoPage({
   // Los precios se cargan AQUÍ y viajan enteros a la calculadora, que se los pasa al
   // cálculo. La misma tanda llega luego a la acción de guardar, para que la vista previa y
   // el recálculo autoritativo no puedan partir de números distintos.
-  const [modulos, comerciales, parametros, nombresNivel, limitesNivel] = await Promise.all([
+  const [modulos, comerciales, parametros, nombresNivel, limitesNivel, iaOn] = await Promise.all([
     listarModulosParaPresupuesto(),
     listarComerciales(),
     cargarParametros(),
     nombresDeNiveles(),
     limitesDeNiveles(),
+    estadoFuncionesIa(['presupuesto_lead', 'presupuesto_revisor'] as const),
   ])
 
   const db = createAdminClient()
@@ -47,6 +52,10 @@ export default async function NuevoPresupuestoPage({
     modulos: [] as string[],
     nivel: null as Nivel | null,
     moneda: null as MonedaClaux | null,
+    /** Volúmenes de arranque. Del lead cuando lo hay; si no, los de siempre. */
+    volumenes: null as Record<string, number> | null,
+    /** Lo que el lead respondió en el paso de tamaño, para poder leerlo aquí. */
+    leadDeclarado: [] as { etiqueta: string; banda: string }[],
   }
 
   // Presupuesto para un cliente en marcha: es el caso de la ampliación —contrata inventario
@@ -88,6 +97,8 @@ export default async function NuevoPresupuestoPage({
         // Y su moneda: a un cliente al que se le factura en euros no se le cotiza la
         // ampliación en dólares.
         moneda: normalizarMonedaClaux(data.moneda_facturacion),
+        volumenes: null,
+        leadDeclarado: [],
       }
     }
   }
@@ -105,21 +116,42 @@ export default async function NuevoPresupuestoPage({
       modulos:           modulosPedidos,
       nivel: nivelQs ? normalizarNivel(nivelQs) : null,
       moneda: monedaQs ? normalizarMonedaClaux(monedaQs) : null,
+      volumenes: null,
+      leadDeclarado: [],
     }
   }
 
   if (lead) {
     const id = parseInt(lead, 10)
     if (!Number.isNaN(id)) {
+      // `sector` y `tamano` viajan porque son lo que el lead contestó del TAMAÑO de
+      // su negocio, y hasta ahora se quedaba en el embudo: el comercial volvía a
+      // preguntarlo (plan de IA §6.1). Rellenan poco a propósito —son bandas de
+      // nivel, no cifras: ver `volumenesDeclarados`— pero se enseñan enteras.
       const { data } = await db
         .from('diagnosticos')
-        .select('id, nombre, telefono, email, modulos_rec, nivel_rec')
+        .select('id, nombre, telefono, email, sector, modulos_rec, nivel_rec, tamano')
         .eq('id', id)
         .maybeSingle()
       if (data) {
         const rec = modulosPedidos.length > 0
           ? modulosPedidos
           : (data.modulos_rec ?? []).filter((c: string) => modulos.some(m => m.clave === c))
+
+        // El lead guarda ÍNDICES de nivel, no cifras: hacen falta los topes vivos
+        // para saber qué banda pulsó, y los módulos del sector para saber si la
+        // tercera pregunta contaba productos o servicios (son dos topes distintos).
+        // Si el catálogo no carga, `obtenerCatalogoPublico` degrada a vacío y esto
+        // se queda sin volúmenes — el presupuesto se hace a mano, como antes.
+        const { sectores, niveles } = await obtenerCatalogoPublico()
+        const delSector = sectores.find(s => s.sector === data.sector)?.modulos ?? []
+        const tamano = (data.tamano as Record<string, number> | null) ?? null
+        const volLead = volumenesDesdeTamano(
+          volumenesDeclarados(niveles, delSector, tamano),
+          parametros.lineas,
+          rec,
+        )
+
         prefill = {
           diagnosticoId:     data.id,
           clientId:          null,
@@ -135,6 +167,12 @@ export default async function NuevoPresupuestoPage({
           // Un lead no tiene moneda: la elige el comercial al cotizar, salvo que
           // venga en la URL desde una propuesta que ya la tiene decidida.
           moneda:            monedaQs ? normalizarMonedaClaux(monedaQs) : null,
+          // Los de siempre debajo: el lead responde tres preguntas, y las monedas y
+          // las cuentas de tesorería no son ninguna de ellas. Cuando ninguna banda
+          // acota nada (el caso normal), esto se queda en `null` y el formulario
+          // arranca como siempre.
+          volumenes:         Object.keys(volLead).length ? { ...VOLUMENES_DEFECTO, ...volLead } : null,
+          leadDeclarado:     tamanoComoTexto(niveles, delSector, tamano).map(l => ({ etiqueta: l.etiqueta, banda: l.banda })),
         }
       }
     }
@@ -160,6 +198,8 @@ export default async function NuevoPresupuestoPage({
       parametros={parametros}
       descuentoAnualPct={descuentoAnualPct}
       prefill={prefill}
+      iaLead={iaOn.presupuesto_lead}
+      iaRevisor={iaOn.presupuesto_revisor}
     />
   )
 }

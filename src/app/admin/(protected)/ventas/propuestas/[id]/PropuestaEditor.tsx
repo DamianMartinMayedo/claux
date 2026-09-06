@@ -5,8 +5,9 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, ArrowDown, ArrowUp, ClipboardPaste, Copy, ExternalLink, Eye, FileText,
-  Images, RotateCcw, Send, Share2, Sparkles, Trash2,
+  Images, RotateCcw, Send, Share2, Trash2,
 } from 'lucide-react'
+import IaSparkle from '@/components/ia/IaSparkle'
 import BarraGuardar from '@/components/BarraGuardar'
 import Tabs from '@/components/Tabs'
 import { toastError, toastLoading, toastSuccess, toastWarning } from '@/app/contexts/ToastContext'
@@ -507,10 +508,10 @@ export default function PropuestaEditor({
                 {/* Escribe TODAS las cajas vacías de la pestaña —estas cuatro, las
                     tres de «hoy» y las de cada módulo—, no solo las de esta tarjeta:
                     es una redacción, y se lee entera o no se lee. */}
-                <button className="btn btn-secondary btn-sm" onClick={redactarConIa} disabled={redactando}>
+                <button className="btn btn-ia btn-sm" onClick={redactarConIa} disabled={redactando}>
                   {redactando
                     ? <><span className="spinner spinner-sm" /> Redactando…</>
-                    : <><Sparkles size={15} strokeWidth={2} /> Redactar con IA</>}
+                    : <><IaSparkle size={15} /> Redactar con IA</>}
                 </button>
               </div>
             </div>

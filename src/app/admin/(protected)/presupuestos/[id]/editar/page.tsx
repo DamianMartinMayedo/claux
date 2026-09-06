@@ -11,6 +11,7 @@ import {
 import { normalizarNivel, type Nivel } from '@/lib/niveles'
 import { normalizarMonedaClaux } from '@/lib/moneda-claux'
 import { nombresDeNiveles, limitesDeNiveles } from '@/lib/niveles-server'
+import { estadoFuncionesIa } from '@/lib/ia/interruptores'
 import PresupuestoCalculadora from '../../nuevo/PresupuestoCalculadora'
 
 export const dynamic = 'force-dynamic'
@@ -39,12 +40,13 @@ export default async function EditarPresupuestoPage({
   // estados, esto es el candado por si se llega por URL directa.
   if (pres.estado !== 'guardado') redirect('/admin/presupuestos')
 
-  const [modulos, comerciales, parametros, nombresNivel, limitesNivel] = await Promise.all([
+  const [modulos, comerciales, parametros, nombresNivel, limitesNivel, iaOn] = await Promise.all([
     listarModulosParaPresupuesto(),
     listarComerciales(),
     cargarParametros(),
     nombresDeNiveles(),
     limitesDeNiveles(),
+    estadoFuncionesIa(['presupuesto_lead', 'presupuesto_revisor'] as const),
   ])
 
   const descuentoAnualPct = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
@@ -78,6 +80,8 @@ export default async function EditarPresupuestoPage({
       parametros={parametros}
       descuentoAnualPct={descuentoAnualPct}
       editarId={presId}
+      iaLead={iaOn.presupuesto_lead}
+      iaRevisor={iaOn.presupuesto_revisor}
       prefill={{
         diagnosticoId:     pres.diagnostico_id ?? null,
         clientId:          pres.client_id ?? null,

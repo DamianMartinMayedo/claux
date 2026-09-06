@@ -132,6 +132,65 @@ export const PARAMETRO_A_DIMENSION: Record<string, string> = {
   empleados:            'trabajadores',
 }
 
+// ── Del TAMAÑO que declaró el lead a los volúmenes del formulario ───────────
+
+/**
+ * Con qué arranca un presupuesto nuevo cuando no hay nada de dónde sacarlo: una
+ * empresa, una moneda y una cuenta. Vive aquí y no dentro del formulario porque
+ * el prefill desde un lead parte de estos mismos valores y los pisa uno a uno;
+ * escritos en dos sitios, un día dejarían de ser los mismos.
+ */
+export const VOLUMENES_DEFECTO: Record<string, number> = {
+  empresas: 1,
+  monedas: 1,
+  cuentas_tesoreria: 1,
+}
+
+/**
+ * Dimensión de `nivel_limites` → línea de volumen que la mide, por orden de
+ * preferencia. La primera que exista Y esté activada por los módulos cotizados
+ * se queda con el número.
+ *
+ * El catálogo tiene dos líneas porque son dos trabajos distintos: cargar el
+ * inventario de una tienda no es cargar la carta de un restaurante. Quien
+ * contrata Inventario recibe el volumen ahí; quien solo enseña el menú, en la
+ * línea del catálogo QR.
+ */
+const DIMENSION_A_PARAMETRO: Record<string, string[]> = {
+  empresas:     ['empresas'],
+  trabajadores: ['empleados'],
+  productos:    ['productos_inventario', 'productos_catalogo'],
+  servicios:    ['productos_catalogo'],
+}
+
+/**
+ * Traduce lo que el lead declaró (`lib/publico/tamano` → volúmenes por dimensión)
+ * a las líneas del presupuesto que de verdad se van a cobrar.
+ *
+ * Solo rellena líneas VIVAS: la clave tiene que existir hoy en
+ * `presupuesto_parametros` y su módulo estar entre los cotizados. Un volumen
+ * puesto en una línea que la pantalla no enseña sería un número que nadie puede
+ * ver ni corregir y que aun así mueve las horas.
+ */
+export function volumenesDesdeTamano(
+  declarados: Record<string, number>,
+  lineas: LineaParametro[],
+  modulos: string[],
+): Record<string, number> {
+  const vol: Record<string, number> = {}
+  const viva = (clave: string) => {
+    const l = lineas.find(x => x.clave === clave)
+    return !!l && (l.modulo === null || modulos.includes(l.modulo))
+  }
+
+  for (const [dimension, valor] of Object.entries(declarados)) {
+    if (!(valor > 0)) continue
+    const clave = (DIMENSION_A_PARAMETRO[dimension] ?? []).find(viva)
+    if (clave) vol[clave] = valor
+  }
+  return vol
+}
+
 export interface DimensionApretada {
   dimension: string
   volumen:   number

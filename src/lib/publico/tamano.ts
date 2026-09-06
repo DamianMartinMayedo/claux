@@ -62,6 +62,14 @@ export interface OpcionTamano {
   label: string
 }
 
+/** Una banda con sus números a la vista, no solo su rótulo. */
+export interface BandaTamano extends OpcionTamano {
+  /** El mínimo de la banda. */
+  desde: number
+  /** El máximo, o `null` en la banda abierta («Más de 5»). */
+  hasta: number | null
+}
+
 /**
  * Las bandas de una dimensión, derivadas de los topes de cada nivel.
  *
@@ -69,33 +77,44 @@ export interface OpcionTamano {
  * de nivel es una opción que no pregunta nada. Y si el último nivel tiene tope
  * finito se añade un «Más de X» que apunta a ese mismo último nivel: no hay nada
  * por encima que vender, pero el visitante tiene que poder decir la verdad.
+ *
+ * Devuelve también los números —y no solo el rótulo— porque el presupuesto los
+ * necesita: de la banda que el lead pulsó salen los volúmenes precargados.
  */
-export function opcionesTamano(niveles: NivelPublico[], dim: string): OpcionTamano[] {
-  const opciones: OpcionTamano[] = []
+export function bandasTamano(niveles: NivelPublico[], dim: string): BandaTamano[] {
+  const bandas: BandaTamano[] = []
   let anterior: number | null = null
 
   niveles.forEach((n, idx) => {
     if (!(dim in n.limites)) return
     const tope = n.limites[dim]
+    const desde = (anterior ?? 0) + 1
 
     if (tope === null) {                                   // sin tope: la última banda
-      opciones.push({ nivelIdx: idx, label: anterior === null ? 'Cualquier cantidad' : `Más de ${fmt(anterior)}` })
+      bandas.push({ nivelIdx: idx, desde, hasta: null, label: anterior === null ? 'Cualquier cantidad' : `Más de ${fmt(anterior)}` })
       anterior = null
       return
     }
     if (anterior !== null && tope <= anterior) return       // no aporta banda nueva
-    opciones.push({
+    bandas.push({
       nivelIdx: idx,
-      label: anterior === null ? `Hasta ${fmt(tope)}` : `Entre ${fmt(anterior + 1)} y ${fmt(tope)}`,
+      desde,
+      hasta: tope,
+      label: anterior === null ? `Hasta ${fmt(tope)}` : `Entre ${fmt(desde)} y ${fmt(tope)}`,
     })
     anterior = tope
   })
 
   // El último nivel tenía tope finito: falta decir qué pasa por encima.
-  if (anterior !== null && opciones.length > 0) {
-    opciones.push({ nivelIdx: opciones[opciones.length - 1].nivelIdx, label: `Más de ${fmt(anterior)}` })
+  if (anterior !== null && bandas.length > 0) {
+    bandas.push({ nivelIdx: bandas[bandas.length - 1].nivelIdx, desde: anterior + 1, hasta: null, label: `Más de ${fmt(anterior)}` })
   }
-  return opciones
+  return bandas
+}
+
+/** Lo mismo, con lo único que necesita el formulario: a qué nivel apunta y qué se lee. */
+export function opcionesTamano(niveles: NivelPublico[], dim: string): OpcionTamano[] {
+  return bandasTamano(niveles, dim).map(({ nivelIdx, label }) => ({ nivelIdx, label }))
 }
 
 function fmt(n: number): string {
@@ -168,4 +187,43 @@ export function tamanoComoTexto(
     })
   }
   return lineas
+}
+
+/**
+ * El MÍNIMO que el lead garantizó en cada dimensión, para el presupuesto
+ * (`docs/planes/ia-claux-plataforma.md` §6.1). Devuelve claves de `nivel_limites`
+ * —`empresas`, `trabajadores`, y `productos` o `servicios` según el sector—, no
+ * líneas del presupuesto: esa traducción depende de qué módulos se cotizan y vive
+ * en `lib/presupuesto/config`.
+ *
+ * DOS DECISIONES, y las dos van contra lo que parece obvio:
+ *
+ * 1. Se toma el SUELO de la banda, no su techo. Estas bandas miden NIVEL, no
+ *    volumen: con el tope de trabajadores en 100, «Hasta 100 personas» es lo que
+ *    contesta un restaurante de ocho. Poner 100 metería seis horas de migración
+ *    inventadas en todos los presupuestos, y con la firma del lead encima.
+ * 2. La primera banda NO rellena nada. «Hasta 100» no dice cuántos hay: solo
+ *    descarta que sean muchos, y un 1 en el formulario se lee como un dato. Se
+ *    rellena únicamente cuando el lead se salió de la banda pequeña («Entre 4 y
+ *    5 negocios» → 4), que es cuando su respuesta sí obliga a subir el número.
+ *
+ * El punto medio —cuántos hay de verdad— es una estimación, y la hace la IA con
+ * el resto del diagnóstico delante, declarando su confianza.
+ */
+export function volumenesDeclarados(
+  niveles: NivelPublico[],
+  modulosDelSector: string[],
+  respuestas: Record<string, number> | null | undefined,
+): Record<string, number> {
+  if (!respuestas) return {}
+  const vol: Record<string, number> = {}
+
+  for (const q of [...PREGUNTAS_TAMANO_BASE, preguntaCatalogo(modulosDelSector)]) {
+    const idx = respuestas[q.clave]
+    if (typeof idx !== 'number') continue
+    const banda = bandasTamano(niveles, q.dim).find((b) => b.nivelIdx === idx)
+    if (!banda || banda.desde <= 1) continue
+    vol[q.dim] = banda.desde
+  }
+  return vol
 }

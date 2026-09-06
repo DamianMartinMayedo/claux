@@ -7,11 +7,20 @@ import { logActividad } from '@/lib/audit'
 import { revalidatePath } from 'next/cache'
 import { calcularInstalacion } from '@/lib/presupuesto/calculo'
 import { cargarParametros } from '@/lib/presupuesto/parametros'
-import type { FormatoDatos } from '@/lib/presupuesto/config'
+import { FORMATOS, etiquetaFase, numeroPresupuesto, type FormatoDatos, type NumeroFase } from '@/lib/presupuesto/config'
 import { COLUMNAS_PRECIO, normalizarNivel, sumarModulos, type Nivel, type ModuloPrecios } from '@/lib/niveles'
 import { importeClaux, normalizarMonedaClaux, type MonedaClaux } from '@/lib/moneda-claux'
 import { hoyEnTz } from '@/lib/fecha-tz'
 import { avisoPropuestas, propuestasDe, refrescarPropuestas, refrescarPropuestasDe } from '@/lib/propuesta/refrescar'
+import { obtenerCatalogoPublico } from '@/lib/publico/catalogo'
+import { tamanoComoTexto } from '@/lib/publico/tamano'
+import { etiquetaModo } from '@/lib/publico/modos'
+import {
+  proponerEntradasLead, revisarPresupuesto,
+  type CasoCerrado, type EntradaLead, type RevisionPresupuesto,
+} from '@/lib/ia/equipo'
+import { IaApagada, IaBolsaAgotada } from '@/lib/ia/interna'
+import type { PropuestaIa } from '@/lib/ia/propuesta'
 
 export interface ModuloPresupuesto extends ModuloPrecios {
   clave:   string
@@ -744,4 +753,231 @@ export async function actualizarHorasReales(
   if (error) return { ok: false, error: error.message }
   revalidatePath('/admin/presupuestos')
   return { ok: true }
+}
+
+// ── La IA que rellena el presupuesto con lo que el lead ya declaró ───────────
+//
+// Ojo a lo que NO hace: ni precio, ni horas, ni nivel. Devuelve una `PropuestaIa`
+// —volúmenes y módulos— que el comercial aplica de un clic sobre el formulario, y
+// el cálculo sigue siendo el de siempre. Nada de esto toca la base de datos: lo
+// que se guarda es el presupuesto que la persona cree luego, con su propia traza.
+export async function sugerirEntradasLeadIa(args: {
+  leadId: number
+  /** Los módulos marcados AHORA en el formulario, no los que recomendó el lead. */
+  modulos: string[]
+  /** Lo tecleado en las líneas de volumen, para no proponer lo que ya está. */
+  volumenes: Record<string, number>
+  /** Las líneas que la pantalla está enseñando (las de una fase excluida no salen). */
+  lineas: string[]
+}): Promise<{ ok: true; propuesta: PropuestaIa<EntradaLead> } | { ok: false; error: string; reintentar?: boolean }> {
+  await requirePermiso('presupuestos')
+  const db = createAdminClient()
+
+  const { data: lead } = await db
+    .from('diagnosticos')
+    .select('sector, necesidades, modo_actual, tamano')
+    .eq('id', args.leadId)
+    .maybeSingle()
+  if (!lead) return { ok: false, error: 'Ese lead ya no existe.' }
+
+  const [catalogo, parametros, modulosCat] = await Promise.all([
+    obtenerCatalogoPublico(),
+    cargarParametros(),
+    db.from('modulos_catalogo').select('clave, nombre, descripcion').eq('activo', true).order('orden'),
+  ])
+
+  // Del lead sale lo que declaró del negocio, ya en palabras: el modelo no sabe
+  // qué es «restaurante_2» ni qué significa el índice 1 en `tamano`.
+  const delSector = catalogo.sectores.find(s => s.sector === lead.sector)?.modulos ?? []
+  const etiquetaNecesidad = new Map(catalogo.necesidades.map(n => [n.clave, n.etiqueta]))
+
+  const visibles = new Set(args.lineas)
+  const lineas = parametros.lineas
+    .filter(l => visibles.has(l.clave))
+    .sort((a, b) => a.orden - b.orden)
+    .map(l => ({ clave: l.clave, etiqueta: l.etiqueta, actual: Number(args.volumenes[l.clave]) || 0 }))
+
+  const modulos = ((modulosCat.data ?? []) as { clave: string; nombre: string; descripcion: string | null }[])
+    .map(m => ({
+      clave: m.clave,
+      nombre: m.nombre,
+      descripcion: (m.descripcion ?? '').slice(0, 160),
+      marcado: args.modulos.includes(m.clave),
+    }))
+
+  try {
+    const propuesta = await proponerEntradasLead({
+      sector:      catalogo.sectores.find(s => s.sector === lead.sector)?.nombre ?? String(lead.sector ?? ''),
+      modoActual:  lead.modo_actual ? etiquetaModo(lead.modo_actual) : null,
+      necesidades: ((lead.necesidades ?? []) as string[]).map(c => etiquetaNecesidad.get(c) ?? c),
+      declarado:   tamanoComoTexto(catalogo.niveles, delSector, lead.tamano as Record<string, number> | null)
+                     .map(l => `${l.etiqueta}: ${l.banda}`),
+      lineas,
+      modulos,
+    })
+    if (!propuesta) return { ok: false, error: 'La IA no ve nada que añadir a lo que ya hay.', reintentar: true }
+    return { ok: true, propuesta }
+  } catch (e) {
+    if (e instanceof IaBolsaAgotada || e instanceof IaApagada) return { ok: false, error: e.message }
+    throw e
+  }
+}
+
+// ── La IA que revisa el borrador antes de emitirlo ───────────────────────────
+//
+// La única función de IA del admin que NO escribe, y es deliberado (plan §Fase 4):
+// aquí quien decide es quien vende. Devuelve avisos para leer; no hay nada que
+// aplicar, ni una cifra que se mueva sola.
+//
+// Trabaja sobre el borrador que hay EN PANTALLA, guardado o no —«antes de emitir»
+// es justo antes de guardarlo—, y recalcula las horas en el servidor con los
+// parámetros de verdad: lo que llegue del navegador es una propuesta, no la
+// cuenta. Y hacia el modelo NO va quién es el cliente: ni el negocio, ni el
+// contacto, ni el comercial. Nada de eso ayuda a saber si las horas se quedan
+// cortas.
+
+/** Cuántos presupuestos cerrados se leen para buscar los parecidos. */
+const CERRADOS_A_MIRAR = 40
+
+interface FilaCerrada {
+  id:           number
+  client_id:    string | null
+  nivel:        string | null
+  modulos:      string[] | null
+  volumenes:    Record<string, number> | null
+  horas_total:  number | null
+  horas_reales: number | null
+}
+
+/** Cuánto se parecen dos presupuestos: por los módulos, que es lo que mueve las horas. */
+function parecido(a: string[], b: string[]): number {
+  if (!a.length || !b.length) return 0
+  const set = new Set(b)
+  const comunes = a.filter(c => set.has(c)).length
+  return comunes / new Set([...a, ...b]).size
+}
+
+export async function revisarPresupuestoIa(
+  input: CrearPresupuestoInput,
+): Promise<{ ok: true; revision: RevisionPresupuesto } | { ok: false; error: string; reintentar?: boolean }> {
+  await requirePermiso('presupuestos')
+  const db = createAdminClient()
+
+  const modulosSel = input.modulos ?? []
+  const volumenes  = input.volumenes ?? {}
+  const fasesFuera = (input.fasesExcluidas ?? []).map(Number).filter(n => n >= 1 && n <= 4)
+  const moneda     = normalizarMonedaClaux(input.moneda)
+  const nivel      = normalizarNivel(input.nivel)
+
+  const [parametros, cat, cerrados] = await Promise.all([
+    cargarParametros(),
+    db.from('modulos_catalogo').select('clave, nombre'),
+    db.from('presupuestos_instalacion')
+      .select('id, client_id, nivel, modulos, volumenes, horas_total, horas_reales')
+      .eq('estado', 'instalado')
+      .not('horas_reales', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(CERRADOS_A_MIRAR),
+  ])
+
+  // El recálculo autoritativo, el mismo que hace guardar: revisar la cuenta del
+  // navegador sería revisar una cuenta que no es la que se va a guardar.
+  const resultado = calcularInstalacion({
+    modulos:   modulosSel,
+    volumenes,
+    formato:   input.formato,
+    moneda,
+    historicoHorasManual: input.migracion?.desea ? Number(input.migracion?.horasManual ?? 0) || 0 : 0,
+    tarifaHoraOverride:   Number(input.tarifaHora) || 0,
+    descuentoPct:         Math.min(100, Math.max(0, Number(input.descuentoPct) || 0)),
+    fasesExcluidas:       fasesFuera,
+  }, parametros)
+
+  // Un formulario recién abierto no tiene nada que revisar, y gastar una llamada
+  // de la bolsa para que conteste eso mismo es tirar dinero.
+  if (!modulosSel.length && resultado.horasTotal === 0) {
+    return { ok: false, error: 'Todavía no hay nada que revisar: marca los módulos y pon los volúmenes.' }
+  }
+
+  const nombreModulo = new Map(((cat.data ?? []) as { clave: string; nombre: string }[]).map(m => [m.clave, m.nombre]))
+  const etiquetaLinea = new Map(parametros.lineas.map(l => [l.clave, l.etiqueta]))
+  const enPalabras = (v: Record<string, number> | null | undefined) =>
+    Object.entries(v ?? {})
+      .filter(([, n]) => Number(n) > 0)
+      .map(([k, n]) => `${etiquetaLinea.get(k) ?? k}: ${n}`)
+
+  // Los casos parecidos y su desvío: los ordena y los cuenta el código. Al modelo
+  // se le pide el juicio, no la aritmética.
+  const filas = ((cerrados.data ?? []) as FilaCerrada[])
+    .filter(f => Number(f.horas_total) > 0 && f.horas_reales != null)
+  const casos: CasoCerrado[] = filas
+    .map(f => ({ f, p: parecido(modulosSel, f.modulos ?? []) }))
+    .sort((a, b) => b.p - a.p)
+    .slice(0, 8)
+    .map(({ f }) => {
+      const horas = Number(f.horas_total)
+      const reales = Number(f.horas_reales)
+      const pct = Math.round((reales / horas - 1) * 100)
+      return {
+        ref:         f.client_id ?? numeroPresupuesto(f.id),
+        nivel:       f.nivel ?? '',
+        modulos:     (f.modulos ?? []).map(c => nombreModulo.get(c) ?? c),
+        volumenes:   enPalabras(f.volumenes),
+        horas,
+        horasReales: reales,
+        desvio:      pct === 0 ? 'clavado' : `${pct > 0 ? '+' : ''}${pct} %`,
+      }
+    })
+
+  // La foto del histórico, calculada aquí: es el contexto que hace que un aviso
+  // de horas signifique algo, y un modelo no tiene por qué sacar una mediana.
+  let nota: string | null = null
+  if (filas.length) {
+    const desvios = filas
+      .map(f => Number(f.horas_reales) / Number(f.horas_total) - 1)
+      .sort((a, b) => a - b)
+    const mediana = desvios[Math.floor(desvios.length / 2)]
+    const pct = Math.round(mediana * 100)
+    nota = `De ${filas.length} instalación${filas.length === 1 ? '' : 'es'} ya cerrada${filas.length === 1 ? '' : 's'}, `
+      + (pct > 0 ? `la mediana costó un ${pct} % más de lo presupuestado.`
+        : pct < 0 ? `la mediana costó un ${Math.abs(pct)} % menos de lo presupuestado.`
+        : 'la mediana salió clavada.')
+  }
+
+  const migracion = input.migracion?.desea
+    ? [
+        input.migracion.desde || input.migracion.hasta ? `de ${input.migracion.desde || '?'} a ${input.migracion.hasta || '?'}` : null,
+        input.migracion.volumen ? `${input.migracion.volumen} registros` : null,
+        input.migracion.horasManual ? `${input.migracion.horasManual} h a mano` : null,
+      ].filter(Boolean).join(' · ') || 'sí'
+    : null
+
+  try {
+    const revision = await revisarPresupuesto({
+      borrador: {
+        nivel:      nivel,
+        moneda,
+        modulos:    modulosSel.map(c => nombreModulo.get(c) ?? c),
+        volumenes:  enPalabras(volumenes),
+        fasesFuera: fasesFuera.map(n => etiquetaFase(n as NumeroFase)),
+        formato:    FORMATOS.find(f => f.key === input.formato)?.label ?? String(input.formato ?? ''),
+        migracion,
+        horas:      resultado.horasTotal,
+        porFase:    resultado.desglose.map(d => ({ fase: d.fase, horas: d.horas })),
+        tarifaHora: Number(input.tarifaHora) || 0,
+        descuentoPct:    Math.min(100, Math.max(0, Number(input.descuentoPct) || 0)),
+        descuentoMotivo: (input.descuentoMotivo || '').trim() || null,
+        total:      resultado.totalFinal,
+        cuota:      await calcularCuotaMensual(db, modulosSel, nivel, moneda),
+        revisiones: resultado.revisiones.map(r => `${r.linea}: ${r.motivo}`),
+      },
+      casos,
+      nota,
+    })
+    if (!revision) return { ok: false, error: 'La IA no ha podido revisarlo.', reintentar: true }
+    return { ok: true, revision }
+  } catch (e) {
+    if (e instanceof IaBolsaAgotada || e instanceof IaApagada) return { ok: false, error: e.message }
+    throw e
+  }
 }

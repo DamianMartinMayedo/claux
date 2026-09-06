@@ -15,7 +15,7 @@ import { normalizarMonedaClaux, type MonedaClaux } from '@/lib/moneda-claux'
 import { CLAVES_TEXTO } from '@/lib/propuesta/secciones'
 import { cargarLead } from '@/lib/propuesta/cargar'
 import { redactarPropuesta, type BorradorPropuesta } from '@/lib/ia/equipo'
-import { IaBolsaAgotada } from '@/lib/ia/interna'
+import { IaApagada, IaBolsaAgotada } from '@/lib/ia/interna'
 
 // ── Propuestas comerciales (panel interno) ───────────────────────────────────
 //
@@ -552,7 +552,9 @@ export async function redactarPropuestaIa(
     if (!borrador) return { ok: false, error: 'La IA no pudo redactar el borrador. Vuelve a intentarlo.' }
     return { ok: true, borrador }
   } catch (e) {
-    if (e instanceof IaBolsaAgotada) return { ok: false, error: e.message }
+    // Bolsa agotada e interruptor apagado se dicen tal cual: no son averías y el
+    // mensaje explica qué hacer. Lo demás sube y sale como error de verdad.
+    if (e instanceof IaBolsaAgotada || e instanceof IaApagada) return { ok: false, error: e.message }
     throw e
   }
 }
