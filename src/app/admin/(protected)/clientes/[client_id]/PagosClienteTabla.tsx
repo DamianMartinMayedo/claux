@@ -14,10 +14,12 @@ import { useRouter } from 'next/navigation'
 import { Check, RefreshCw, Trash2 } from 'lucide-react'
 import { RowActions } from '@/components/portal/RowActions'
 import { ConfirmDialog } from '@/components/portal/Dialog'
+import { useOrden, ThOrden, type ColumnasOrden } from '@/components/TableSort'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { confirmarPago, eliminarPago } from '@/app/actions/pagos'
 import { ajustarCobroConfiguracion } from '@/app/actions/presupuestos'
-import { importeClaux, normalizarMonedaClaux, type MonedaClaux } from '@/lib/moneda-claux'
+import { claveOrdenImporte, importeClaux, normalizarMonedaClaux, type MonedaClaux } from '@/lib/moneda-claux'
+import { METODO_PAGO_LABEL } from '@/lib/billing'
 
 export type PagoFicha = {
   pago_id:        string
@@ -38,10 +40,12 @@ export type PresupuestoRef = { id: number; total: number; moneda: MonedaClaux }
 type Accion = 'confirmar' | 'ajustar' | 'eliminar'
 type Pendiente = { accion: Accion; pago: PagoFicha; objetivo: PresupuestoRef | null }
 
-const METODO_LABEL: Record<string, string> = {
-  tropipay:      'TropiPay',
-  transferencia: 'Transferencia',
-  efectivo:      'Efectivo',
+const COLUMNAS: ColumnasOrden<PagoFicha> = {
+  fecha:  { label: 'Fecha',  valor: p => p.fecha },
+  // Lo pendiente primero: es lo único que pide algo de quien mira esta tabla.
+  estado: { label: 'Estado', valor: p => (p.estado === 'por_confirmar' ? 0 : 1) },
+  monto:  { label: 'Monto',  valor: p => claveOrdenImporte(p.monto, p.moneda) },
+  metodo: { label: 'Método', valor: p => METODO_PAGO_LABEL[p.metodo ?? ''] ?? p.metodo },
 }
 
 const monedaDe = (x: { moneda: string | null }) => normalizarMonedaClaux(x.moneda)
@@ -98,21 +102,24 @@ export default function PagosClienteTabla({
     router.refresh()
   }
 
+  // El último cobro arriba, que es el que se viene a mirar.
+  const orden = useOrden(pagos, COLUMNAS, { clave: 'fecha', dir: 'desc' })
+
   return (
     <>
       <div className="table-wrapper table-wrapper-flush">
         <table className="table">
           <thead>
             <tr>
-              <th>Fecha</th>
-              <th className="col-num">Monto</th>
-              <th>Estado</th>
-              <th>Método</th>
+              <ThOrden clave="fecha" orden={orden} />
+              <ThOrden clave="monto" orden={orden} className="col-num" />
+              <ThOrden clave="estado" orden={orden} />
+              <ThOrden clave="metodo" orden={orden} />
               {puedeGestionar && <th className="col-actions" />}
             </tr>
           </thead>
           <tbody>
-            {pagos.map(p => {
+            {orden.filas.map(p => {
               const porConfirmar = p.estado === 'por_confirmar'
               const objetivo     = presupuestoDe(p)
               const moneda       = monedaDe(p)
@@ -141,7 +148,7 @@ export default function PagosClienteTabla({
                   </td>
                   <td data-label="Método">
                     <span className="badge badge-neutral">
-                      {METODO_LABEL[p.metodo ?? ''] ?? p.metodo ?? '—'}
+                      {METODO_PAGO_LABEL[p.metodo ?? ''] ?? p.metodo ?? '—'}
                     </span>
                   </td>
                   {puedeGestionar && (

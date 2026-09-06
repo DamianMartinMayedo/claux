@@ -2,17 +2,22 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { Check, Copy, Eye, FileText, Presentation, Trash2, X } from 'lucide-react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Check, Copy, Eye, FileText, Inbox, Presentation, Trash2 } from 'lucide-react'
 import { toastError, toastLoading, toastSuccess, toastWarning } from '@/app/contexts/ToastContext'
 import { RowActions } from '@/components/portal/RowActions'
 import BulkBar from '@/components/portal/BulkBar'
 import HeaderCheck from '@/components/portal/HeaderCheck'
+import Filtros from '@/components/portal/Filtros'
+import ModalShell from '@/components/portal/ModalShell'
 import { useRowSelection } from '@/components/portal/useRowSelection'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { useOrden, ThOrden, type ColumnasOrden } from '@/components/TableSort'
 import VentasTabs from '@/components/admin/VentasTabs'
 import type { RolAdmin, SeccionKey } from '@/lib/roles'
+import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
+import type { FiltroAdmin } from '@/lib/exportar/tablas-admin'
 import { etiquetaModo } from '@/lib/publico/modos'
 import type { RespuestaTamano } from '@/lib/publico/tamano'
 import { pistasDePrueba, explicarPistas } from '@/lib/leads-prueba'
@@ -24,8 +29,7 @@ import {
   type EstadoLead,
 } from '@/app/actions/diagnostico'
 import { crearPropuesta } from '@/app/actions/propuestas'
-
-type Filtro = 'todos' | 'nuevo' | 'contactado' | 'pruebas'
+import ExportarMenu from '@/components/portal/ExportarMenu'
 
 function fmtFecha(iso: string): string {
   return new Date(iso).toLocaleString('es', {
@@ -88,7 +92,15 @@ export default function SolicitudesView({
   }
 }) {
   const router = useRouter()
-  const [filtro, setFiltro] = useState<Filtro>('todos')
+  /**
+   * Los dos filtros viven en la URL. Y son DOS, no uno: el estado es un dato
+   * guardado y «posibles pruebas» una corazonada que se calcula aquí. Juntos en
+   * un solo control se excluían —no se podía pedir «las nuevas que además huelen
+   * a prueba»—, y la descarga tenía que explicar a mano que ese valor no viajaba.
+   */
+  const params  = useSearchParams()
+  const filtro  = params.get('estado') ?? ''
+  const pruebas = params.get('pruebas') ?? ''
   const [detalle, setDetalle] = useState<DiagnosticoLead | null>(null)
   const [saving, setSaving] = useState(false)
   const [porBorrar, setPorBorrar] = useState<DiagnosticoLead | null>(null)
@@ -99,14 +111,31 @@ export default function SolicitudesView({
   // `lib/leads-prueba.ts`): marca la fila y llena el filtro, nunca borra.
   const pistas = useMemo(() => pistasDePrueba(leads), [leads])
 
-  const visibles = useMemo(() => leads.filter((l) => (
-    filtro === 'todos'   ? true
-      : filtro === 'pruebas' ? pistas.has(l.id)
-      : l.estado === filtro
-  )), [leads, filtro, pistas])
+  // El sector se guarda como CLAVE; el rótulo es el vivo del catálogo. Se resuelve
+  // una vez y se usa en la celda, en la ficha y para ordenar: si la tabla ordena por
+  // la clave y enseña el rótulo, la columna sale desordenada a la vista.
+  const sectorDe = useMemo(
+    () => (l: DiagnosticoLead) => etiquetas.sectores[l.sector] ?? l.sector,
+    [etiquetas.sectores],
+  )
 
-  const nNuevos = leads.filter((l) => l.estado === 'nuevo').length
-  const { pageItems, ...pag } = usePagination(visibles)
+  const visibles = useMemo(() => leads.filter((l) => (
+    (!filtro || l.estado === filtro) && (!pruebas || pistas.has(l.id))
+  )), [leads, filtro, pruebas, pistas])
+
+  const COLUMNAS: ColumnasOrden<DiagnosticoLead> = useMemo(() => ({
+    estado:   { label: 'Estado',   valor: (l) => l.estado },
+    nombre:   { label: 'Nombre',   valor: (l) => l.nombre },
+    contacto: { label: 'Contacto', valor: (l) => l.telefono },
+    sector:   { label: 'Sector',   valor: sectorDe },
+    fecha:    { label: 'Fecha',    valor: (l) => l.created_at },
+  }), [sectorDe])
+
+  const orden = useOrden(visibles, COLUMNAS, { clave: 'fecha', dir: 'desc' })
+  const { pageItems, ...pag } = usePagination(orden.filas)
+
+  const nNuevos      = leads.filter((l) => l.estado === 'nuevo').length
+  const nContactados = leads.length - nNuevos
 
   // La selección solo alcanza a lo BORRABLE: así «seleccionar todo» nunca marca
   // una solicitud protegida y el conteo de la barra no promete de más.
@@ -117,11 +146,6 @@ export default function SolicitudesView({
   const sel = useRowSelection(borrables)
 
   const puedePropuestas = rol === 'super_admin' || permisos.includes('propuestas')
-
-  function cambiarFiltro(f: Filtro) {
-    setFiltro(f)
-    sel.clear()
-  }
 
   // La propuesta se CREA aquí y se abre ya: llevar el lead por la barra de
   // direcciones (`?lead=`) obligaría al editor a decidir de dónde salen el nivel
@@ -198,12 +222,27 @@ export default function SolicitudesView({
     })
   }
 
-  const FILTROS: { k: Filtro; label: string; n?: number }[] = [
-    { k: 'todos', label: 'Todas' },
-    { k: 'nuevo', label: 'Nuevas' },
-    { k: 'contactado', label: 'Contactadas' },
-    { k: 'pruebas', label: 'Posibles pruebas', n: pistas.size },
-  ]
+  /**
+   * LA DECLARACIÓN. `cliente` los dos: los leads vienen enteros, así que el
+   * navegador filtra sobre el conjunto completo. «Posibles pruebas» va con
+   * `sinExportar` —el fichero no puede reproducir una corazonada—, y de eso se
+   * encarga el resumen del desplegable sin que nadie escriba la frase.
+   */
+  const declaracion: Filtro[] = useMemo(() => [
+    {
+      clave: 'estado', label: 'Todas', rotulo: 'Estado',
+      valor: filtro, widget: 'pastillas', donde: 'cliente',
+      todasCount: leads.length,
+      opciones: [
+        { valor: 'nuevo',      label: 'Nuevas',      count: nNuevos },
+        { valor: 'contactado', label: 'Contactadas', count: nContactados },
+      ],
+    },
+    {
+      clave: 'pruebas', label: 'Posibles pruebas', rotulo: 'Posibles pruebas',
+      valor: pruebas, widget: 'toggle', donde: 'cliente', sinExportar: true,
+    },
+  ], [filtro, pruebas, leads.length, nNuevos, nContactados])
 
   const bloqueoDetalle = detalle ? bloqueoDe(detalle) : null
 
@@ -218,27 +257,31 @@ export default function SolicitudesView({
 
       <VentasTabs rol={rol} permisos={permisos} />
 
-      <div className="ter-toolbar">
-        {FILTROS.map((f) => (
-          <button
-            key={f.k}
-            className={`btn btn-sm ${filtro === f.k ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => cambiarFiltro(f.k)}
-          >
-            {f.label}{f.n !== undefined && f.n > 0 ? ` (${f.n})` : ''}
-          </button>
-        ))}
-      </div>
+      <Filtros
+        filtros={declaracion}
+        acciones={
+          <ExportarMenu
+            ambito="admin"
+            clave="solicitudes"
+            filtro={filtroExport<FiltroAdmin>(declaracion)}
+            resumen={resumenDe(declaracion)}
+            pequeno
+            sinPeriodo
+          />
+        }
+      />
 
       {visibles.length === 0 ? (
-        <div className="card">
-          <p className="text-sm-muted">
-            {filtro === 'todos'
-              ? 'No hay solicitudes todavía.'
-              : filtro === 'pruebas'
+        <div className="table-wrapper">
+          <div className="table-empty">
+            <Inbox size={40} strokeWidth={1.5} />
+            <h3 className="table-empty-title">Sin solicitudes</h3>
+            <p>{!filtro && !pruebas
+              ? 'Aquí llegan las que se envían desde la web.'
+              : pruebas && !filtro
                 ? 'Ninguna solicitud parece de prueba.'
-                : 'No hay solicitudes en este estado.'}
-          </p>
+                : 'No hay solicitudes con los filtros aplicados.'}</p>
+          </div>
         </div>
       ) : (
         <div className="card card-table">
@@ -249,11 +292,11 @@ export default function SolicitudesView({
                   <th className="col-check">
                     <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
                   </th>
-                  <th>Estado</th>
-                  <th>Nombre</th>
-                  <th>Contacto</th>
-                  <th>Sector</th>
-                  <th>Fecha</th>
+                  <ThOrden orden={orden} clave="estado" />
+                  <ThOrden orden={orden} clave="nombre" />
+                  <ThOrden orden={orden} clave="contacto" />
+                  <ThOrden orden={orden} clave="sector" />
+                  <ThOrden orden={orden} clave="fecha" />
                   <th className="col-actions"></th>
                 </tr>
               </thead>
@@ -285,9 +328,11 @@ export default function SolicitudesView({
                         <div>{l.telefono}</div>
                         {l.email && <div className="text-xs-muted">{l.email}</div>}
                       </td>
-                      <td data-label="Sector">{l.sector}</td>
+                      <td data-label="Sector">{sectorDe(l)}</td>
                       <td data-label="Fecha">{fmtFecha(l.created_at)}</td>
-                      <td className="col-actions">
+                      {/* La fila abre la ficha; el menú de acciones no la abre por
+                          debajo mientras eliges dentro de él. */}
+                      <td className="col-actions" onClick={(e) => e.stopPropagation()}>
                         <RowActions>
                           <button className="row-actions-item" onClick={() => setDetalle(l)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
                           <Link href={`/admin/presupuestos/nuevo?lead=${l.id}`} className="row-actions-item"><FileText size={15} strokeWidth={2} /> Crear presupuesto</Link>
@@ -323,142 +368,134 @@ export default function SolicitudesView({
       </BulkBar>
 
       {detalle && (
-        <div className="modal-backdrop">
-          <div className="modal modal-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="modal-title">{detalle.nombre}</h2>
-              <button onClick={() => setDetalle(null)} className="modal-close" aria-label="Cerrar">
-                <X size={20} strokeWidth={2} />
-              </button>
-            </div>
-            <div className="modal-body">
-              <div className="sol-detalle">
+        <ModalShell
+          title={detalle.nombre}
+          subtitle={`${sectorDe(detalle)} · ${fmtFecha(detalle.created_at)}`}
+          size="modal-xl"
+          onClose={() => setDetalle(null)}
+        >
+          <div className="modal-body">
+            <div className="sol-detalle">
+              <div className="sol-row">
+                <span className="sol-label">Estado</span>
+                <span className="sol-value"><EstadoBadge estado={detalle.estado} /></span>
+              </div>
+              <div className="sol-row">
+                <span className="sol-label">Teléfono</span>
+                <span className="sol-value">{detalle.telefono}</span>
+                <button className="btn btn-secondary btn-xs" onClick={() => copiar(detalle.telefono, 'Teléfono')}>
+                  <Copy size={13} strokeWidth={2} /> Copiar
+                </button>
+              </div>
+              {detalle.email && (
                 <div className="sol-row">
-                  <span className="sol-label">Estado</span>
-                  <span className="sol-value"><EstadoBadge estado={detalle.estado} /></span>
-                </div>
-                <div className="sol-row">
-                  <span className="sol-label">Teléfono</span>
-                  <span className="sol-value">{detalle.telefono}</span>
-                  <button className="btn btn-secondary btn-xs" onClick={() => copiar(detalle.telefono, 'Teléfono')}>
+                  <span className="sol-label">Correo</span>
+                  <span className="sol-value">{detalle.email}</span>
+                  <button className="btn btn-secondary btn-xs" onClick={() => copiar(detalle.email!, 'Correo')}>
                     <Copy size={13} strokeWidth={2} /> Copiar
                   </button>
                 </div>
-                {detalle.email && (
-                  <div className="sol-row">
-                    <span className="sol-label">Correo</span>
-                    <span className="sol-value">{detalle.email}</span>
-                    <button className="btn btn-secondary btn-xs" onClick={() => copiar(detalle.email!, 'Correo')}>
-                      <Copy size={13} strokeWidth={2} /> Copiar
-                    </button>
-                  </div>
-                )}
-                <div className="sol-row">
-                  <span className="sol-label">Sector</span>
-                  <span className="sol-value">{etiquetas.sectores[detalle.sector] ?? detalle.sector}</span>
-                </div>
-                <div className="sol-row">
-                  <span className="sol-label">Necesidades</span>
-                  <span className="sol-value">{rotular(detalle.necesidades, etiquetas.necesidades)}</span>
-                </div>
-                <div className="sol-row">
-                  <span className="sol-label">Cómo lo hace hoy</span>
-                  <span className="sol-value">{detalle.modo_actual ? etiquetaModo(detalle.modo_actual) : '—'}</span>
-                </div>
-                <div className="sol-row">
-                  <span className="sol-label">Módulos recomendados</span>
-                  <span className="sol-value">{rotular(detalle.modulos_rec, etiquetas.modulos)}</span>
-                </div>
-                {/* Lo que declaró de tamaño, antes del nivel: primero el dato,
-                    después la conclusión que sale de él. La tercera fila cambia
-                    con el sector —servicios o productos—, porque son dos topes
-                    distintos y la pregunta se le hizo según el suyo.
-
-                    Y si no hay nada, se DICE. Ocultar las filas dejaba la ficha
-                    idéntica a la de antes en los 27 leads anteriores al paso de
-                    tamaño, que es exactamente como se ve una función rota. */}
-                {(tamanos[detalle.id] ?? []).length > 0 ? (
-                  (tamanos[detalle.id] ?? []).map((t) => (
-                    <div key={t.etiqueta} className="sol-row">
-                      <span className="sol-label">{t.etiqueta}</span>
-                      <span className="sol-value">{t.banda}</span>
-                    </div>
-                  ))
-                ) : (
-                  <div className="sol-row">
-                    <span className="sol-label">Tamaño</span>
-                    <span className="sol-value">No se le preguntó: hizo el diagnóstico antes de que existiera este paso</span>
-                  </div>
-                )}
-                <div className="sol-row">
-                  <span className="sol-label">Nivel que le corresponde</span>
-                  <span className="sol-value">
-                    {detalle.nivel_rec
-                      ? (nombresNivel[detalle.nivel_rec] ?? detalle.nivel_rec)
-                      : 'Sin calcular'}
-                  </span>
-                </div>
-                <div className="sol-row">
-                  <span className="sol-label">Hizo el diagnóstico</span>
-                  <span className="sol-value">{fmtFecha(detalle.created_at)}</span>
-                </div>
-                {/* Las dos fechas juntas, y ésta la última: es la que manda.
-                    Un lead que pidió que le llamemos está esperando; uno que
-                    hizo el diagnóstico y se fue, no. Se guardaba desde el
-                    principio y no se enseñaba en ninguna pantalla. */}
-                <div className="sol-row">
-                  <span className="sol-label">Pidió que le llamemos</span>
-                  <span className="sol-value">
-                    {detalle.contacto_solicitado_at
-                      ? fmtFecha(detalle.contacto_solicitado_at)
-                      : 'No lo ha pedido'}
-                  </span>
-                </div>
-                {/* Los presupuestos que salieron de aquí: es el candado del
-                    borrado y, sobre todo, la señal de que esto no es basura. */}
-                {detalle.presupuestos.length > 0 && (
-                  <div className="sol-row">
-                    <span className="sol-label">Presupuestos</span>
-                    <span className="sol-value">
-                      {detalle.presupuestos.map((p) => (
-                        <Link key={p.id} href={`/admin/presupuestos/${p.id}`} className="sol-presupuesto">
-                          #{p.id} · {p.nombre_negocio}{p.client_id ? ` · ${p.client_id}` : ''}
-                        </Link>
-                      ))}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button
-                className="btn btn-danger-text"
-                disabled={!!bloqueoDetalle || pending}
-                title={bloqueoDetalle ?? undefined}
-                onClick={() => setPorBorrar(detalle)}
-              >
-                <Trash2 size={15} strokeWidth={2} /> Eliminar
-              </button>
-              <Link href={`/admin/presupuestos/nuevo?lead=${detalle.id}`} className="btn btn-secondary">
-                <FileText size={15} strokeWidth={2} /> Crear presupuesto
-              </Link>
-              {puedePropuestas && (
-                <button className="btn btn-secondary" disabled={pending} onClick={() => nuevaPropuesta(detalle)}>
-                  <Presentation size={15} strokeWidth={2} /> Crear propuesta
-                </button>
               )}
-              {detalle.estado === 'nuevo' ? (
-                <button className="btn btn-primary" disabled={saving} onClick={() => marcar(detalle, 'contactado')}>
-                  <Check size={15} strokeWidth={2} /> Marcar como contactada
-                </button>
+              <div className="sol-row">
+                <span className="sol-label">Sector</span>
+                <span className="sol-value">{sectorDe(detalle)}</span>
+              </div>
+              <div className="sol-row">
+                <span className="sol-label">Necesidades</span>
+                <span className="sol-value">{rotular(detalle.necesidades, etiquetas.necesidades)}</span>
+              </div>
+              <div className="sol-row">
+                <span className="sol-label">Cómo lo hace hoy</span>
+                <span className="sol-value">{detalle.modo_actual ? etiquetaModo(detalle.modo_actual) : '—'}</span>
+              </div>
+              <div className="sol-row">
+                <span className="sol-label">Módulos recomendados</span>
+                <span className="sol-value">{rotular(detalle.modulos_rec, etiquetas.modulos)}</span>
+              </div>
+              {/* Lo que declaró de tamaño, antes del nivel: primero el dato,
+                  después la conclusión que sale de él. La tercera fila cambia
+                  con el sector —servicios o productos—, porque son dos topes
+                  distintos y la pregunta se le hizo según el suyo.
+
+                  Y si no hay nada, se DICE. Ocultar las filas dejaba la ficha
+                  idéntica a la de antes en los 27 leads anteriores al paso de
+                  tamaño, que es exactamente como se ve una función rota. */}
+              {(tamanos[detalle.id] ?? []).length > 0 ? (
+                (tamanos[detalle.id] ?? []).map((t) => (
+                  <div key={t.etiqueta} className="sol-row">
+                    <span className="sol-label">{t.etiqueta}</span>
+                    <span className="sol-value">{t.banda}</span>
+                  </div>
+                ))
               ) : (
-                <button className="btn btn-secondary" disabled={saving} onClick={() => marcar(detalle, 'nuevo')}>
-                  Marcar como nueva
-                </button>
+                <div className="sol-row">
+                  <span className="sol-label">Tamaño</span>
+                  <span className="sol-value">No se le preguntó: hizo el diagnóstico antes de que existiera este paso</span>
+                </div>
+              )}
+              <div className="sol-row">
+                <span className="sol-label">Nivel que le corresponde</span>
+                <span className="sol-value">
+                  {detalle.nivel_rec
+                    ? (nombresNivel[detalle.nivel_rec] ?? detalle.nivel_rec)
+                    : 'Sin calcular'}
+                </span>
+              </div>
+              {/* La fecha del diagnóstico ya está en el subtítulo. Aquí queda la
+                  que MANDA: un lead que pidió que le llamemos está esperando; uno
+                  que hizo el diagnóstico y se fue, no. */}
+              <div className="sol-row">
+                <span className="sol-label">Pidió que le llamemos</span>
+                <span className="sol-value">
+                  {detalle.contacto_solicitado_at
+                    ? fmtFecha(detalle.contacto_solicitado_at)
+                    : 'No lo ha pedido'}
+                </span>
+              </div>
+              {/* Los presupuestos que salieron de aquí: es el candado del
+                  borrado y, sobre todo, la señal de que esto no es basura. */}
+              {detalle.presupuestos.length > 0 && (
+                <div className="sol-row">
+                  <span className="sol-label">Presupuestos</span>
+                  <span className="sol-value">
+                    {detalle.presupuestos.map((p) => (
+                      <Link key={p.id} href={`/admin/presupuestos/${p.id}`} className="sol-presupuesto">
+                        #{p.id} · {p.nombre_negocio}{p.client_id ? ` · ${p.client_id}` : ''}
+                      </Link>
+                    ))}
+                  </span>
+                </div>
               )}
             </div>
           </div>
-        </div>
+          <div className="modal-footer">
+            <button
+              className="btn btn-danger-text"
+              disabled={!!bloqueoDetalle || pending}
+              title={bloqueoDetalle ?? undefined}
+              onClick={() => setPorBorrar(detalle)}
+            >
+              <Trash2 size={15} strokeWidth={2} /> Eliminar
+            </button>
+            <Link href={`/admin/presupuestos/nuevo?lead=${detalle.id}`} className="btn btn-secondary">
+              <FileText size={15} strokeWidth={2} /> Crear presupuesto
+            </Link>
+            {puedePropuestas && (
+              <button className="btn btn-secondary" disabled={pending} onClick={() => nuevaPropuesta(detalle)}>
+                <Presentation size={15} strokeWidth={2} /> Crear propuesta
+              </button>
+            )}
+            {detalle.estado === 'nuevo' ? (
+              <button className="btn btn-primary" disabled={saving} onClick={() => marcar(detalle, 'contactado')}>
+                <Check size={15} strokeWidth={2} /> Marcar como contactada
+              </button>
+            ) : (
+              <button className="btn btn-secondary" disabled={saving} onClick={() => marcar(detalle, 'nuevo')}>
+                Marcar como nueva
+              </button>
+            )}
+          </div>
+        </ModalShell>
       )}
 
       {porBorrar && (

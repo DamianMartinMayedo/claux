@@ -4,6 +4,7 @@ import { CheckCircle } from 'lucide-react'
 import { useState } from 'react'
 import Link from 'next/link'
 import Tabs from '@/components/Tabs'
+import { diasDeCalendario } from '@/lib/fecha-tz'
 
 type ClienteAlerta = {
   client_id: string
@@ -15,17 +16,17 @@ type ClienteAlerta = {
 
 type Tab = 'vencen' | 'trial'
 
-function calcDias(c: ClienteAlerta): { label: string; color: string } {
+// `hoy` llega del servidor, en el día del NEGOCIO. Antes salía del reloj del
+// navegador (`new Date()`), así que la misma pantalla decía cosas distintas según
+// dónde estuviera abierta —y en una lista de a quién hay que cobrar, eso importa.
+function calcDias(c: ClienteAlerta, hoy: string): { label: string; tono: string } {
   const fecha = c.estado === 'GRACIA' ? c.fecha_fin_gracia : c.fecha_expiracion
-  if (!fecha) return { label: '—', color: 'var(--color-text-muted)' }
-  const [y, m, d] = fecha.split('T')[0].split('-').map(Number)
-  const exp = new Date(y, m - 1, d)
-  const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
-  const dias = Math.ceil((exp.getTime() - hoy.getTime()) / 86_400_000)
-  if (dias < 0)   return { label: 'Vencido', color: 'var(--color-error)' }
-  if (dias === 0) return { label: 'Hoy',     color: 'var(--color-error)' }
-  if (dias <= 5)  return { label: `${dias}d`, color: 'var(--color-error)' }
-  return              { label: `${dias}d`,    color: 'var(--color-warning)' }
+  if (!fecha) return { label: '—', tono: 'dias-value-muted' }
+  const dias = diasDeCalendario(hoy, fecha.split('T')[0])
+  if (dias < 0)   return { label: 'Vencido', tono: 'dias-value-error' }
+  if (dias === 0) return { label: 'Hoy',     tono: 'dias-value-error' }
+  if (dias <= 5)  return { label: `${dias}d`, tono: 'dias-value-error' }
+  return              { label: `${dias}d`,    tono: 'dias-value-warning' }
 }
 
 const ESTADO_BADGE: Record<string, string> = {
@@ -33,11 +34,11 @@ const ESTADO_BADGE: Record<string, string> = {
   GRACIA: 'badge-warning', DESACTIVADO: 'badge-warning', VENCIDO: 'badge-error',
 }
 
-function TablaAlerta({ clientes }: { clientes: ClienteAlerta[] }) {
+function TablaAlerta({ clientes, hoy }: { clientes: ClienteAlerta[]; hoy: string }) {
   if (clientes.length === 0) return (
-    <div className="pv-empty">
-      <CheckCircle size={32} strokeWidth={1.5} />
-      <p>Sin alertas pendientes</p>
+    <div className="table-empty table-empty-sm">
+      <CheckCircle size={36} strokeWidth={1.5} />
+      <p>Sin alertas pendientes.</p>
     </div>
   )
 
@@ -52,11 +53,11 @@ function TablaAlerta({ clientes }: { clientes: ClienteAlerta[] }) {
       </thead>
       <tbody>
         {clientes.map(c => {
-          const { label, color } = calcDias(c)
+          const { label, tono } = calcDias(c, hoy)
           return (
             <tr key={c.client_id}>
               <td data-label="Cliente">
-                <Link href={`/admin/clientes/${c.client_id}`} className="table-empresa-link cell-clamp">
+                <Link href={`/admin/clientes/${c.client_id}`} className="table-name-link cell-clamp">
                   {c.nombre_empresa}
                 </Link>
               </td>
@@ -66,9 +67,7 @@ function TablaAlerta({ clientes }: { clientes: ClienteAlerta[] }) {
                 </span>
               </td>
               <td data-label="Días" className="col-num">
-                <span className="dias-value" style={{ color }}>
-                  {label}
-                </span>
+                <span className={`dias-value ${tono}`}>{label}</span>
               </td>
             </tr>
           )
@@ -81,9 +80,12 @@ function TablaAlerta({ clientes }: { clientes: ClienteAlerta[] }) {
 export default function ProximosVencer({
   vencenPronto,
   trialGracia,
+  hoy,
 }: {
   vencenPronto: ClienteAlerta[]
   trialGracia:  ClienteAlerta[]
+  /** Día del negocio, calculado en el servidor. */
+  hoy: string
 }) {
   const defaultTab: Tab = vencenPronto.length > 0 ? 'vencen' : 'trial'
   const [tab, setTab] = useState<Tab>(defaultTab)
@@ -107,8 +109,8 @@ export default function ProximosVencer({
 
       <div className="pv-body">
         {tab === 'vencen'
-          ? <TablaAlerta clientes={vencenPronto} />
-          : <TablaAlerta clientes={trialGracia} />
+          ? <TablaAlerta clientes={vencenPronto} hoy={hoy} />
+          : <TablaAlerta clientes={trialGracia} hoy={hoy} />
         }
       </div>
     </div>

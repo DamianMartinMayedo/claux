@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowDown, ArrowUp, Eye, EyeOff, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Eye, EyeOff, Images, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { toastError, toastLoading, toastSuccess, toastWarning } from '@/app/contexts/ToastContext'
 import { RowActions } from '@/components/portal/RowActions'
 import BulkBar from '@/components/portal/BulkBar'
 import HeaderCheck from '@/components/portal/HeaderCheck'
 import { useRowSelection } from '@/components/portal/useRowSelection'
 import { ConfirmDialog } from '@/components/portal/Dialog'
+import ModalShell from '@/components/portal/ModalShell'
 import VentasTabs from '@/components/admin/VentasTabs'
 import PropuestasTabs from '@/components/admin/PropuestasTabs'
 import { DIAS_CADUCA_CAPTURA } from '@/lib/propuesta/secciones'
@@ -216,11 +217,12 @@ export default function CapturasView({
       )}
 
       {capturas.length === 0 ? (
-        <div className="card">
-          <p className="text-sm-muted">
-            No hay ninguna captura todavía. Sin ellas, la propuesta se salta las
-            diapositivas de producto: no se pinta un hueco.
-          </p>
+        <div className="table-wrapper">
+          <div className="table-empty">
+            <Images size={40} strokeWidth={1.5} />
+            <h3 className="table-empty-title">Sin capturas</h3>
+            <p>Sin ellas la propuesta se salta las diapositivas de producto.</p>
+          </div>
         </div>
       ) : (
         <div className="card card-table">
@@ -361,22 +363,21 @@ export default function CapturasView({
       />
 
       {mirando && (
-        /* El fondo SÍ cierra: aquí no hay nada escrito que perder. */
-        <div className="modal-backdrop open" onClick={() => setMirando(null)}>
-          <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="modal-title">{mirando.modulo_nombre} · {mirando.vista}</h2>
-            </div>
-            <div className="modal-body">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img className="cap-previo" src={mirando.url} alt={mirando.alt} />
-              <p className="text-xs-muted">{mirando.alt}</p>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setMirando(null)}>Cerrar</button>
-            </div>
+        <ModalShell
+          title={mirando.vista}
+          subtitle={mirando.modulo_nombre}
+          size="modal-lg"
+          onClose={() => setMirando(null)}
+        >
+          <div className="modal-body">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="cap-previo" src={mirando.url} alt={mirando.alt} />
+            <p className="text-xs-muted">{mirando.alt}</p>
           </div>
-        </div>
+          <div className="modal-footer">
+            <button className="btn btn-secondary" onClick={() => setMirando(null)}>Cerrar</button>
+          </div>
+        </ModalShell>
       )}
 
       {subiendo && (
@@ -445,7 +446,7 @@ function Sectores({ sectores, marcados, onToggle }: {
       </p>
       <div className="cap-sector-lista">
         {sectores.map(s => (
-          <label key={s.sector} className="cap-sector-check">
+          <label key={s.sector} className="module-check">
             <input
               type="checkbox" checked={marcados.includes(s.sector)}
               onChange={() => onToggle(s.sector)}
@@ -526,109 +527,104 @@ function ModalCaptura({ modulos, sectores, capturas, onCancel, onSubmit, pending
   }
 
   return (
-    /* El fondo NO cierra: aquí hay un formulario a medio escribir y una imagen
-       elegida, y un clic de más lo tiraba todo sin preguntar. */
-    <div className="modal-backdrop open">
-      <div className="modal modal-lg">
-        <div className="modal-header"><h2 className="modal-title">Subir captura</h2></div>
-        <div className="modal-body">
-          <div className="input-group">
-            <label htmlFor="cap-modulo">Módulo</label>
-            <select
-              id="cap-modulo" className="input" value={modulo}
-              onChange={e => cambiarModulo(e.target.value)}
-            >
-              {modulos.map(m => <option key={m.clave} value={m.clave}>{m.nombre}</option>)}
-            </select>
-          </div>
-
-          <div className="input-group">
-            <label htmlFor="cap-vista">Pantalla<span className="required">*</span></label>
-            {vistas.length > 0 && !otra ? (
-              <>
-                <select
-                  id="cap-vista" className="input" value={vista}
-                  onChange={e => {
-                    if (e.target.value === '__otra') { setOtra(true); setVista('') } else setVista(e.target.value)
-                  }}
-                >
-                  <option value="">Elige la pantalla</option>
-                  {vistas.map(v => <option key={v} value={v}>{v}</option>)}
-                  <option value="__otra">Otra pantalla…</option>
-                </select>
-                <p className="text-xs-muted">
-                  Elegir una que ya está crea la variante de otro sector de esa misma pantalla.
-                </p>
-              </>
-            ) : (
-              <>
-                <input
-                  id="cap-vista" className="input" value={vista} placeholder="Reportes financieros"
-                  onChange={e => setVista(e.target.value)}
-                />
-                <p className="text-xs-muted">
-                  {vistas.length > 0
-                    ? 'Nombre nuevo: será una pantalla más de este módulo.'
-                    : `${nombreModulo} no tiene ninguna captura todavía.`}
-                </p>
-                {vistas.length > 0 && (
-                  <button
-                    className="btn btn-secondary btn-sm cap-otra"
-                    onClick={() => { setOtra(false); setVista('') }}
-                  >
-                    Elegir una de las que hay
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-
-          <div className="input-group">
-            <label htmlFor="cap-alt">Texto alternativo<span className="required">*</span></label>
-            <input
-              id="cap-alt" className="input" value={altTocado ? alt : altSugerido}
-              placeholder="Estado de resultados con el margen del mes"
-              onChange={e => { setAltTocado(true); setAlt(e.target.value) }}
-            />
-            <p className="text-xs-muted">
-              Es lo que se lee si la imagen no carga, que en una conexión lenta pasa.
-              Se propone del módulo y la pantalla; mejor si dice qué se ve.
-            </p>
-          </div>
-
-          <Sectores
-            sectores={sectores} marcados={sector}
-            onToggle={s => setSector(v => v.includes(s) ? v.filter(x => x !== s) : [...v, s])}
-          />
-
-          <div className="input-group">
-            <label htmlFor="cap-file">Imagen<span className="required">*</span></label>
-            <input
-              id="cap-file" type="file" accept="image/*" className="input input-file"
-              onChange={e => elegirImagen(e.target.files?.[0] ?? null)}
-            />
-            {previo && (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img className="cap-previo" src={previo} alt="La captura elegida" />
-            )}
-            <p className="text-xs-muted">
-              Se recodifica a WebP de 1200 px y por debajo de 180 KB. Si no baja de ahí,
-              se rechaza: quien la abre suele estar con datos móviles y son ocho seguidas.
-            </p>
-          </div>
-        </div>
-        <div className="modal-footer">
-          {falta.length > 0 && <p className="cap-falta">Falta {falta.join(', ')}.</p>}
-          <button className="btn btn-secondary" onClick={onCancel}>Cancelar</button>
-          <button
-            className="btn btn-primary" disabled={pending || !modulo || falta.length > 0}
-            onClick={enviar}
+    <ModalShell title="Subir captura" size="modal-lg" onClose={onCancel}>
+      <div className="modal-body">
+        <div className="input-group">
+          <label htmlFor="cap-modulo">Módulo</label>
+          <select
+            id="cap-modulo" className="input" value={modulo}
+            onChange={e => cambiarModulo(e.target.value)}
           >
-            Subir
-          </button>
+            {modulos.map(m => <option key={m.clave} value={m.clave}>{m.nombre}</option>)}
+          </select>
+        </div>
+
+        <div className="input-group">
+          <label htmlFor="cap-vista">Pantalla<span className="required">*</span></label>
+          {vistas.length > 0 && !otra ? (
+            <>
+              <select
+                id="cap-vista" className="input" value={vista}
+                onChange={e => {
+                  if (e.target.value === '__otra') { setOtra(true); setVista('') } else setVista(e.target.value)
+                }}
+              >
+                <option value="">Elige la pantalla</option>
+                {vistas.map(v => <option key={v} value={v}>{v}</option>)}
+                <option value="__otra">Otra pantalla…</option>
+              </select>
+              <p className="text-xs-muted">
+                Elegir una que ya está crea la variante de otro sector de esa misma pantalla.
+              </p>
+            </>
+          ) : (
+            <>
+              <input
+                id="cap-vista" className="input" value={vista} placeholder="Reportes financieros"
+                onChange={e => setVista(e.target.value)}
+              />
+              <p className="text-xs-muted">
+                {vistas.length > 0
+                  ? 'Nombre nuevo: será una pantalla más de este módulo.'
+                  : `${nombreModulo} no tiene ninguna captura todavía.`}
+              </p>
+              {vistas.length > 0 && (
+                <button
+                  className="btn btn-secondary btn-sm cap-otra"
+                  onClick={() => { setOtra(false); setVista('') }}
+                >
+                  Elegir una de las que hay
+                </button>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="input-group">
+          <label htmlFor="cap-alt">Texto alternativo<span className="required">*</span></label>
+          <input
+            id="cap-alt" className="input" value={altTocado ? alt : altSugerido}
+            placeholder="Estado de resultados con el margen del mes"
+            onChange={e => { setAltTocado(true); setAlt(e.target.value) }}
+          />
+          <p className="text-xs-muted">
+            Es lo que se lee si la imagen no carga, que en una conexión lenta pasa.
+            Se propone del módulo y la pantalla; mejor si dice qué se ve.
+          </p>
+        </div>
+
+        <Sectores
+          sectores={sectores} marcados={sector}
+          onToggle={s => setSector(v => v.includes(s) ? v.filter(x => x !== s) : [...v, s])}
+        />
+
+        <div className="input-group">
+          <label htmlFor="cap-file">Imagen<span className="required">*</span></label>
+          <input
+            id="cap-file" type="file" accept="image/*" className="input input-file"
+            onChange={e => elegirImagen(e.target.files?.[0] ?? null)}
+          />
+          {previo && (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img className="cap-previo" src={previo} alt="La captura elegida" />
+          )}
+          <p className="text-xs-muted">
+            Se recodifica a WebP de 1200 px y por debajo de 180 KB. Si no baja de ahí,
+            se rechaza: quien la abre suele estar con datos móviles y son ocho seguidas.
+          </p>
         </div>
       </div>
-    </div>
+      <div className="modal-footer">
+        {falta.length > 0 && <p className="cap-falta">Falta {falta.join(', ')}.</p>}
+        <button className="btn btn-secondary" onClick={onCancel}>Cancelar</button>
+        <button
+          className="btn btn-primary" disabled={pending || !modulo || falta.length > 0}
+          onClick={enviar}
+        >
+          Subir
+        </button>
+      </div>
+    </ModalShell>
   )
 }
 
@@ -643,41 +639,41 @@ function ModalEditar({ captura, sectores, onCancel, onSubmit, pending }: {
   const [sector, setSector] = useState<string[]>(captura.sector)
 
   return (
-    /* Igual que al subir: el fondo no tira lo escrito. */
-    <div className="modal-backdrop open">
-      <div className="modal">
-        <div className="modal-header"><h2 className="modal-title">Editar la captura</h2></div>
-        <div className="modal-body">
-          <div className="input-group">
-            <label htmlFor="cape-vista">Pantalla</label>
-            <input
-              id="cape-vista" className="input" value={vista}
-              onChange={e => setVista(e.target.value)}
-            />
-          </div>
-          <div className="input-group">
-            <label htmlFor="cape-alt">Texto alternativo</label>
-            <input
-              id="cape-alt" className="input" value={alt}
-              onChange={e => setAlt(e.target.value)}
-            />
-          </div>
-          <Sectores
-            sectores={sectores} marcados={sector}
-            onToggle={s => setSector(v => v.includes(s) ? v.filter(x => x !== s) : [...v, s])}
+    <ModalShell
+      title="Editar la captura"
+      subtitle={`${captura.modulo_nombre} · ${captura.vista}`}
+      onClose={onCancel}
+    >
+      <div className="modal-body">
+        <div className="input-group">
+          <label htmlFor="cape-vista">Pantalla</label>
+          <input
+            id="cape-vista" className="input" value={vista}
+            onChange={e => setVista(e.target.value)}
           />
         </div>
-        <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onCancel}>Cancelar</button>
-          <button
-            className="btn btn-primary"
-            disabled={pending || !vista.trim() || !alt.trim()}
-            onClick={() => onSubmit({ vista: vista.trim(), alt: alt.trim(), sector })}
-          >
-            Guardar
-          </button>
+        <div className="input-group">
+          <label htmlFor="cape-alt">Texto alternativo</label>
+          <input
+            id="cape-alt" className="input" value={alt}
+            onChange={e => setAlt(e.target.value)}
+          />
         </div>
+        <Sectores
+          sectores={sectores} marcados={sector}
+          onToggle={s => setSector(v => v.includes(s) ? v.filter(x => x !== s) : [...v, s])}
+        />
       </div>
-    </div>
+      <div className="modal-footer">
+        <button className="btn btn-secondary" onClick={onCancel}>Cancelar</button>
+        <button
+          className="btn btn-primary"
+          disabled={pending || !vista.trim() || !alt.trim()}
+          onClick={() => onSubmit({ vista: vista.trim(), alt: alt.trim(), sector })}
+        >
+          Guardar
+        </button>
+      </div>
+    </ModalShell>
   )
 }

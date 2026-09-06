@@ -1,19 +1,39 @@
 'use client'
 
-import { Download, Eye, Search, User } from 'lucide-react'
-import { useState, useMemo } from 'react'
+import { Eye, User } from 'lucide-react'
+import { useMemo } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { suscripcionLabel, precioMensualEfectivo, monedaDelCliente, esSocioHoy, type CondicionesCliente } from '@/lib/billing'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { useOrden, ThOrden, type ColumnasOrden } from '@/components/TableSort'
+import { claveOrdenImporte } from '@/lib/moneda-claux'
+import { diasDeCalendario } from '@/lib/fecha-tz'
 import { RowActions } from '@/components/portal/RowActions'
+import ExportarMenu from '@/components/portal/ExportarMenu'
+import Filtros from '@/components/portal/Filtros'
+import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
+import type { FiltroAdmin } from '@/lib/exportar/tablas-admin'
+
+/**
+ * Los estados de un cliente EN PALABRAS. El desplegable imprimía el código en crudo
+ * («GRACIA», «DESACTIVADO») y el resumen de la descarga decía «Estado: ACTIVO»: la
+ * etiqueta vive junto al valor precisamente para que eso no pueda volver a pasar.
+ */
+const ESTADOS = [
+  { valor: 'ACTIVO',      label: 'Activo' },
+  { valor: 'TRIAL',       label: 'Trial' },
+  { valor: 'GRACIA',      label: 'Período especial' },
+  { valor: 'DESACTIVADO', label: 'Suspendido' },
+  { valor: 'VENCIDO',     label: 'Vencido' },
+]
 
 const ESTADO_BADGE: Record<string, string> = {
   ACTIVO: 'badge-success', TRIAL: 'badge-info', GRACIA: 'badge-warning',
   DESACTIVADO: 'badge-warning', VENCIDO: 'badge-error',
 }
 
-type Cliente = CondicionesCliente & {
+export type Cliente = CondicionesCliente & {
   client_id: string; nombre_empresa: string; nombre_contacto: string | null
   email_admin: string; estado: string
   ciclo_facturacion: string | null
@@ -22,10 +42,6 @@ type Cliente = CondicionesCliente & {
   created_at: string | null; notas: string | null
   archivado_at: string | null
   es_prueba: boolean | null
-}
-
-function cicloLabel(ciclo: string | null) {
-  return ciclo === 'anual' ? 'Anual' : 'Mensual'
 }
 
 function formatFecha(fecha: string | null) {
@@ -50,11 +66,11 @@ function fechaTope(c: Cliente): string | null {
   return (c.estado === 'GRACIA' && c.fecha_fin_gracia) ? c.fecha_fin_gracia : c.fecha_expiracion
 }
 
-function cuentaAtras(fecha: string): DiasInfo {
-  const [y, m, d] = fecha.split('T')[0].split('-').map(Number)
-  const exp = new Date(y, m - 1, d)
-  const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
-  const dias = Math.ceil((exp.getTime() - hoy.getTime()) / 86_400_000)
+// `hoy` llega del servidor, en el día del NEGOCIO (America/Havana). Antes salía del
+// reloj del navegador, así que los días que le quedan a un cliente cambiaban según
+// desde dónde se mirase la lista.
+function cuentaAtras(fecha: string, hoy: string): DiasInfo {
+  const dias = diasDeCalendario(hoy, fecha.split('T')[0])
 
   if (dias < 0)   return { label: 'Vencido',   variant: 'error' }
   if (dias === 0) return { label: 'Hoy',        variant: 'error' }
@@ -69,53 +85,85 @@ function cuentaAtras(fecha: string): DiasInfo {
  * cuando el resto del admin (dashboard, bandeja, cron de recordatorios) ya descarta
  * al socio con `esSocioHoy`. Era la única voz de la pantalla que no lo hacía.
  */
-function calcDiasRestantes(c: Cliente): DiasInfo {
+function calcDiasRestantes(c: Cliente, hoy: string): DiasInfo {
   if (!esSocioHoy(c) && c.estado === 'DESACTIVADO') return { label: '—', variant: 'muted' }
   const fecha = fechaTope(c)
   if (!fecha) return { label: '—', variant: 'muted' }
-  return cuentaAtras(fecha)
+  return cuentaAtras(fecha, hoy)
 }
 
-const DIAS_COLOR: Record<DiasInfo['variant'], string> = {
-  error:   'var(--color-error)',
-  warning: 'var(--color-warning)',
-  success: 'var(--color-success)',
-  muted:   'var(--color-text-muted)',
-}
 
-function exportCSV(clientes: Cliente[]) {
-  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
-  // La moneda va en su propia columna, no pegada al número ni en la cabecera: con dos
-  // monedas en la misma hoja, «Precio mensual USD» mintiendo en la mitad de las filas
-  // es peor que no traerla, y quien abra el CSV va a sumar la columna sin mirar.
-  const headers = ['ID Cliente', 'Empresa', 'Contacto', 'Email', 'Precio mensual', 'Moneda', 'Ciclo',
-    'Estado', 'Socio CLAUX', 'Expiración', 'Días restantes', 'Fecha alta', 'Notas']
-  const rows = clientes.map(c => [
-    c.client_id, c.nombre_empresa, c.nombre_contacto ?? '', c.email_admin,
-    precioMensualEfectivo(c).toFixed(2), monedaDelCliente(c), cicloLabel(c.ciclo_facturacion), c.estado,
-    esSocioHoy(c) ? 'Sí' : '', fechaTope(c) ?? '', calcDiasRestantes(c).label,
-    c.fecha_inicio ?? c.created_at ?? '', c.notas ?? '',
-  ])
-  const csv = [headers.map(esc).join(','), ...rows.map(r => r.map(esc).join(','))].join('\n')
-  const blob = new Blob(['' + csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a'); a.href = url; a.download = 'clientes.csv'; a.click()
-  URL.revokeObjectURL(url)
+/**
+ * Clave de orden de la columna «Suscripción». Lleva la MONEDA delante a propósito:
+ * ordenar por el número pelado pondría 100 CUP por encima de 50 USD, que es una
+ * comparación que no existe. Así cada moneda se ordena dentro de su propio bloque y
+ * el listado nunca insinúa un cambio que nadie ha aplicado.
+ */
+const claveImporte = (c: Cliente) =>
+  claveOrdenImporte(precioMensualEfectivo(c), monedaDelCliente(c))
+
+
+
+/**
+ * Las columnas por las que se puede ordenar. Fuera de `ClientesTabla` para que no se
+ * reconstruya el objeto en cada render: `useOrden` lo tiene entre las dependencias del
+ * `useMemo` que ordena, así que un objeto nuevo por render volvería a ordenar la lista
+ * entera cada vez. `hoy` no hace falta aquí porque ninguna clave depende de él: los
+ * días se ordenan por la fecha tope, que es el dato, y no por la etiqueta.
+ */
+const COLUMNAS: ColumnasOrden<Cliente> = {
+  empresa:     { label: 'Empresa',     valor: c => c.nombre_empresa },
+  email:       { label: 'Email',       valor: c => c.email_admin },
+  suscripcion: { label: 'Suscripción', valor: claveImporte },
+  estado:      { label: 'Estado',      valor: c => c.estado },
+  // La misma fecha que pinta la columna y que cuenta los días: la de vencimiento del
+  // socio cuando lo es, y la de expiración (o fin de gracia) cuando no.
+  vence:       { label: 'Expiración',  valor: c => fechaTope(c) },
 }
 
 export default function ClientesTabla({
   clientes,
   descuentoAnualPct,
+  hoy,
 }: {
   clientes: Cliente[]
   descuentoAnualPct: number
+  /** Día del negocio, calculado en el servidor. */
+  hoy: string
 }) {
   const router = useRouter()
-  const [busqueda, setBusqueda]         = useState('')
-  const [filtroEstado, setFiltroEstado] = useState('')
-  const [verArchivados, setVerArchivados] = useState(false)
+
+  /**
+   * Los filtros viven en la URL, como en el portal. En `useState` no sobrevivían a nada:
+   * volver de la ficha de un cliente devolvía la lista EN BLANCO —con el filtro perdido— y
+   * no había forma de mandarle a nadie un enlace a «los que vencen este mes».
+   */
+  const params        = useSearchParams()
+  const busqueda      = params.get('q') ?? ''
+  const filtroEstado  = params.get('estado') ?? ''
+  const verArchivados = params.get('archivados') === '1'
 
   const nArchivados = useMemo(() => clientes.filter(c => c.archivado_at).length, [clientes])
+
+  /**
+   * LA DECLARACIÓN. Los dos en `cliente` y es correcto: esta pantalla se trae la cartera
+   * ENTERA —no hay techo— así que filtrar en el navegador da el mismo resultado que la
+   * consulta. El día que la lista lleve techo (Fase 6.2 del plan), pasan a `escalado`.
+   */
+  const declaracion: Filtro[] = useMemo(() => [
+    {
+      clave: 'estado', label: 'Todos los estados', rotulo: 'Estado',
+      valor: filtroEstado, widget: 'select', donde: 'cliente',
+      opciones: ESTADOS,
+    },
+    {
+      clave: 'archivados', rotulo: 'Archivados',
+      label: `Archivados (${nArchivados})`,
+      valor: verArchivados ? '1' : '', widget: 'toggle', donde: 'cliente',
+      // Sin ninguno archivado no hay nada que enseñar ni que esconder.
+      ocultarSi: nArchivados === 0,
+    },
+  ], [filtroEstado, verArchivados, nArchivados])
 
   const filtrados = useMemo(() => {
     const q = busqueda.toLowerCase()
@@ -131,44 +179,36 @@ export default function ClientesTabla({
     })
   }, [clientes, busqueda, filtroEstado, verArchivados])
 
-  const { pageItems, ...pag } = usePagination(filtrados)
+  // Primero se ORDENA lo filtrado y después se pagina: al revés se ordenaría solo la
+  // página que se está viendo. Por defecto, lo que urge — el que vence antes arriba;
+  // el tercer clic en una cabecera devuelve el orden del servidor (alta más reciente).
+  const orden = useOrden(filtrados, COLUMNAS, { clave: 'vence', dir: 'asc' })
+  const { pageItems, ...pag } = usePagination(orden.filas)
 
   return (
     <>
-      {/* Filtros */}
-      <div className="filters-bar">
-        <div className="search-wrapper">
-          <Search />
-          <input
-            type="search" className="search-input"
-            placeholder="Buscar por empresa, email o ID…"
-            value={busqueda}
-            onChange={e => setBusqueda(e.target.value)}
+      {/* La barra del sistema, no una a mano: el buscador, el estado y el interruptor de
+          archivados salen de la declaración de arriba, y con ellos los chips de lo puesto y
+          el «Limpiar» que esta pantalla no tenía. */}
+      <Filtros
+        filtros={declaracion}
+        q={busqueda}
+        placeholder="Buscar por empresa, email o ID…"
+        acciones={
+          /* Se descarga TODO lo que cae en el filtro, no la página pintada, y en Excel
+             además de CSV. El `filtro` y el resumen se GENERAN de la declaración: no hay un
+             objeto que escribir a mano y que se pueda quedar corto, ni un resumen que
+             imprima «Estado: ACTIVO» como imprimía éste. */
+          <ExportarMenu
+            ambito="admin"
+            clave="clientes"
+            pequeno
+            filtro={filtroExport<FiltroAdmin>(declaracion, { q: busqueda })}
+            resumen={resumenDe(declaracion)}
+            sinPeriodo
           />
-        </div>
-
-        <select className="filter-select" value={filtroEstado}
-          onChange={e => setFiltroEstado(e.target.value)}>
-          <option value="">Todos los estados</option>
-          <option value="ACTIVO">Activo</option>
-          <option value="TRIAL">Trial</option>
-          <option value="GRACIA">Período especial</option>
-          <option value="DESACTIVADO">Suspendido</option>
-          <option value="VENCIDO">Vencido</option>
-        </select>
-
-        <button className="btn btn-secondary" onClick={() => exportCSV(filtrados)}>
-          <Download size={14} />
-          Exportar CSV
-        </button>
-
-        {nArchivados > 0 && (
-          <label className="checkbox-group">
-            <input type="checkbox" checked={verArchivados} onChange={e => setVerArchivados(e.target.checked)} />
-            <span className="checkbox-label">Ver archivados ({nArchivados})</span>
-          </label>
-        )}
-      </div>
+        }
+      />
 
       {filtrados.length === 0 ? (
         <div className="table-wrapper">
@@ -183,24 +223,26 @@ export default function ClientesTabla({
           <table className="table">
             <thead>
               <tr>
-                <th>Empresa</th>
-                <th>Email</th>
-                <th>Suscripción</th>
-                <th>Estado</th>
-                <th>Expiración</th>
+                <ThOrden orden={orden} clave="empresa">Empresa</ThOrden>
+                <ThOrden orden={orden} clave="email">Email</ThOrden>
+                <ThOrden orden={orden} clave="suscripcion">Suscripción</ThOrden>
+                <ThOrden orden={orden} clave="estado">Estado</ThOrden>
+                <ThOrden orden={orden} clave="vence">Expiración</ThOrden>
+                {/* «Días» es la misma fecha contada de otra forma: ordenar por ella es
+                    ordenar por «Expiración», y dos cabeceras que hacen lo mismo confunden. */}
                 <th className="col-center">Días</th>
-                  <th className="col-actions"></th>
+                <th className="col-actions"></th>
               </tr>
             </thead>
             <tbody>
               {pageItems.map(c => {
-                const dias = calcDiasRestantes(c)
+                const dias = calcDiasRestantes(c, hoy)
                 return (
                   <tr key={c.client_id} className="table-row-clickable" onClick={() => router.push(`/admin/clientes/${c.client_id}`)}>
                     <td data-label="Empresa">
                       <Link
                         href={`/admin/clientes/${c.client_id}`}
-                        className="table-empresa-link"
+                        className="table-name-link"
                         onClick={e => e.stopPropagation()}
                       >
                         {c.nombre_empresa}
@@ -221,11 +263,13 @@ export default function ClientesTabla({
                     </td>
                     <td data-label="Expiración" className="table-muted">{formatFecha(fechaTope(c))}</td>
                     <td data-label="Días" className="col-center">
-                      <span className="dias-value" style={{ color: DIAS_COLOR[dias.variant] }}>
+                      <span className={`dias-value dias-value-${dias.variant}`}>
                         {dias.label}
                       </span>
                     </td>
-                    <td className="col-actions">
+                    {/* La fila entera navega, así que el clic del menú se para aquí: sin
+                        esto, abrir «Acciones» abría además la ficha por debajo. */}
+                    <td className="col-actions" onClick={e => e.stopPropagation()}>
                       <RowActions>
                         <button className="row-actions-item" onClick={() => router.push(`/admin/clientes/${c.client_id}`)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
                       </RowActions>

@@ -2,27 +2,28 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { Copy, Eye, Images, Link2, Pencil, Plus, Send, Trash2 } from 'lucide-react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Copy, Eye, Images, Link2, Pencil, Plus, Presentation, Send, Trash2 } from 'lucide-react'
 import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastContext'
 import { RowActions } from '@/components/portal/RowActions'
 import BulkBar from '@/components/portal/BulkBar'
 import HeaderCheck from '@/components/portal/HeaderCheck'
 import { useRowSelection } from '@/components/portal/useRowSelection'
 import { ConfirmDialog } from '@/components/portal/Dialog'
+import Filtros from '@/components/portal/Filtros'
+import ModalShell from '@/components/portal/ModalShell'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import { useOrden, ThOrden } from '@/components/TableSort'
 import VentasTabs from '@/components/admin/VentasTabs'
 import PropuestasTabs from '@/components/admin/PropuestasTabs'
 import { DIAS_CADUCA_CAPTURA } from '@/lib/propuesta/secciones'
+import type { Filtro } from '@/lib/filtros'
 import type { RolAdmin, SeccionKey } from '@/lib/roles'
-import { importeClaux } from '@/lib/moneda-claux'
+import { claveOrdenImporte, importeClaux } from '@/lib/moneda-claux'
 import {
   crearPropuesta, eliminarPropuesta, eliminarPropuestasEnLote,
   type PropuestaRow,
 } from '@/app/actions/propuestas'
-
-type Filtro = 'TODAS' | 'BORRADOR' | 'PUBLICADA' | 'ABIERTAS'
 
 function fmtFecha(iso: string): string {
   return new Date(iso).toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -43,7 +44,9 @@ export default function PropuestasView({
   permisos: SeccionKey[]
 }) {
   const router = useRouter()
-  const [filtro, setFiltro] = useState<Filtro>('TODAS')
+  // El filtro vive en la URL, no en `useState`: así se puede mandar un enlace a
+  // «las publicadas» y volver de una propuesta no borra por dónde ibas.
+  const filtro = useSearchParams().get('estado') ?? ''
   const [porBorrar, setPorBorrar] = useState<PropuestaRow | null>(null)
   const [confirmLote, setConfirmLote] = useState(false)
   const [nueva, setNueva] = useState(false)
@@ -51,31 +54,31 @@ export default function PropuestasView({
   const [pending, startTransition] = useTransition()
 
   const visibles = useMemo(() => propuestas.filter(p =>
-    filtro === 'TODAS' ? true
+    filtro === '' ? true
       : filtro === 'ABIERTAS' ? p.aperturas > 0
       : p.estado === filtro,
   ), [propuestas, filtro])
 
   const publicadas = propuestas.filter(p => p.estado === 'PUBLICADA').length
+  const borradores = propuestas.length - publicadas
   const abiertas   = propuestas.filter(p => p.aperturas > 0).length
 
   const ord = useOrden(visibles, {
     negocio:  { label: 'Negocio',  valor: p => p.nombre_negocio },
     comercial:{ label: 'Comercial', valor: p => p.comercial_nombre ?? '' },
     estado:   { label: 'Estado',   valor: p => p.estado },
+    presupuesto: { label: 'Presupuesto', valor: p => p.presupuesto_id },
     // Se ordena por el número de aperturas, no por el texto de la celda: «3 veces»
     // y «12 veces» se ordenan al revés como cadenas.
     acuse:    { label: 'Acuse',    valor: p => p.aperturas },
+    marco:    { label: 'Qué marcó', valor: p => p.seleccion
+      ? claveOrdenImporte(p.seleccion.cuota, p.seleccion.moneda)
+      : null },
     fecha:    { label: 'Creada',   valor: p => p.created_at },
   })
   const { pageItems, ...pag } = usePagination(ord.filas)
 
   const sel = useRowSelection(visibles.map(p => String(p.id)))
-
-  function cambiarFiltro(f: Filtro) {
-    setFiltro(f)
-    sel.clear()
-  }
 
   function crear() {
     const nombre = nombreNueva.trim()
@@ -140,12 +143,27 @@ export default function PropuestasView({
     }
   }
 
-  const FILTROS: { k: Filtro; label: string; n?: number }[] = [
-    { k: 'TODAS',     label: 'Todas' },
-    { k: 'BORRADOR',  label: 'Borradores' },
-    { k: 'PUBLICADA', label: 'Publicadas', n: publicadas },
-    { k: 'ABIERTAS',  label: 'Abiertas por el cliente', n: abiertas },
-  ]
+  /**
+   * LA DECLARACIÓN. `cliente` y no `escalado`: las propuestas se cuentan por
+   * decenas y vienen enteras, así que filtrar en el navegador da exactamente el
+   * mismo resultado que la consulta y sin viaje.
+   *
+   * «Abiertas» no es un estado —es si el cliente la abrió—, pero comparte control
+   * con los dos que sí lo son: son la misma pregunta («¿por dónde va esto?») y en
+   * dos filas de pastillas se lee peor.
+   */
+  const declaracion: Filtro[] = useMemo(() => [
+    {
+      clave: 'estado', label: 'Todas', rotulo: 'Estado',
+      valor: filtro, widget: 'pastillas', donde: 'cliente',
+      todasCount: propuestas.length,
+      opciones: [
+        { valor: 'BORRADOR',  label: 'Borradores',            count: borradores },
+        { valor: 'PUBLICADA', label: 'Publicadas',            count: publicadas },
+        { valor: 'ABIERTAS',  label: 'Abiertas por el cliente', count: abiertas },
+      ],
+    },
+  ], [filtro, propuestas.length, borradores, publicadas, abiertas])
 
   return (
     <div className="view-container">
@@ -178,25 +196,17 @@ export default function PropuestasView({
         </div>
       )}
 
-      <div className="ter-toolbar">
-        {FILTROS.map(f => (
-          <button
-            key={f.k}
-            className={`btn btn-sm ${filtro === f.k ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => cambiarFiltro(f.k)}
-          >
-            {f.label}{f.n != null && f.n > 0 ? ` (${f.n})` : ''}
-          </button>
-        ))}
-      </div>
+      <Filtros filtros={declaracion} />
 
       {visibles.length === 0 ? (
-        <div className="card">
-          <p className="text-sm-muted">
-            {filtro === 'TODAS'
-              ? 'No hay propuestas. Se crean desde una solicitud, desde un presupuesto o aquí mismo.'
-              : 'No hay propuestas en este estado.'}
-          </p>
+        <div className="table-wrapper">
+          <div className="table-empty">
+            <Presentation size={40} strokeWidth={1.5} />
+            <h3 className="table-empty-title">Sin propuestas</h3>
+            <p>{filtro === ''
+              ? 'Se crean desde una solicitud, desde un presupuesto o con el botón de arriba.'
+              : 'No hay propuestas en este estado.'}</p>
+          </div>
         </div>
       ) : (
         <div className="card card-table">
@@ -210,9 +220,9 @@ export default function PropuestasView({
                   <ThOrden orden={ord} clave="negocio" />
                   <ThOrden orden={ord} clave="estado" />
                   <ThOrden orden={ord} clave="comercial" />
-                  <th>Presupuesto</th>
+                  <ThOrden orden={ord} clave="presupuesto" />
                   <ThOrden orden={ord} clave="acuse">Acuse</ThOrden>
-                  <th>Qué marcó</th>
+                  <ThOrden orden={ord} clave="marco" />
                   <ThOrden orden={ord} clave="fecha" />
                   <th className="col-actions"></th>
                 </tr>
@@ -227,7 +237,7 @@ export default function PropuestasView({
                         aria-label={`Seleccionar la propuesta de ${p.nombre_negocio}`} />
                     </td>
                     <td data-label="Negocio">
-                      <Link href={`/admin/ventas/propuestas/${p.id}`} className="text-sm-bold cell-clamp" title={p.nombre_negocio}>
+                      <Link href={`/admin/ventas/propuestas/${p.id}`} className="table-name-link cell-clamp" title={p.nombre_negocio}>
                         {p.nombre_negocio}
                       </Link>
                       <div className="text-xs-muted">{p.modulos.length} módulo{p.modulos.length === 1 ? '' : 's'}</div>
@@ -307,27 +317,24 @@ export default function PropuestasView({
       </BulkBar>
 
       {nueva && (
-        <div className="modal-backdrop open" onClick={() => setNueva(false)}>
-          <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
-            <div className="modal-header"><h2 className="modal-title">Nueva propuesta</h2></div>
-            <div className="modal-body">
-              <div className="input-group">
-                <label htmlFor="prp-nombre">Nombre del negocio</label>
-                <input
-                  id="prp-nombre" className="input" autoFocus value={nombreNueva}
-                  onChange={e => setNombreNueva(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') crear() }}
-                />
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setNueva(false)}>Cancelar</button>
-              <button className="btn btn-primary" disabled={pending || !nombreNueva.trim()} onClick={crear}>
-                Crear
-              </button>
+        <ModalShell title="Nueva propuesta" size="modal-sm" onClose={() => setNueva(false)}>
+          <div className="modal-body">
+            <div className="input-group">
+              <label htmlFor="prp-nombre">Nombre del negocio</label>
+              <input
+                id="prp-nombre" className="input" value={nombreNueva}
+                onChange={e => setNombreNueva(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') crear() }}
+              />
             </div>
           </div>
-        </div>
+          <div className="modal-footer">
+            <button className="btn btn-secondary" onClick={() => setNueva(false)}>Cancelar</button>
+            <button className="btn btn-primary" disabled={pending || !nombreNueva.trim()} onClick={crear}>
+              Crear
+            </button>
+          </div>
+        </ModalShell>
       )}
 
       {porBorrar && (

@@ -5,8 +5,9 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, ArrowDown, ArrowUp, ClipboardPaste, Copy, ExternalLink, Eye, FileText,
-  Images, RotateCcw, Save, Send, Share2, Trash2,
+  Images, RotateCcw, Send, Share2, Sparkles, Trash2,
 } from 'lucide-react'
+import BarraGuardar from '@/components/BarraGuardar'
 import Tabs from '@/components/Tabs'
 import { toastError, toastLoading, toastSuccess, toastWarning } from '@/app/contexts/ToastContext'
 import { NIVELES, NOMBRE_NIVEL, precioModulo, type Nivel } from '@/lib/niveles'
@@ -15,7 +16,8 @@ import { NO_OCULTABLES, ORDEN_POR_DEFECTO, seccionDe } from '@/lib/propuesta/sec
 import type { ResumenEditor } from '@/lib/propuesta/editor'
 import type { Firmante } from '@/lib/propuesta/firmantes'
 import {
-  despublicarPropuesta, guardarPropuesta, publicarPropuesta, revocarEnlacePropuesta,
+  despublicarPropuesta, guardarPropuesta, publicarPropuesta, redactarPropuestaIa,
+  revocarEnlacePropuesta,
   type ModuloParaPropuesta, type PresupuestoVinculable, type PropuestaDetalle,
 } from '@/app/actions/propuestas'
 
@@ -94,6 +96,9 @@ export default function PropuestaEditor({
 
   const [tab, setTab] = useState<Pestana>('textos')
   const [pending, startTransition] = useTransition()
+  // Propio, y no `pending`: esa transición la comparten publicar, despublicar y
+  // revocar, y el pie diría «Guardando…» mientras se publica.
+  const [guardando, setGuardando] = useState(false)
 
   const [titulo, setTitulo] = useState(p.titulo)
   const [nombre, setNombre] = useState(p.nombre_negocio)
@@ -164,6 +169,39 @@ export default function PropuestaEditor({
   const paresHoy = CAMPOS_HOY.map((c, i) => [c, pre.hoy[i] ?? null] as [string, string | null])
   const hayQueTraer = (pares: [string, string | null][]) =>
     pares.some(([clave, valor]) => valor && !(textos[clave] ?? '').trim())
+
+  /**
+   * Redactar el borrador con la IA interna (la paga CLAUX, no el cliente).
+   *
+   * Misma regla que «Traer»: SOLO rellena cajas vacías. Lo que ya escribió el
+   * comercial no se pisa nunca —lo escribió después de la reunión, y eso vale
+   * más que cualquier borrador— y nada se guarda hasta pulsar Guardar.
+   */
+  const [redactando, setRedactando] = useState(false)
+  async function redactarConIa() {
+    const ld = toastLoading('Redactando…')
+    setRedactando(true)
+    try {
+      const res = await redactarPropuestaIa(p.id)
+      await ld.dismiss()
+      if (!res.ok || !res.borrador) { toastError(res.error ?? 'No se pudo redactar.'); return }
+      const b = res.borrador
+      const pares: [string, string | null][] = [
+        ...CAMPOS_ENTENDIMOS.map((c, i) => [c.clave, b.entendimos[i] ?? null] as [string, string | null]),
+        ...CAMPOS_HOY.map((c, i) => [c, b.hoy[i] ?? null] as [string, string | null]),
+        ...Object.entries(b.modulos).map(([clave, texto]) => [`modulo:${clave}`, texto] as [string, string | null]),
+      ]
+      const antes = pares.filter(([clave, valor]) => valor && !(textos[clave] ?? '').trim()).length
+      if (antes === 0) { toastWarning('No quedaba ninguna caja vacía que rellenar.'); return }
+      traer(pares)
+      toastSuccess(`${antes} caja(s) redactada(s). Repásalas antes de guardar.`)
+    } catch {
+      toastError('No se ha podido redactar. Vuelve a intentarlo.')
+    } finally {
+      await ld.dismiss()
+      setRedactando(false)
+    }
+  }
 
   const activos = useMemo(() => catalogo.filter(m => m.activo), [catalogo])
   // Un módulo retirado del catálogo que sigue en la propuesta se enseña igual: si
@@ -256,18 +294,21 @@ export default function PropuestaEditor({
 
   function guardar() {
     const ld = toastLoading('Guardando…')
+    setGuardando(true)
     startTransition(async () => {
-      const r = await guardarPropuesta(p.id, {
-        titulo, nombreNegocio: nombre, nivel, moneda, modulos,
-        comercialNombre: firma.nombre, comercialEmail: firma.email, comercialTel: firma.tel,
-        presupuestoId, textos,
-        seccionesOcultas: ocultas, seccionesOrden: orden,
-      })
-      await ld.dismiss()
-      if (!r.ok) { toastError(r.error ?? 'No se pudo guardar'); return }
-      setSucio(false)
-      toastSuccess('Propuesta guardada')
-      router.refresh()
+      try {
+        const r = await guardarPropuesta(p.id, {
+          titulo, nombreNegocio: nombre, nivel, moneda, modulos,
+          comercialNombre: firma.nombre, comercialEmail: firma.email, comercialTel: firma.tel,
+          presupuestoId, textos,
+          seccionesOcultas: ocultas, seccionesOrden: orden,
+        })
+        await ld.dismiss()
+        if (!r.ok) { toastError(r.error ?? 'No se pudo guardar'); return }
+        setSucio(false)
+        toastSuccess('Propuesta guardada')
+        router.refresh()
+      } finally { setGuardando(false) }
     })
   }
 
@@ -339,9 +380,6 @@ export default function PropuestaEditor({
           <Link href={`/p/preview/${p.id}`} target="_blank" className="btn btn-secondary">
             <Eye size={16} strokeWidth={2} /> Presentar
           </Link>
-          <button className="btn btn-primary" disabled={pending || !sucio} onClick={guardar}>
-            <Save size={16} strokeWidth={2} /> {sucio ? 'Guardar' : 'Guardado'}
-          </button>
         </div>
       </div>
 
@@ -459,12 +497,22 @@ export default function PropuestaEditor({
           <div className="card">
             <div className="prp-card-head">
               <h2 className="card-title card-title-sm">Lo que entendimos</h2>
-              <button
-                className="btn btn-secondary btn-sm" disabled={!hayQueTraer(paresEntendimos)}
-                onClick={() => traer(paresEntendimos)}
-              >
-                <ClipboardPaste size={15} strokeWidth={2} /> Traer lo del diagnóstico
-              </button>
+              <div className="prp-card-acciones">
+                <button
+                  className="btn btn-secondary btn-sm" disabled={!hayQueTraer(paresEntendimos)}
+                  onClick={() => traer(paresEntendimos)}
+                >
+                  <ClipboardPaste size={15} strokeWidth={2} /> Traer lo del diagnóstico
+                </button>
+                {/* Escribe TODAS las cajas vacías de la pestaña —estas cuatro, las
+                    tres de «hoy» y las de cada módulo—, no solo las de esta tarjeta:
+                    es una redacción, y se lee entera o no se lee. */}
+                <button className="btn btn-secondary btn-sm" onClick={redactarConIa} disabled={redactando}>
+                  {redactando
+                    ? <><span className="spinner spinner-sm" /> Redactando…</>
+                    : <><Sparkles size={15} strokeWidth={2} /> Redactar con IA</>}
+                </button>
+              </div>
             </div>
             <p className="text-sm-muted">
               En gris, lo que va a salir si dejas la caja en blanco. Tráelo para retocarlo.
@@ -613,13 +661,13 @@ export default function PropuestaEditor({
                       </span>
                       <div className="prp-seccion-flechas">
                         <button
-                          className="ter-action-btn" disabled={i === 0}
+                          className="icon-btn" disabled={i === 0}
                           aria-label={`Subir ${c.vista}`} onClick={() => moverCaptura(i, -1)}
                         >
                           <ArrowUp size={15} strokeWidth={2} />
                         </button>
                         <button
-                          className="ter-action-btn" disabled={i === ordenCapturas.length - 1}
+                          className="icon-btn" disabled={i === ordenCapturas.length - 1}
                           aria-label={`Bajar ${c.vista}`} onClick={() => moverCaptura(i, 1)}
                         >
                           <ArrowDown size={15} strokeWidth={2} />
@@ -698,11 +746,11 @@ export default function PropuestaEditor({
                       </p>
                     </div>
                     <div className="prp-seccion-flechas">
-                      <button className="ter-action-btn" disabled={bloque === 0}
+                      <button className="icon-btn" disabled={bloque === 0}
                         aria-label={`Subir ${s.etiqueta}`} onClick={() => moverBloque(bloque, -1)}>
                         <ArrowUp size={15} strokeWidth={2} />
                       </button>
-                      <button className="ter-action-btn" disabled={bloque === bloques.length - 1}
+                      <button className="icon-btn" disabled={bloque === bloques.length - 1}
                         aria-label={`Bajar ${s.etiqueta}`} onClick={() => moverBloque(bloque, 1)}>
                         <ArrowDown size={15} strokeWidth={2} />
                       </button>
@@ -833,6 +881,11 @@ export default function PropuestaEditor({
           </div>
         </div>
       )}
+
+      {/* Fuera de las tres pestañas a propósito: lo editado en «Textos» sigue sin
+          guardar aunque estés mirando «Presentar», y un botón por pestaña lo
+          escondería justo cuando hace falta. */}
+      <BarraGuardar cambios={sucio} guardando={guardando} onGuardar={guardar} />
     </div>
   )
 }

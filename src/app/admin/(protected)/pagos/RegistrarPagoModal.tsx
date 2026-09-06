@@ -1,12 +1,10 @@
 'use client'
 
-import { AlertTriangle, Info, Plus, X } from 'lucide-react'
+import { AlertTriangle, Info, Plus } from 'lucide-react'
 import { useState, useRef, useCallback } from 'react'
-import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { registrarPago, obtenerDatosPagoDefecto } from '@/app/actions/pagos'
-import { useModalKeyboard } from '@/lib/use-modal-keyboard'
-import { useMounted } from '@/lib/use-mounted'
+import ModalShell from '@/components/portal/ModalShell'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { MONEDAS_CLAUX, importeClaux, type MonedaClaux } from '@/lib/moneda-claux'
 
@@ -96,7 +94,6 @@ export default function RegistrarPagoModal({
   const [loading, setLoading]         = useState(false)
   const [loadingDefecto, setLoadingDefecto] = useState(false)
   const [advertencia, setAdvertencia] = useState('')
-  const mounted = useMounted()
 
   const [clienteId, setClienteId]         = useState(preselectedClientId ?? '')
   const [montoSugerido, setMontoSugerido] = useState('')
@@ -187,8 +184,6 @@ export default function RegistrarPagoModal({
     setClienteId(preselectedClientId ?? '')
   }, [preselectedClientId])
 
-  useModalKeyboard(open, handleClose)
-
   // ── Alertas calculadas ───────────────────────────────────────────────
   const alertaInicioTemprano = (fechaInicio && fechaExpActual && fechaInicio < fechaExpActual)
     ? `Se recomienda que el inicio (${formatDateES(fechaInicio)}) sea igual o posterior a la expiración actual (${formatDateES(fechaExpActual)}).`
@@ -207,162 +202,154 @@ export default function RegistrarPagoModal({
     && !!fechaInicio && !!fechaExpActual && fechaInicio < fechaExpActual
 
   const modal = (
-    <div className="modal-backdrop">
-      <div className="modal modal-560">
-        <div className="modal-header">
-          <h2 className="modal-title">Registrar pago</h2>
-          <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
-            <X size={18} />
-          </button>
-        </div>
+    <ModalShell title="Registrar pago" size="modal-560" onClose={handleClose}>
 
-        <form ref={formRef} onSubmit={handleSubmit}>
-          <div className="modal-body">
+      <form ref={formRef} onSubmit={handleSubmit}>
+        <div className="modal-body">
 
-            {/* Cliente */}
+          {/* Cliente */}
+          <div className="input-group">
+            <label>Cliente <span className="required">*</span></label>
+            <select
+              name="client_id"
+              className="input"
+              required
+              value={clienteId}
+              onChange={onClienteChange}
+            >
+              <option value="" disabled>Selecciona un cliente</option>
+              {clientes.map(c => (
+                <option key={c.client_id} value={c.client_id}>
+                  {c.client_id} — {c.nombre_empresa}
+                </option>
+              ))}
+            </select>
+            {loadingDefecto && (
+              <span className="text-xs-muted">
+                Cargando datos de la suscripción...
+              </span>
+            )}
+          </div>
+
+          {/* Ciclo (informativo) + Moneda + Método */}
+          <div className="grid-cols-3">
             <div className="input-group">
-              <label>Cliente <span className="required">*</span></label>
-              <select
-                name="client_id"
+              <label>Ciclo</label>
+              <div className="input input-display">
+                {ciclo === 'anual' ? `Anual (−${descuentoAnualPct}%)` : 'Mensual'} · {duracionDias} días
+              </div>
+            </div>
+            <div className="input-group">
+              <label>Moneda <span className="required">*</span></label>
+              <select name="moneda" className="input" required value={moneda}
+                onChange={e => onMonedaChange(e.target.value as MonedaClaux)}>
+                {MONEDAS_CLAUX.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+            <div className="input-group">
+              <label>Método de pago <span className="required">*</span></label>
+              <select name="metodo" className="input" required defaultValue="transferencia">
+                <option value="tropipay">TropiPay</option>
+                <option value="transferencia">Transferencia</option>
+                <option value="efectivo">Efectivo</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Monto (fijado por la configuración del cliente, no editable) */}
+          <div className="input-group">
+            <label>Monto a cobrar</label>
+            <div className="input input-display">{importeClaux(parseFloat(montoSugerido) || 0, moneda)}</div>
+            <input type="hidden" name="monto" value={montoSugerido} />
+            <span className="input-hint">
+              Precio configurado del cliente ({ciclo === 'anual' ? 'anual' : 'mensual'}).
+              {prorata && ` Ajustado por prorrateo: crédito ${importeClaux(prorata.credit, moneda)} sobre ${importeClaux(prorata.precioPeriodo, moneda)}.`}
+              {solapeOtraMoneda && ` El período anterior se cobró en ${ultimoPago!.moneda}: no se prorratea entre monedas.`}
+            </span>
+          </div>
+
+          {/* Período */}
+          <div className="grid-cols-2">
+            <div className="input-group">
+              <label>Inicio período <span className="required">*</span></label>
+              <input
+                name="fecha_inicio_periodo"
+                type="date"
+                lang="es-ES"
                 className="input"
                 required
-                value={clienteId}
-                onChange={onClienteChange}
-              >
-                <option value="" disabled>Selecciona un cliente</option>
-                {clientes.map(c => (
-                  <option key={c.client_id} value={c.client_id}>
-                    {c.client_id} — {c.nombre_empresa}
-                  </option>
-                ))}
-              </select>
-              {loadingDefecto && (
+                value={fechaInicio}
+                onChange={(e) => onInicioChange(e.target.value)}
+              />
+              {fechaInicio && (
                 <span className="text-xs-muted">
-                  Cargando datos de la suscripción...
+                  {formatDateES(fechaInicio)}
                 </span>
               )}
             </div>
-
-            {/* Ciclo (informativo) + Moneda + Método */}
-            <div className="grid-cols-3">
-              <div className="input-group">
-                <label>Ciclo</label>
-                <div className="input input-display">
-                  {ciclo === 'anual' ? `Anual (−${descuentoAnualPct}%)` : 'Mensual'} · {duracionDias} días
-                </div>
-              </div>
-              <div className="input-group">
-                <label>Moneda <span className="required">*</span></label>
-                <select name="moneda" className="input" required value={moneda}
-                  onChange={e => onMonedaChange(e.target.value as MonedaClaux)}>
-                  {MONEDAS_CLAUX.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
-              </div>
-              <div className="input-group">
-                <label>Método de pago <span className="required">*</span></label>
-                <select name="metodo" className="input" required defaultValue="transferencia">
-                  <option value="tropipay">TropiPay</option>
-                  <option value="transferencia">Transferencia</option>
-                  <option value="efectivo">Efectivo</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Monto (fijado por la configuración del cliente, no editable) */}
             <div className="input-group">
-              <label>Monto a cobrar</label>
-              <div className="input input-display">{importeClaux(parseFloat(montoSugerido) || 0, moneda)}</div>
-              <input type="hidden" name="monto" value={montoSugerido} />
-              <span className="input-hint">
-                Precio configurado del cliente ({ciclo === 'anual' ? 'anual' : 'mensual'}).
-                {prorata && ` Ajustado por prorrateo: crédito ${importeClaux(prorata.credit, moneda)} sobre ${importeClaux(prorata.precioPeriodo, moneda)}.`}
-                {solapeOtraMoneda && ` El período anterior se cobró en ${ultimoPago!.moneda}: no se prorratea entre monedas.`}
-              </span>
+              <label>Fin período <span className="required">*</span></label>
+              <input
+                name="fecha_fin_periodo"
+                type="date"
+                lang="es-ES"
+                className="input"
+                required
+                value={fechaFin}
+                onChange={(e) => setFechaFin(e.target.value)}
+              />
+              {fechaFin && (
+                <span className="text-xs-muted">
+                  {formatDateES(fechaFin)}
+                </span>
+              )}
             </div>
-
-            {/* Período */}
-            <div className="grid-cols-2">
-              <div className="input-group">
-                <label>Inicio período <span className="required">*</span></label>
-                <input
-                  name="fecha_inicio_periodo"
-                  type="date"
-                  lang="es-ES"
-                  className="input"
-                  required
-                  value={fechaInicio}
-                  onChange={(e) => onInicioChange(e.target.value)}
-                />
-                {fechaInicio && (
-                  <span className="text-xs-muted">
-                    {formatDateES(fechaInicio)}
-                  </span>
-                )}
-              </div>
-              <div className="input-group">
-                <label>Fin período <span className="required">*</span></label>
-                <input
-                  name="fecha_fin_periodo"
-                  type="date"
-                  lang="es-ES"
-                  className="input"
-                  required
-                  value={fechaFin}
-                  onChange={(e) => setFechaFin(e.target.value)}
-                />
-                {fechaFin && (
-                  <span className="text-xs-muted">
-                    {formatDateES(fechaFin)}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Alerta inicio temprano */}
-            {alertaInicioTemprano && (
-              <div className="alert alert-warning alert-flex mt-neg-1">
-                <AlertTriangle size={15} className="flex-shrink-0 mt-px" />
-                <span className="text-xs">{alertaInicioTemprano}</span>
-              </div>
-            )}
-
-            {/* Desglose pro-rata */}
-            {prorata && (
-              <div className="info-banner mt-2">
-                <Info aria-hidden />
-                <div className="pro-rata-details">
-                  <strong>Desglose pro-rata ({prorata.overlapDays} días solapados)</strong>
-                  <span>Tarifa diaria período anterior: {importeClaux(prorata.dailyRate, moneda)}/día</span>
-                  <span>Crédito por días ya pagados: −{importeClaux(prorata.credit, moneda)}</span>
-                  <strong>Monto sugerido primer período: {importeClaux(prorata.suggestedNet, moneda)}</strong>
-                </div>
-              </div>
-            )}
-
-            {/* Notas */}
-            <div className="input-group">
-              <label>Notas</label>
-              <textarea name="notas" className="input" rows={2} placeholder="Referencia de pago, observaciones..." />
-            </div>
-
-            {advertencia && (
-              <div className="alert alert-warning alert-flex">
-                <AlertTriangle size={15} className="flex-shrink-0 mt-px" />
-                <span className="text-xs">{advertencia}</span>
-              </div>
-            )}
-
           </div>
 
-          <div className="modal-footer">
-            <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
-            <button type="submit" className="btn btn-primary" disabled={loading || loadingDefecto}>
-              {loading ? <><span className="spinner" /> Registrando...</> : 'Registrar pago'}
-            </button>
+          {/* Alerta inicio temprano */}
+          {alertaInicioTemprano && (
+            <div className="alert alert-warning alert-flex mt-neg-1">
+              <AlertTriangle size={15} className="flex-shrink-0 mt-px" />
+              <span className="text-xs">{alertaInicioTemprano}</span>
+            </div>
+          )}
+
+          {/* Desglose pro-rata */}
+          {prorata && (
+            <div className="info-banner mt-2">
+              <Info aria-hidden />
+              <div className="pro-rata-details">
+                <strong>Desglose pro-rata ({prorata.overlapDays} días solapados)</strong>
+                <span>Tarifa diaria período anterior: {importeClaux(prorata.dailyRate, moneda)}/día</span>
+                <span>Crédito por días ya pagados: −{importeClaux(prorata.credit, moneda)}</span>
+                <strong>Monto sugerido primer período: {importeClaux(prorata.suggestedNet, moneda)}</strong>
+              </div>
+            </div>
+          )}
+
+          {/* Notas */}
+          <div className="input-group">
+            <label>Notas</label>
+            <textarea name="notas" className="input" rows={2} placeholder="Referencia de pago, observaciones..." />
           </div>
-        </form>
-      </div>
-    </div>
+
+          {advertencia && (
+            <div className="alert alert-warning alert-flex">
+              <AlertTriangle size={15} className="flex-shrink-0 mt-px" />
+              <span className="text-xs">{advertencia}</span>
+            </div>
+          )}
+
+        </div>
+
+        <div className="modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
+          <button type="submit" className="btn btn-primary" disabled={loading || loadingDefecto}>
+            {loading ? <><span className="spinner" /> Registrando...</> : 'Registrar pago'}
+          </button>
+        </div>
+      </form>
+    </ModalShell>
   )
 
   return (
@@ -371,7 +358,7 @@ export default function RegistrarPagoModal({
         <Plus size={16} />
         Registrar pago
       </button>
-      {mounted && open && createPortal(modal, document.body)}
+      {open && modal}
     </>
   )
 }

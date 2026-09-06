@@ -1,12 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Check, Download, Eye, Pencil, Trash2, X } from 'lucide-react'
 import { RowActions } from '@/components/portal/RowActions'
 import PresupuestoPdfMenu from '@/components/admin/PresupuestoPdfMenu'
 import { ConfirmDialog } from '@/components/portal/Dialog'
+import ModalShell from '@/components/portal/ModalShell'
+import { useOrden, ThOrden, type ColumnasOrden } from '@/components/TableSort'
 import { useToast, toastTono } from '@/app/contexts/ToastContext'
 import {
   obtenerPresupuesto,
@@ -18,7 +20,8 @@ import {
 import { descargarPresupuesto } from '@/lib/pdf/presupuesto'
 import { importeCiclo } from '@/lib/billing'
 import { normalizarNivel, precioModulo, type Nivel, type ModuloPrecios } from '@/lib/niveles'
-import { importeClaux, normalizarMonedaClaux } from '@/lib/moneda-claux'
+import { claveOrdenImporte, importeClaux, normalizarMonedaClaux } from '@/lib/moneda-claux'
+import { numeroPresupuesto } from '@/lib/presupuesto/config'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Detalle = Record<string, any>
@@ -41,6 +44,17 @@ function EstadoBadge({ estado }: { estado: string }) {
   return <span className="badge badge-info">Guardado</span>
 }
 
+/** Guardado → aprobado → instalado: el orden del ciclo, no el alfabético. */
+const ESTADO_PRIORIDAD: Record<string, number> = { guardado: 0, aprobado: 1, instalado: 2 }
+
+const COLUMNAS: ColumnasOrden<PresupuestoRow> = {
+  fecha:       { label: 'Fecha',       valor: p => p.created_at },
+  estado:      { label: 'Estado',      valor: p => ESTADO_PRIORIDAD[p.estado] ?? 9 },
+  horas:       { label: 'Horas',       valor: p => p.horas_total },
+  reales:      { label: 'Reales',      valor: p => p.horas_reales },
+  instalacion: { label: 'Instalación', valor: p => claveOrdenImporte(p.total_final ?? p.coste_instalacion, p.moneda) },
+}
+
 export default function PresupuestosClienteTabla({
   presupuestos,
   catalogo,
@@ -55,7 +69,9 @@ export default function PresupuestosClienteTabla({
   const { error: toastError, success: toastSuccess } = useToast()
   const router = useRouter()
   const [detalle, setDetalle] = useState<Detalle | null>(null)
-  const [cargando, setCargando] = useState(false)
+  // Lleva la FILA, no un booleano: el modal abre al instante y ya con el nombre del
+  // negocio en la cabecera, en vez de un recuadro anónimo mientras llega el detalle.
+  const [cargando, setCargando] = useState<PresupuestoRow | null>(null)
   const [aprobando, setAprobando] = useState(false)
   const [horasReales, setHorasReales] = useState('')
   const [horasRealesOriginales, setHorasRealesOriginales] = useState('')
@@ -65,14 +81,28 @@ export default function PresupuestosClienteTabla({
   const [borrar, setBorrar]     = useState<PresupuestoRow | null>(null)
   const [borrando, setBorrando] = useState(false)
 
-  async function abrir(id: number) {
-    setCargando(true)
-    const d = await obtenerPresupuesto(id)
-    setCargando(false)
+  // Cuál de las peticiones en vuelo es la que vale. Con la conexión de Cuba da tiempo
+  // a cerrar el modal o a pulsar otra fila antes de que conteste el servidor, y sin
+  // esto la respuesta atrasada volvía a abrir el modal —o pisaba el presupuesto que
+  // se acababa de pedir con el que se había pedido antes.
+  const peticion = useRef(0)
+
+  async function abrir(p: PresupuestoRow) {
+    const mia = ++peticion.current
+    setCargando(p)
+    const d = await obtenerPresupuesto(p.id)
+    if (peticion.current !== mia) return
+    setCargando(null)
     if (!d) { toastError('No se pudo cargar el presupuesto'); return }
     setHorasReales(d.horas_reales != null ? String(d.horas_reales) : '')
     setHorasRealesOriginales(d.horas_reales != null ? String(d.horas_reales) : '')
     setDetalle(d)
+  }
+
+  function cerrarDetalle() {
+    peticion.current++
+    setDetalle(null)
+    setCargando(null)
   }
 
   async function descargarPdf(incluir: 'todo' | 'instalacion' | 'suscripcion') {
@@ -85,7 +115,7 @@ export default function PresupuestosClienteTabla({
     const mensual = Number(detalle.cuota_mensual ?? 0)
     try {
       await descargarPresupuesto({
-        numero: `PRE-${String(detalle.id).padStart(4, '0')}`,
+        numero: numeroPresupuesto(detalle.id),
         fecha: fmtFecha(detalle.created_at),
         negocio: detalle.nombre_negocio ?? '',
         responsable: detalle.nombre_responsable,
@@ -102,7 +132,7 @@ export default function PresupuestosClienteTabla({
         descuentoAnualPct,
         moneda,
         incluir,
-      }, `PRE-${String(detalle.id).padStart(4, '0')}${incluir === 'todo' ? '' : `-${incluir}`}.pdf`)
+      }, `${numeroPresupuesto(detalle.id)}${incluir === 'todo' ? '' : `-${incluir}`}.pdf`)
     } catch {
       toastError('No se pudo generar el PDF.')
     }
@@ -140,7 +170,7 @@ export default function PresupuestosClienteTabla({
     setGuardando(false)
     if (!r.ok) { toastError(r.error ?? 'No se pudo guardar'); return }
     toastSuccess('Horas reales guardadas')
-    setDetalle(null)
+    cerrarDetalle()
     router.refresh()
   }
 
@@ -156,22 +186,25 @@ export default function PresupuestosClienteTabla({
     : horasHanCambiado             ? 'horas'
     : 'pdf'
 
+  // El de siempre primero, que es el que se mira: el más reciente arriba.
+  const orden = useOrden(presupuestos, COLUMNAS, { clave: 'fecha', dir: 'desc' })
+
   return (
     <>
       <div className="table-wrapper table-wrapper-flush">
         <table className="table">
           <thead>
             <tr>
-              <th>Fecha</th>
-              <th>Estado</th>
-              <th className="col-num">Horas</th>
-              <th className="col-num">Reales</th>
-              <th className="col-num">Instalación</th>
+              <ThOrden clave="fecha" orden={orden} />
+              <ThOrden clave="estado" orden={orden} />
+              <ThOrden clave="horas" orden={orden} className="col-num" />
+              <ThOrden clave="reales" orden={orden} className="col-num" />
+              <ThOrden clave="instalacion" orden={orden} className="col-num" />
               <th className="col-actions" />
             </tr>
           </thead>
           <tbody>
-            {presupuestos.map(p => {
+            {orden.filas.map(p => {
               const reales = p.horas_reales
               const seExcedio = reales != null && reales > p.horas_total
               const moneda = normalizarMonedaClaux(p.moneda)
@@ -179,8 +212,8 @@ export default function PresupuestosClienteTabla({
                 <tr
                   key={p.id}
                   className="table-row-clickable"
-                  onClick={() => abrir(p.id)}
-                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrir(p.id) } }}
+                  onClick={() => abrir(p)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrir(p) } }}
                   tabIndex={0}
                   role="button"
                   aria-label={`Abrir presupuesto del ${fmtFecha(p.created_at)}`}
@@ -199,9 +232,11 @@ export default function PresupuestosClienteTabla({
                       <span className="text-xs-muted"> · −{Number(p.descuento_pct)}%</span>
                     )}
                   </td>
-                  <td className="col-actions">
+                  {/* La fila entera abre el detalle; el menú, no: sin esto cada opción
+                      disparaba además el clic de la fila. */}
+                  <td className="col-actions" onClick={e => e.stopPropagation()}>
                       <RowActions>
-                        <button className="row-actions-item" onClick={() => abrir(p.id)}>
+                        <button className="row-actions-item" onClick={() => abrir(p)}>
                           <Eye size={15} strokeWidth={2} /> Ver detalles
                         </button>
                         {/* Editar y eliminar solo en borrador: aprobado es la prueba de
@@ -255,122 +290,119 @@ export default function PresupuestosClienteTabla({
       )}
 
       {(detalle || cargando) && (
-        <div className="modal-backdrop">
-          <div className="modal modal-640 modal-fixed-actions" onClick={e => e.stopPropagation()}>
-            {cargando || !detalle ? (
+        <ModalShell
+          title={detalle?.nombre_negocio ?? cargando?.nombre_negocio ?? ''}
+          subtitle={`${numeroPresupuesto(detalle?.id ?? cargando!.id)} · ${fmtFecha(detalle?.created_at ?? cargando!.created_at)}`}
+          size="modal-640 modal-fixed-actions"
+          onClose={cerrarDetalle}
+        >
+          {!detalle ? (
+            <div className="modal-body">
+              <p className="text-sm-muted"><span className="spinner" /> Cargando…</p>
+            </div>
+          ) : (
+            <>
               <div className="modal-body">
-                <p className="text-sm-muted"><span className="spinner" /> Cargando…</p>
+                <div className="sol-detalle">
+                  <div className="sol-row"><span className="sol-label">Estado</span><span className="sol-value"><EstadoBadge estado={detalle.estado} /></span></div>
+                  <div className="sol-row"><span className="sol-label">Comercial</span><span className="sol-value">{detalle.comercial_nombre ?? '—'}</span></div>
+                  <div className="sol-row"><span className="sol-label">Responsable</span><span className="sol-value">{detalle.nombre_responsable ?? '—'}</span></div>
+                  <div className="sol-row"><span className="sol-label">Contacto</span><span className="sol-value">{detalle.contacto ?? '—'}</span></div>
+                  <div className="sol-row"><span className="sol-label">Nivel</span><span className="sol-value">{nombresNivel[normalizarNivel(detalle.nivel)]}</span></div>
+                  <div className="sol-row"><span className="sol-label">Módulos</span><span className="sol-value">{(detalle.modulos ?? []).join(', ') || '—'}</span></div>
+                  {detalle.client_id && (
+                    <div className="sol-row"><span className="sol-label">Cliente</span><span className="sol-value">{detalle.client_id}</span></div>
+                  )}
+                </div>
+
+                <div className="pres-desglose">
+                  <p className="mod-list-label">Desglose por fase</p>
+                  {desglose.map((d, i) => (
+                    <div key={i} className="pres-fase-row">
+                      <span className="pres-fase-nombre">{d.fase}</span>
+                      <span className="pres-fase-horas">{d.horas}h</span>
+                      <span className="pres-fase-sub">{imp(d.subtotal, monedaDet)}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {revisiones.length > 0 && (
+                  <div className="alert alert-warning">
+                    <strong>Líneas a revisar</strong>
+                    <ul className="pres-revisiones">
+                      {revisiones.map((r, i) => <li key={i}><strong>{r.linea}:</strong> {r.motivo}</li>)}
+                    </ul>
+                  </div>
+                )}
+
+                <div className="pres-totales">
+                  <p className="pres-bloque-titulo">Pago único · Instalación</p>
+                  <div><span className="pres-total-label">Horas totales</span><span className="pres-total-valor">{detalle.horas_total}h</span></div>
+                  {Number(detalle.tarifa_hora) > 0 && (
+                    <div><span className="pres-total-label">Tarifa aplicada</span><span className="pres-total-valor">{imp(detalle.tarifa_hora, monedaDet)}/h</span></div>
+                  )}
+                  <div><span className="pres-total-label">Coste instalación</span><span className="pres-total-valor">{imp(detalle.coste_instalacion, monedaDet)}</span></div>
+                  {Number(detalle.descuento_pct) > 0 && (
+                    <div className="pres-total-dto">
+                      <span className="pres-total-label">
+                        Descuento ({Number(detalle.descuento_pct)}%)
+                        {detalle.descuento_motivo && <em className="pres-dto-motivo"> · {detalle.descuento_motivo}</em>}
+                      </span>
+                      <span className="pres-total-valor">
+                        −{imp(Number(detalle.coste_instalacion) - Number(detalle.total_final), monedaDet)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="pres-total-final">
+                    <span className="pres-total-label">Total a pagar una vez</span>
+                    <span className="pres-total-valor">{imp(detalle.total_final ?? detalle.coste_instalacion, monedaDet)}</span>
+                  </div>
+                </div>
+                <div className="input-group pres-horas-reales">
+                  <label htmlFor="cliente-horas-reales">Horas reales de la instalación</label>
+                  <input id="cliente-horas-reales" type="number" min="0" step="0.5" className="input" value={horasReales} onChange={e => setHorasReales(e.target.value)} placeholder="Completar al cerrar la instalación" />
+                </div>
               </div>
-            ) : (
-              <>
-                <div className="modal-header">
-                  <h2 className="modal-title">{detalle.nombre_negocio}</h2>
-                  <button type="button" onClick={() => setDetalle(null)} className="modal-close" aria-label="Cerrar">
-                    <X size={18} />
+              {/* Orden por importancia: lo secundario a la izquierda, la acción principal
+                  la última (a la derecha en escritorio; arriba en móvil, que invierte la
+                  columna). Sin «Cerrar»: para eso está la ✕ de la cabecera. */}
+              <div className="modal-footer">
+                <PresupuestoPdfMenu
+                  nombre={detalle.nombre_negocio}
+                  destacado={accionPrincipal === 'pdf'}
+                  onDownload={descargarPdf}
+                >
+                  <Download size={16} strokeWidth={2} /> Descargar PDF
+                </PresupuestoPdfMenu>
+                {detalle.estado === 'aprobado' && (
+                  <button type="button" className="btn btn-secondary" disabled={aprobando} onClick={() => aprobar(detalle.id, false)}>
+                    <X size={16} strokeWidth={2} /> Quitar aprobación
                   </button>
-                </div>
-                <div className="modal-body">
-                  <div className="sol-detalle">
-                    <div className="sol-row"><span className="sol-label">Estado</span><span className="sol-value"><EstadoBadge estado={detalle.estado} /></span></div>
-                    <div className="sol-row"><span className="sol-label">Comercial</span><span className="sol-value">{detalle.comercial_nombre ?? '—'}</span></div>
-                    <div className="sol-row"><span className="sol-label">Responsable</span><span className="sol-value">{detalle.nombre_responsable ?? '—'}</span></div>
-                    <div className="sol-row"><span className="sol-label">Contacto</span><span className="sol-value">{detalle.contacto ?? '—'}</span></div>
-                    <div className="sol-row"><span className="sol-label">Nivel</span><span className="sol-value">{nombresNivel[normalizarNivel(detalle.nivel)]}</span></div>
-                    <div className="sol-row"><span className="sol-label">Módulos</span><span className="sol-value">{(detalle.modulos ?? []).join(', ') || '—'}</span></div>
-                    {detalle.client_id && (
-                      <div className="sol-row"><span className="sol-label">Cliente</span><span className="sol-value">{detalle.client_id}</span></div>
-                    )}
-                  </div>
-
-                  <div className="pres-desglose">
-                    <p className="mod-list-label">Desglose por fase</p>
-                    {desglose.map((d, i) => (
-                      <div key={i} className="pres-fase-row">
-                        <span className="pres-fase-nombre">{d.fase}</span>
-                        <span className="pres-fase-horas">{d.horas}h</span>
-                        <span className="pres-fase-sub">{imp(d.subtotal, monedaDet)}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {revisiones.length > 0 && (
-                    <div className="alert alert-warning">
-                      <strong>Líneas a revisar</strong>
-                      <ul className="pres-revisiones">
-                        {revisiones.map((r, i) => <li key={i}><strong>{r.linea}:</strong> {r.motivo}</li>)}
-                      </ul>
-                    </div>
-                  )}
-
-                  <div className="pres-totales">
-                    <p className="pres-bloque-titulo">Pago único · Instalación</p>
-                    <div><span className="pres-total-label">Horas totales</span><span className="pres-total-valor">{detalle.horas_total}h</span></div>
-                    {Number(detalle.tarifa_hora) > 0 && (
-                      <div><span className="pres-total-label">Tarifa aplicada</span><span className="pres-total-valor">{imp(detalle.tarifa_hora, monedaDet)}/h</span></div>
-                    )}
-                    <div><span className="pres-total-label">Coste instalación</span><span className="pres-total-valor">{imp(detalle.coste_instalacion, monedaDet)}</span></div>
-                    {Number(detalle.descuento_pct) > 0 && (
-                      <div className="pres-total-dto">
-                        <span className="pres-total-label">
-                          Descuento ({Number(detalle.descuento_pct)}%)
-                          {detalle.descuento_motivo && <em className="pres-dto-motivo"> · {detalle.descuento_motivo}</em>}
-                        </span>
-                        <span className="pres-total-valor">
-                          −{imp(Number(detalle.coste_instalacion) - Number(detalle.total_final), monedaDet)}
-                        </span>
-                      </div>
-                    )}
-                    <div className="pres-total-final">
-                      <span className="pres-total-label">Total a pagar una vez</span>
-                      <span className="pres-total-valor">{imp(detalle.total_final ?? detalle.coste_instalacion, monedaDet)}</span>
-                    </div>
-                  </div>
-                  <div className="input-group pres-horas-reales">
-                    <label htmlFor="cliente-horas-reales">Horas reales de la instalación</label>
-                    <input id="cliente-horas-reales" type="number" min="0" step="0.5" className="input" value={horasReales} onChange={e => setHorasReales(e.target.value)} placeholder="Completar al cerrar la instalación" />
-                  </div>
-                </div>
-                {/* Orden por importancia: lo secundario a la izquierda, la acción principal
-                    la última (a la derecha en escritorio; arriba en móvil, que invierte la
-                    columna). Sin «Cerrar»: para eso está la ✕ de la cabecera. */}
-                <div className="modal-footer">
-                  <PresupuestoPdfMenu
-                    nombre={detalle.nombre_negocio}
-                    destacado={accionPrincipal === 'pdf'}
-                    onDownload={descargarPdf}
-                  >
-                    <Download size={16} strokeWidth={2} /> Descargar PDF
-                  </PresupuestoPdfMenu>
-                  {detalle.estado === 'aprobado' && (
-                    <button type="button" className="btn btn-secondary" disabled={aprobando} onClick={() => aprobar(detalle.id, false)}>
-                      <X size={16} strokeWidth={2} /> Quitar aprobación
+                )}
+                {detalle.estado === 'guardado' && (
+                  <>
+                    <Link href={`/admin/presupuestos/${detalle.id}/editar`} className="btn btn-secondary">
+                      <Pencil size={16} strokeWidth={2} /> Editar
+                    </Link>
+                    <button
+                      type="button"
+                      className={accionPrincipal === 'aprobar' ? 'btn btn-primary' : 'btn btn-secondary'}
+                      disabled={aprobando}
+                      onClick={() => aprobar(detalle.id, true)}
+                    >
+                      <Check size={16} strokeWidth={2} /> Aprobar
                     </button>
-                  )}
-                  {detalle.estado === 'guardado' && (
-                    <>
-                      <Link href={`/admin/presupuestos/${detalle.id}/editar`} className="btn btn-secondary">
-                        <Pencil size={16} strokeWidth={2} /> Editar
-                      </Link>
-                      <button
-                        type="button"
-                        className={accionPrincipal === 'aprobar' ? 'btn btn-primary' : 'btn btn-secondary'}
-                        disabled={aprobando}
-                        onClick={() => aprobar(detalle.id, true)}
-                      >
-                        <Check size={16} strokeWidth={2} /> Aprobar
-                      </button>
-                    </>
-                  )}
-                  {horasHanCambiado && (
-                    <button type="button" className="btn btn-primary" disabled={guardando} onClick={guardarHoras}>
-                      {guardando ? <><span className="spinner" /> Guardando...</> : 'Guardar'}
-                    </button>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+                  </>
+                )}
+                {horasHanCambiado && (
+                  <button type="button" className="btn btn-primary" disabled={guardando} onClick={guardarHoras}>
+                    {guardando ? <><span className="spinner" /> Guardando...</> : 'Guardar'}
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </ModalShell>
       )}
     </>
   )

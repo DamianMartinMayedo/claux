@@ -2,17 +2,20 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { Check, ExternalLink, PhoneCall, Trash2 } from 'lucide-react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Check, ExternalLink, PackagePlus, PhoneCall, Trash2 } from 'lucide-react'
 import { toastError, toastLoading, toastSuccess, toastWarning } from '@/app/contexts/ToastContext'
 import { RowActions } from '@/components/portal/RowActions'
 import BulkBar from '@/components/portal/BulkBar'
 import HeaderCheck from '@/components/portal/HeaderCheck'
+import Filtros from '@/components/portal/Filtros'
 import { useRowSelection } from '@/components/portal/useRowSelection'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { useOrden, ThOrden, type ColumnasOrden } from '@/components/TableSort'
 import VentasTabs from '@/components/admin/VentasTabs'
 import type { RolAdmin, SeccionKey } from '@/lib/roles'
+import type { Filtro as FiltroDecl } from '@/lib/filtros'
 import {
   actualizarEstadoAmpliacion,
   eliminarAmpliacion,
@@ -21,7 +24,6 @@ import {
 } from '@/app/actions/soporte'
 
 type Estado = Ampliacion['estado']
-type Filtro = 'TODAS' | Estado | 'PRUEBAS'
 
 // El estado es el de `soporte_mensajes`, pero leído en clave comercial: lo que le
 // importa a quien vende es si ya llamó y si acabó activándose.
@@ -34,6 +36,18 @@ const ESTADO_BADGE: Record<Estado, string> = {
   NUEVO:    'badge-info',
   LEIDO:    'badge-warning',
   RESUELTO: 'badge-success',
+}
+
+// Para ordenar por estado: el que hay que atender primero, primero. Alfabético
+// pondría «Activado» antes que «Sin contactar», que es justo al revés.
+const ESTADO_PRIORIDAD: Record<Estado, number> = { NUEVO: 0, LEIDO: 1, RESUELTO: 2 }
+
+const COLUMNAS: ColumnasOrden<Ampliacion> = {
+  estado:  { label: 'Estado',         valor: s => ESTADO_PRIORIDAD[s.estado] },
+  cliente: { label: 'Cliente',        valor: s => s.nombre_empresa },
+  modulo:  { label: 'Quiere activar', valor: s => s.modulo },
+  email:   { label: 'Lo pidió',       valor: s => s.email },
+  fecha:   { label: 'Fecha',          valor: s => s.created_at },
 }
 
 function fmtFecha(iso: string): string {
@@ -61,32 +75,33 @@ export default function AmpliacionesView({
   permisos: SeccionKey[]
 }) {
   const router = useRouter()
-  const [filtro, setFiltro] = useState<Filtro>('TODAS')
+  // En la URL, no en `useState`: el enlace a «sin contactar» se puede mandar, y
+  // volver de la ficha de un cliente no deja la lista entera otra vez.
+  const filtro = useSearchParams().get('estado') ?? ''
   const [guardando, setGuardando] = useState<number | null>(null)
   const [porBorrar, setPorBorrar] = useState<Ampliacion | null>(null)
   const [confirmLote, setConfirmLote] = useState(false)
   const [pending, startTransition] = useTransition()
 
-  const visibles = solicitudes.filter(s =>
-    filtro === 'TODAS' ? true : filtro === 'PRUEBAS' ? s.es_prueba : s.estado === filtro,
-  )
+  const visibles = useMemo(() => solicitudes.filter(s =>
+    filtro === '' ? true : filtro === 'PRUEBAS' ? s.es_prueba : s.estado === filtro,
+  ), [solicitudes, filtro])
+
+  const orden = useOrden(visibles, COLUMNAS, { clave: 'fecha', dir: 'desc' })
+  const { pageItems, ...pag } = usePagination(orden.filas)
+
   const pruebas = solicitudes.filter(s => s.es_prueba).length
   // El contador que decide a quién se llama no puede contar las de prueba: era
-  // lo que hacía que la pantalla dijese cuatro cuando había una.
+  // lo que hacía que la pantalla dijese cuatro cuando había una. Por eso el
+  // subtítulo dice «de clientes reales» y las pastillas no: el número de una
+  // pastilla es cuántas filas va a enseñar, sin excepciones.
   const sinContactar = solicitudes.filter(s => s.estado === 'NUEVO' && !s.es_prueba).length
-
-  const { pageItems, ...pag } = usePagination(visibles)
 
   const borrables = useMemo(
     () => visibles.filter(s => !bloqueoDe(s)).map(s => String(s.id)),
     [visibles],
   )
   const sel = useRowSelection(borrables)
-
-  function cambiarFiltro(f: Filtro) {
-    setFiltro(f)
-    sel.clear()
-  }
 
   async function marcar(s: Ampliacion, estado: Estado) {
     if (guardando) return
@@ -135,13 +150,27 @@ export default function AmpliacionesView({
     })
   }
 
-  const FILTROS: { k: Filtro; label: string; n?: number }[] = [
-    { k: 'TODAS',    label: 'Todas' },
-    { k: 'NUEVO',    label: 'Sin contactar' },
-    { k: 'LEIDO',    label: 'Contactadas' },
-    { k: 'RESUELTO', label: 'Activadas' },
-    { k: 'PRUEBAS',  label: 'De clientes de prueba', n: pruebas },
-  ]
+  /**
+   * LA DECLARACIÓN. `cliente`: las ampliaciones vienen enteras y son pocas, así
+   * que el navegador filtra sobre el conjunto completo y no miente.
+   *
+   * «De clientes de prueba» no es un estado, pero se pregunta en el mismo sitio
+   * que ellos: son las cuatro formas de acotar la misma lista.
+   */
+  const declaracion: FiltroDecl[] = useMemo(() => {
+    const cuenta = (e: Estado) => solicitudes.filter(s => s.estado === e).length
+    return [{
+      clave: 'estado', label: 'Todas', rotulo: 'Estado',
+      valor: filtro, widget: 'pastillas', donde: 'cliente',
+      todasCount: solicitudes.length,
+      opciones: [
+        { valor: 'NUEVO',    label: 'Sin contactar',         count: cuenta('NUEVO') },
+        { valor: 'LEIDO',    label: 'Contactadas',           count: cuenta('LEIDO') },
+        { valor: 'RESUELTO', label: 'Activadas',             count: cuenta('RESUELTO') },
+        { valor: 'PRUEBAS',  label: 'De clientes de prueba', count: solicitudes.filter(s => s.es_prueba).length },
+      ],
+    }]
+  }, [filtro, solicitudes])
 
   return (
     <div className="view-container">
@@ -149,7 +178,7 @@ export default function AmpliacionesView({
         <div>
           <h1 className="page-title">Ampliaciones</h1>
           <p className="page-subtitle">
-            {solicitudes.length} en total · {sinContactar} sin contactar
+            {solicitudes.length} en total · {sinContactar} de clientes reales sin contactar
             {pruebas > 0 && ` · ${pruebas} de clientes de prueba`}. Clientes que piden activar algo desde su portal.
           </p>
         </div>
@@ -157,23 +186,17 @@ export default function AmpliacionesView({
 
       <VentasTabs rol={rol} permisos={permisos} />
 
-      <div className="ter-toolbar">
-        {FILTROS.map(f => (
-          <button
-            key={f.k}
-            className={`btn btn-sm ${filtro === f.k ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => cambiarFiltro(f.k)}
-          >
-            {f.label}{f.n != null && f.n > 0 ? ` (${f.n})` : ''}
-          </button>
-        ))}
-      </div>
+      <Filtros filtros={declaracion} />
 
       {visibles.length === 0 ? (
-        <div className="card">
-          <p className="text-sm-muted">
-            No hay ampliaciones {filtro === 'TODAS' ? 'todavía' : 'en este estado'}.
-          </p>
+        <div className="table-wrapper">
+          <div className="table-empty">
+            <PackagePlus size={40} strokeWidth={1.5} />
+            <h3 className="table-empty-title">Sin ampliaciones</h3>
+            <p>{filtro === ''
+              ? 'Las piden los clientes desde su portal.'
+              : 'No hay ampliaciones en este estado.'}</p>
+          </div>
         </div>
       ) : (
         <div className="card card-table">
@@ -184,11 +207,11 @@ export default function AmpliacionesView({
                   <th className="col-check">
                     <HeaderCheck checked={sel.allSelected} indeterminate={sel.someSelected} onChange={sel.toggleAll} />
                   </th>
-                  <th>Estado</th>
-                  <th>Cliente</th>
-                  <th>Quiere activar</th>
-                  <th>Lo pidió</th>
-                  <th>Fecha</th>
+                  <ThOrden orden={orden} clave="estado" />
+                  <ThOrden orden={orden} clave="cliente" />
+                  <ThOrden orden={orden} clave="modulo" />
+                  <ThOrden orden={orden} clave="email" />
+                  <ThOrden orden={orden} clave="fecha" />
                   <th className="col-actions"></th>
                 </tr>
               </thead>
@@ -213,7 +236,12 @@ export default function AmpliacionesView({
                       </td>
                       <td data-label="Cliente">
                         <div className="cell-nombre">
-                          <span className="text-sm-bold cell-clamp">{s.nombre_empresa}</span>
+                          {/* La fila NO es clicable: una ampliación no tiene ficha
+                              propia. Lo que sí la tiene es el cliente, y a ella se
+                              entra por su nombre. */}
+                          <Link href={`/admin/clientes/${s.client_id}`} className="table-name-link cell-clamp">
+                            {s.nombre_empresa}
+                          </Link>
                           {s.es_prueba && <span className="badge badge-purple">Prueba</span>}
                         </div>
                         {s.contacto && <div className="text-xs-muted">{s.contacto}</div>}

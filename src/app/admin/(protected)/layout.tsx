@@ -6,7 +6,6 @@ import { soloManual, RUTA_MANUAL } from '@/lib/roles'
 import TopLoader from '@/components/portal/TopLoader'
 import Sidebar from '@/components/admin/Sidebar'
 import Header from '@/components/admin/Header'
-import { desactivarClientesVencidos } from '@/app/actions/clientes'
 import AdminToastWrapper from '@/components/admin/AdminToastWrapper'
 import { AvisosProvider } from '@/components/admin/notificaciones/AvisosContext'
 import AvisosPopups from '@/components/admin/notificaciones/AvisosPopups'
@@ -46,12 +45,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   // sitio es el manual.
   if (soloManual(ctx)) redirect(RUTA_MANUAL)
 
-  // Desactivar automáticamente clientes vencidos (solo super_admin, evita error
-  // de permisos para un vendedor al abrir el panel).
-  if (ctx.rol === 'super_admin') {
-    await desactivarClientesVencidos()
-  }
-
   // Carga inicial de la bandeja del equipo: la campana nace con su contador puesto
   // y los popups pueden salir en la primera pantalla, sin una ida y vuelta extra.
   // Ya viene filtrada por los permisos de quien está en sesión.
@@ -61,7 +54,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <AvisosProvider inicial={avisosIniciales}>
       <div className="admin-shell">
         <TopLoader />
-        <Header displayName={ctx.nombre} rol={ctx.rol} />
+        <Header displayName={ctx.nombre} rol={ctx.rol} permisos={ctx.permisos} email={ctx.email} />
         <Sidebar rol={ctx.rol} permisos={ctx.permisos} />
         <div className="admin-main">
           <AdminToastWrapper>{children}</AdminToastWrapper>

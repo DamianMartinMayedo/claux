@@ -1,9 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Save, Trash2 } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import { guardarSetting } from '@/app/actions/settings'
+import BarraGuardar from '@/components/BarraGuardar'
+import VentasTabs from '@/components/admin/VentasTabs'
 import PropuestasTabs from '@/components/admin/PropuestasTabs'
 import { CLAVES_AJUSTES, tarjetasComoJson } from '@/lib/propuesta/ajustes'
 import type { RolAdmin, SeccionKey } from '@/lib/roles'
@@ -22,6 +24,11 @@ export interface TextosPropuesta {
  *
  * Una tarjeta por diapositiva, y cada una dice a cuál alimenta: cinco grupos
  * seguidos en una sola columna no dejaban ver qué se estaba tocando.
+ *
+ * Guardar vive ABAJO y pegado (`<BarraGuardar>`). Estaba en la cabecera, y con
+ * cinco grupos de tarjetas editabas el último sin ver ni la pestaña en la que
+ * estabas ni el botón: había que subir a ciegas para guardar. El pie, además,
+ * cuenta lo pendiente, que antes solo lo sabía el botón (encendido o apagado).
  */
 export default function TextosView({ textos, rol, permisos }: {
   textos: TextosPropuesta
@@ -48,6 +55,14 @@ export default function TextosView({ textos, rol, permisos }: {
     { key: CLAVES_AJUSTES.pago,      value: pago.trim(),                 antes: base.pago },
   ]
   const cambiados = pares.filter(p => p.value !== p.antes)
+
+  function descartar() {
+    setQueEs(base.queEs)
+    setProblema(base.problema.join('\n'))
+    setConfianza(base.confianza)
+    setEmpecemos(base.empecemos)
+    setPago(base.pago)
+  }
 
   async function guardar() {
     if (cambiados.length === 0 || loading) return
@@ -76,13 +91,13 @@ export default function TextosView({ textos, rol, permisos }: {
             Salen igual en todas las propuestas. Un grupo vacío vuelve al texto del sistema.
           </p>
         </div>
-        <button className="btn btn-primary" disabled={loading || cambiados.length === 0} onClick={guardar}>
-          {loading
-            ? <><span className="spinner" /> Guardando…</>
-            : <><Save size={16} strokeWidth={2} /> {cambiados.length === 0 ? 'Guardado' : 'Guardar'}</>}
-        </button>
       </div>
 
+      {/* Las DOS filas, como en las tres páginas hermanas. Faltaba la primera y
+          esta página se salía de su sitio: `.subtabs` sube con margen negativo
+          para colgar de `.tabs`, así que sin esa fila el pastillero flotaba
+          suelto bajo la cabecera y desde aquí no se podía volver a Ventas. */}
+      <VentasTabs rol={rol} permisos={permisos} />
       <PropuestasTabs rol={rol} permisos={permisos} />
 
       <div className="prp-panel">
@@ -131,6 +146,11 @@ export default function TextosView({ textos, rol, permisos }: {
           </div>
         </div>
       </div>
+
+      <BarraGuardar
+        cambios={cambiados.length} guardando={loading}
+        onGuardar={guardar} onDescartar={descartar}
+      />
     </div>
   )
 }

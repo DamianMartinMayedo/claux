@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { ClipboardList } from 'lucide-react'
 import NecesidadModal, { type ModuloLite, type Necesidad } from './NecesidadModal'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import { eliminarNecesidad, reordenarNecesidades } from '@/app/actions/diagnostico-necesidades'
@@ -92,8 +93,10 @@ export default function NecesidadesPageClient({
       </div>
 
       {necesidades.length === 0 ? (
-        <div className="dgn-empty">
-          <p>No hay necesidades configuradas. Crea la primera para que aparezca en el diagnóstico.</p>
+        <div className="table-empty">
+          <ClipboardList size={40} strokeWidth={1.5} />
+          <h3 className="table-empty-title">Sin necesidades</h3>
+          <p>Crea la primera para que aparezca en el diagnóstico.</p>
         </div>
       ) : (
         <div className="table-wrapper">
@@ -133,7 +136,7 @@ export default function NecesidadesPageClient({
                       {/* `.badge` como la columna Estado de esta MISMA fila, que ya salía
                           plana: con `.dgn-chip` una llevaba pill y la otra no, y la
                           incoherencia se veía de un vistazo. */}
-                      <div className="dgn-chips">
+                      <div className="badge-row mb-0">
                         {n.modulos.map((c) => (
                           <span key={c} className="badge badge-neutral">{nombreModulo.get(c) ?? c}</span>
                         ))}
@@ -145,7 +148,7 @@ export default function NecesidadesPageClient({
                       </span>
                     </td>
                     <td className="col-actions">
-                      <div className="ter-actions" onClick={(e) => e.stopPropagation()}>
+                      <div className="table-actions" onClick={(e) => e.stopPropagation()}>
                         <NecesidadModal modulos={modulos} necesidad={n} />
                         <button className="btn btn-ghost btn-sm" onClick={() => setConfirmarBorrado(n)}>
                           Eliminar

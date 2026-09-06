@@ -8,6 +8,8 @@ import {
 } from '@/lib/billing'
 import { totalPorMoneda, importesPorMoneda } from '@/lib/moneda-claux'
 import { COLUMNAS_EXENCION } from '@/lib/clientes/ciclo-vida'
+import { hoyEnTz, sumarDias } from '@/lib/fecha-tz'
+import { TOPE_VER_MAS } from '@/lib/listados'
 import ProximosVencer   from './ProximosVencer'
 
 export default async function DashboardPage() {
@@ -16,16 +18,22 @@ export default async function DashboardPage() {
 
   const DIAS_AVISO = parseInt(await getSetting('dias_aviso', '5'), 10)
 
-  const hoy = new Date()
-  hoy.setHours(0, 0, 0, 0)
-  const fechaAviso = new Date(hoy)
-  fechaAviso.setDate(hoy.getDate() + DIAS_AVISO)
-  const fecha14 = new Date(hoy)
-  fecha14.setDate(hoy.getDate() + 14)
+  // El día lo pone el negocio (America/Havana), no el reloj del proceso. Con
+  // `new Date()` + `toISOString()` el corte se hacía en UTC: media tarde en La
+  // Habana ya es el día siguiente en UTC, así que la ventana de avisos se
+  // desplazaba un día justo en la pantalla que dice a quién hay que cobrar.
+  const fechaHoyStr   = hoyEnTz()
+  const fechaAvisoStr = sumarDias(fechaHoyStr, DIAS_AVISO)
+  const fecha14Str    = sumarDias(fechaHoyStr, 14)
 
-  const fechaHoyStr   = hoy.toISOString().split('T')[0]
-  const fechaAvisoStr = fechaAviso.toISOString().split('T')[0]
-  const fecha14Str    = fecha14.toISOString().split('T')[0]
+  // Mes en curso, como rango [inicio, inicio del siguiente): así el filtro va en la
+  // consulta y no en memoria, y no hay que adivinar si el mes tiene 28, 30 o 31.
+  const mesActual     = fechaHoyStr.slice(0, 7)
+  const [anioMes, numMes] = mesActual.split('-').map(Number)
+  const mesInicio     = `${mesActual}-01`
+  const mesSiguiente  = numMes === 12
+    ? `${anioMes + 1}-01-01`
+    : `${anioMes}-${String(numMes + 1).padStart(2, '0')}-01`
 
   const [
     { count: totalClientes },
@@ -56,7 +64,11 @@ export default async function DashboardPage() {
       .lte('fecha_expiracion', fechaAvisoStr),
     supabase.from('clients').select('*', { count: 'exact', head: true }).eq('estado', 'DESACTIVADO').eq('es_prueba', false),
     supabase.from('clients').select(COLUMNAS_CONDICIONES).in('estado', ['ACTIVO', 'TRIAL']).eq('es_prueba', false),
-    supabase.from('payments').select('monto, moneda, fecha, estado, client_id'),
+    // Solo el mes en curso, que es lo único que pinta esta pantalla. Antes se traía
+    // la tabla ENTERA de pagos para filtrar en memoria por el mes: iba bien con
+    // pocos clientes y deja de ir sin avisar.
+    supabase.from('payments').select('monto, moneda, fecha, estado, client_id')
+      .gte('fecha', mesInicio).lt('fecha', mesSiguiente),
     // Vencen pronto: activos/trial expiran en 0-14 días (rojo y ámbar)
     supabase.from('clients')
       .select(`client_id, nombre_empresa, estado, fecha_expiracion, fecha_fin_gracia, ${COLUMNAS_EXENCION}`)
@@ -71,8 +83,10 @@ export default async function DashboardPage() {
       .in('estado', ['TRIAL', 'GRACIA'])
       .eq('es_prueba', false)
       .order('fecha_expiracion', { ascending: true }),
-    // IDs de clientes de prueba: para excluir sus pagos de los ingresos.
-    supabase.from('clients').select('client_id').eq('es_prueba', true),
+    // IDs de clientes de prueba: para excluir sus pagos de los ingresos. Con techo
+    // explícito, porque de esta lista depende una RESTA: un id que no llegue mete
+    // los cobros de una demo en el ingreso del mes, y el número sale creíble.
+    supabase.from('clients').select('client_id').eq('es_prueba', true).limit(TOPE_VER_MAS),
   ])
 
   const idsPrueba = new Set((clientesPruebaData ?? []).map(c => c.client_id))
@@ -100,16 +114,14 @@ export default async function DashboardPage() {
   const cartera = (clientesActivosDatos ?? []) as unknown as CondicionesCliente[]
   const ingresosEstimados = totalPorMoneda(cartera, monedaDelCliente, precioMensualEfectivo)
 
-  // Ingresos del mes actual
-  const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`
-  // Solo los pagos confirmados cuentan como ingreso, y nunca los de clientes de prueba.
+  // Ingresos del mes actual. La consulta ya viene acotada al mes, así que aquí solo
+  // queda descartar lo que no es ingreso: sin confirmar, y los clientes de prueba.
   const confirmadosData = (pagosData ?? [])
     .filter(p => p.estado !== 'por_confirmar' && !idsPrueba.has(p.client_id))
   // Cada cobro trae SU moneda: se agrupa por ella, no por la del cliente hoy.
-  const ingresosMes = totalPorMoneda(
-    confirmadosData.filter(p => p.fecha?.startsWith(mesActual)),
-    p => p.moneda, p => p.monto,
-  )
+  const ingresosMes = totalPorMoneda(confirmadosData, p => p.moneda, p => p.monto)
+  // Los pagos DEL MES, que es lo que dice la tarjeta. Antes contaba los de siempre:
+  // el importe era del mes y el número de debajo era histórico, en la misma tarjeta.
   const totalPagos = confirmadosData.length
 
   return (
@@ -205,6 +217,7 @@ export default async function DashboardPage() {
           <ProximosVencer
             vencenPronto={vencenPronto}
             trialGracia={trialGracia}
+            hoy={fechaHoyStr}
           />
         </div>
       </div>

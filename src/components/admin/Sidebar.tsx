@@ -1,9 +1,8 @@
 'use client'
 
-import { BarChart3, Bell, Boxes, Clock, CreditCard, LayoutGrid, LifeBuoy, LogOut, Settings, Sparkles, Stethoscope, Store, UserCog, Users } from 'lucide-react'
+import { BarChart3, Boxes, CreditCard, LayoutGrid, LifeBuoy, Sparkles, Stethoscope, Store, Users } from 'lucide-react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { usePathname } from 'next/navigation'
 import { RUTA_SECCION, type RolAdmin, type SeccionKey } from '@/lib/roles'
 
 type NavItem = {
@@ -17,6 +16,14 @@ type NavItem = {
 
 type NavGroup = { section: string; items: NavItem[] }
 
+/**
+ * Lo que se hace todos los días, y solo eso.
+ *
+ * Hubo un tercer grupo, «Sistema» (Usuarios, Configuración, Notificaciones,
+ * Actividad), que no era trabajo sino ajuste: se toca de mes en mes y ocupaba un
+ * tercio de la barra. Vive en el menú de cuenta de la cabecera, igual que en el
+ * portal — la lista está en `lib/admin/paginas-cuenta.ts`.
+ */
 const NAV: NavGroup[] = [
   {
     section: 'Principal',
@@ -57,28 +64,10 @@ const NAV: NavGroup[] = [
       )},
     ]
   },
-  {
-    section: 'Sistema',
-    items: [
-      { href: '/admin/usuarios', label: 'Usuarios', key: 'usuarios', icon: (
-        <UserCog size={18} className="flex-shrink-0" />
-      )},
-      { href: '/admin/configuracion', label: 'Configuración', key: 'configuracion', icon: (
-        <Settings size={18} className="flex-shrink-0" />
-      )},
-      { href: '/admin/notificaciones', label: 'Notificaciones', key: 'notificaciones', icon: (
-        <Bell size={18} className="flex-shrink-0" />
-      )},
-      { href: '/admin/actividad', label: 'Actividad', key: 'actividad', icon: (
-        <Clock size={18} className="flex-shrink-0" />
-      )},
-    ]
-  },
 ]
 
 export default function Sidebar({ rol, permisos }: { rol: RolAdmin; permisos: SeccionKey[] }) {
   const pathname = usePathname()
-  const router   = useRouter()
 
   const visible = (item: NavItem): boolean => {
     if (rol === 'super_admin') return true
@@ -97,13 +86,6 @@ export default function Sidebar({ rol, permisos }: { rol: RolAdmin; permisos: Se
   const esActivo = (item: NavItem): boolean => {
     const prefijos = item.match ?? [item.href]
     return prefijos.some(p => pathname === p || pathname.startsWith(p + '/'))
-  }
-
-  async function handleLogout() {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push('/admin/login')
-    router.refresh()
   }
 
   return (
@@ -126,13 +108,6 @@ export default function Sidebar({ rol, permisos }: { rol: RolAdmin; permisos: Se
         })}
       </nav>
 
-      {/* Logout al fondo */}
-      <div className="sidebar-footer-nav">
-        <button onClick={handleLogout} className="nav-item nav-item-danger">
-          <LogOut size={18} className="flex-shrink-0" />
-          <span className="flex-1">Cerrar sesión</span>
-        </button>
-      </div>
     </aside>
   )
 }

@@ -1,6 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { TOPE_VER_MAS } from '@/lib/listados'
 import { requirePermiso } from '@/lib/admin-guard'
 import { logActividad } from '@/lib/audit'
 import { revalidatePath } from 'next/cache'
@@ -138,7 +139,11 @@ export async function listarPresupuestos(): Promise<PresupuestoRow[]> {
   const { data } = await db
     .from('presupuestos_instalacion')
     .select(COLUMNAS_LISTADO)
+    // TECHO EXPLÍCITO: sin `.limit()` lo pone PostgREST por su cuenta y recorta sin
+    // decir nada. Escrito aquí, el día que la cifra se acerque se ve en el código y no
+    // en una lista a la que le faltan filas.
     .order('created_at', { ascending: false })
+    .limit(TOPE_VER_MAS)
   return (data ?? []) as unknown as PresupuestoRow[]
 }
 
@@ -157,6 +162,7 @@ export async function listarPresupuestosDeCliente(clientId: string): Promise<Pre
     .select(COLUMNAS_LISTADO)
     .eq('client_id', clientId)
     .order('created_at', { ascending: false })
+    .limit(TOPE_VER_MAS)
   return (data ?? []) as unknown as PresupuestoRow[]
 }
 

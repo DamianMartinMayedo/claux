@@ -1,13 +1,10 @@
 'use client'
 
-import { X } from 'lucide-react'
 import { useState } from 'react'
-import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { useModalKeyboard } from '@/lib/use-modal-keyboard'
-import { useMounted } from '@/lib/use-mounted'
 import { useToast } from '@/app/contexts/ToastContext'
 import { previsualizarSiembra, aplicarSiembra, type FilaSiembra } from '@/app/actions/modulos'
+import ModalShell from '@/components/portal/ModalShell'
 import ImpactoPrecios, { type ImpactoFila } from './ImpactoPrecios'
 import { NIVELES, type Nivel } from '@/lib/niveles'
 import { MONEDAS_CLAUX, importeClaux, type MonedaClaux } from '@/lib/moneda-claux'
@@ -44,7 +41,6 @@ function sugerir(desde: Nivel, hasta: Nivel) {
 export default function SembrarColumnaModal({ nombresNivel }: { nombresNivel: Record<Nivel, string> }) {
   const router = useRouter()
   const { success: toastSuccess, error: toastError } = useToast()
-  const mounted = useMounted()
 
   const [open, setOpen] = useState(false)
   const [origen, setOrigen]   = useState<Nivel>('inicial')
@@ -66,8 +62,6 @@ export default function SembrarColumnaModal({ nombresNivel }: { nombresNivel: Re
     setOpen(false)
     reset()
   }
-
-  useModalKeyboard(open, handleClose)
 
   function cambiarOrigen(n: Nivel) {
     setOrigen(n)
@@ -111,134 +105,126 @@ export default function SembrarColumnaModal({ nombresNivel }: { nombresNivel: Re
   }
 
   const modal = (
-    <div className="modal-backdrop">
-      <div className="modal modal-lg">
-        <div className="modal-header">
-          <h2 className="modal-title">Sembrar una casilla de precios</h2>
-          <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
-            <X size={18} />
-          </button>
+    <ModalShell title="Sembrar una casilla de precios" size="modal-lg" onClose={handleClose}>
+
+      <div className="modal-body">
+        <p className="text-xs-muted">
+          Rellena una casilla entera a partir de otra. Es el punto de partida: después
+          cada precio se ajusta a mano en su módulo.
+        </p>
+
+        <div className="grid-cols-2">
+          <div className="input-group">
+            <label htmlFor="sem-origen">Nivel de origen</label>
+            <select id="sem-origen" className="input" value={origen}
+                    onChange={e => cambiarOrigen(e.target.value as Nivel)}>
+              {NIVELES.map(n => <option key={n} value={n}>{nombresNivel[n]}</option>)}
+            </select>
+          </div>
+          <div className="input-group">
+            <label htmlFor="sem-origen-moneda">Moneda de origen</label>
+            <select id="sem-origen-moneda" className="input" value={origenMoneda}
+                    onChange={e => { setOrigenMoneda(e.target.value as MonedaClaux); reset() }}>
+              {MONEDAS_CLAUX.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
         </div>
 
-        <div className="modal-body">
-          <p className="text-xs-muted">
-            Rellena una casilla entera a partir de otra. Es el punto de partida: después
-            cada precio se ajusta a mano en su módulo.
-          </p>
-
-          <div className="grid-cols-2">
-            <div className="input-group">
-              <label htmlFor="sem-origen">Nivel de origen</label>
-              <select id="sem-origen" className="input" value={origen}
-                      onChange={e => cambiarOrigen(e.target.value as Nivel)}>
-                {NIVELES.map(n => <option key={n} value={n}>{nombresNivel[n]}</option>)}
-              </select>
-            </div>
-            <div className="input-group">
-              <label htmlFor="sem-origen-moneda">Moneda de origen</label>
-              <select id="sem-origen-moneda" className="input" value={origenMoneda}
-                      onChange={e => { setOrigenMoneda(e.target.value as MonedaClaux); reset() }}>
-                {MONEDAS_CLAUX.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
-            </div>
+        <div className="grid-cols-2">
+          <div className="input-group">
+            <label htmlFor="sem-destino">Nivel de destino</label>
+            <select id="sem-destino" className="input" value={destino}
+                    onChange={e => cambiarDestino(e.target.value as Nivel)}>
+              {NIVELES.map(n => <option key={n} value={n}>{nombresNivel[n]}</option>)}
+            </select>
           </div>
-
-          <div className="grid-cols-2">
-            <div className="input-group">
-              <label htmlFor="sem-destino">Nivel de destino</label>
-              <select id="sem-destino" className="input" value={destino}
-                      onChange={e => cambiarDestino(e.target.value as Nivel)}>
-                {NIVELES.map(n => <option key={n} value={n}>{nombresNivel[n]}</option>)}
-              </select>
-            </div>
-            <div className="input-group">
-              <label htmlFor="sem-destino-moneda">Moneda de destino</label>
-              <select id="sem-destino-moneda" className="input" value={destinoMoneda}
-                      onChange={e => { setDestinoMoneda(e.target.value as MonedaClaux); reset() }}>
-                {MONEDAS_CLAUX.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
-            </div>
+          <div className="input-group">
+            <label htmlFor="sem-destino-moneda">Moneda de destino</label>
+            <select id="sem-destino-moneda" className="input" value={destinoMoneda}
+                    onChange={e => { setDestinoMoneda(e.target.value as MonedaClaux); reset() }}>
+              {MONEDAS_CLAUX.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
           </div>
+        </div>
 
-          <div className="grid-cols-2">
-            <div className="input-group">
-              <label htmlFor="sem-mult">Multiplicar por</label>
-              <input id="sem-mult" className="input" type="number" min="0" step="any"
-                     value={mult} onChange={e => { setMult(e.target.value); reset() }} />
-            </div>
-            <div className="input-group">
-              <label htmlFor="sem-redondeo">Redondear al alza</label>
-              <select id="sem-redondeo" className="input" value={redondeo}
-                      onChange={e => { setRedondeo(e.target.value); reset() }}>
-                <option value="0">Sin redondear</option>
-                <option value="1">A la unidad</option>
-                <option value="5">A múltiplos de 5</option>
-                <option value="10">A múltiplos de 10</option>
-              </select>
-            </div>
+        <div className="grid-cols-2">
+          <div className="input-group">
+            <label htmlFor="sem-mult">Multiplicar por</label>
+            <input id="sem-mult" className="input" type="number" min="0" step="any"
+                   value={mult} onChange={e => { setMult(e.target.value); reset() }} />
           </div>
+          <div className="input-group">
+            <label htmlFor="sem-redondeo">Redondear al alza</label>
+            <select id="sem-redondeo" className="input" value={redondeo}
+                    onChange={e => { setRedondeo(e.target.value); reset() }}>
+              <option value="0">Sin redondear</option>
+              <option value="1">A la unidad</option>
+              <option value="5">A múltiplos de 5</option>
+              <option value="10">A múltiplos de 10</option>
+            </select>
+          </div>
+        </div>
 
-          {filas !== null && (
-            <>
-              <h3 className="mod-paginas-title">
-                {filas.length === 0
-                  ? 'La casilla ya está así: no cambia ningún precio.'
-                  : `Cambian ${filas.length} precio${filas.length !== 1 ? 's' : ''}`}
-              </h3>
+        {filas !== null && (
+          <>
+            <h3 className="mod-paginas-title">
+              {filas.length === 0
+                ? 'La casilla ya está así: no cambia ningún precio.'
+                : `Cambian ${filas.length} precio${filas.length !== 1 ? 's' : ''}`}
+            </h3>
 
-              {filas.length > 0 && (
-                <div className="table-wrapper">
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>Módulo</th>
-                        <th className="col-num">Ahora</th>
-                        <th className="col-num">Quedaría</th>
+            {filas.length > 0 && (
+              <div className="table-wrapper">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Módulo</th>
+                      <th className="col-num">Ahora</th>
+                      <th className="col-num">Quedaría</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filas.map(f => (
+                      <tr key={f.clave}>
+                        <td data-label="Módulo"><span className="cell-clamp">{f.nombre}</span></td>
+                        <td data-label="Ahora" className="col-num table-price">
+                          {importeClaux(f.actual, destinoMoneda)}
+                        </td>
+                        <td data-label="Quedaría" className="col-num table-price">
+                          {importeClaux(f.nuevo, destinoMoneda)}
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {filas.map(f => (
-                        <tr key={f.clave}>
-                          <td data-label="Módulo"><span className="cell-clamp">{f.nombre}</span></td>
-                          <td data-label="Ahora" className="col-num table-price">
-                            {importeClaux(f.actual, destinoMoneda)}
-                          </td>
-                          <td data-label="Quedaría" className="col-num table-price">
-                            {importeClaux(f.nuevo, destinoMoneda)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
-              <ImpactoPrecios impacto={impacto} nombresNivel={nombresNivel} />
-            </>
-          )}
-        </div>
-
-        <div className="modal-footer">
-          <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
-          {filas === null ? (
-            <button type="button" className="btn btn-primary" onClick={handlePrevisualizar} disabled={cargando}>
-              {cargando ? <><span className="spinner" /> Calculando…</> : 'Previsualizar'}
-            </button>
-          ) : (
-            <button type="button" className="btn btn-primary" onClick={handleAplicar}
-                    disabled={aplicando || filas.length === 0}>
-              {aplicando ? <><span className="spinner" /> Aplicando…</> : 'Aplicar'}
-            </button>
-          )}
-        </div>
+            <ImpactoPrecios impacto={impacto} nombresNivel={nombresNivel} />
+          </>
+        )}
       </div>
-    </div>
+
+      <div className="modal-footer">
+        <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
+        {filas === null ? (
+          <button type="button" className="btn btn-primary" onClick={handlePrevisualizar} disabled={cargando}>
+            {cargando ? <><span className="spinner" /> Calculando…</> : 'Previsualizar'}
+          </button>
+        ) : (
+          <button type="button" className="btn btn-primary" onClick={handleAplicar}
+                  disabled={aplicando || filas.length === 0}>
+            {aplicando ? <><span className="spinner" /> Aplicando…</> : 'Aplicar'}
+          </button>
+        )}
+      </div>
+    </ModalShell>
   )
 
   return (
     <>
       <button className="btn btn-secondary btn-sm" onClick={() => setOpen(true)}>Sembrar precios</button>
-      {mounted && open && createPortal(modal, document.body)}
+      {open && modal}
     </>
   )
 }

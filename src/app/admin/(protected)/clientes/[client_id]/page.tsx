@@ -17,22 +17,13 @@ import PagosClienteTabla, { type PagoFicha } from './PagosClienteTabla'
 import { ESTADO_BADGE } from '@/lib/badges'
 import { puedeAcceder } from '@/lib/roles'
 import { getSetting } from '@/app/actions/settings'
-import { suscripcionLabel, precioMensualEfectivo, esSocioHoy, monedaDelCliente } from '@/lib/billing'
+import { suscripcionLabel, precioMensualEfectivo, esSocioHoy, monedaDelCliente, METODO_PAGO_LABEL, COLUMNAS_PAGO } from '@/lib/billing'
+import { TOPE_VER_MAS } from '@/lib/listados'
 import { nombresDeNiveles } from '@/lib/niveles-server'
 import { listarFirmasCliente } from '@/app/actions/documentos-admin'
 import { COLUMNAS_PRECIO, normalizarNivel } from '@/lib/niveles'
 import { importeClaux, normalizarMonedaClaux, type MonedaClaux } from '@/lib/moneda-claux'
-
-function periodoIa(): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Havana', year: 'numeric', month: '2-digit' })
-    .format(new Date()).slice(0, 7)
-}
-
-const METODO_LABEL: Record<string, string> = {
-  tropipay:      'TropiPay',
-  transferencia: 'Transferencia',
-  efectivo:      'Efectivo',
-}
+import { mesEnTz } from '@/lib/fecha-tz'
 
 const MOTIVOS_GRACIA: Record<string, string> = {
   descuento: 'Descuento comercial',
@@ -48,6 +39,12 @@ const MOTIVOS_GRACIA: Record<string, string> = {
  * y el cliente puede pagar en una un mes y en la otra al siguiente. Devuelve solo
  * las monedas con movimiento, de mayor a menor.
  */
+/** Lo que pinta esta ficha: la fila de la tabla más el período que enseña el resumen. */
+type PagoFichaConPeriodo = PagoFicha & {
+  fecha_inicio_periodo: string | null
+  fecha_fin_periodo:    string | null
+}
+
 function sumarPorMoneda(
   filas: { monto: number | null; moneda: string | null }[],
 ): [MonedaClaux, number][] {
@@ -86,13 +83,16 @@ export default async function ClienteDetallePage({
   const tabPedida = typeof sp.tab === 'string' ? sp.tab : undefined
   const supabase = await createClient()
 
-  const [{ data: cliente }, { data: pagos }, { data: catalogo }, { data: usuarios }, { data: presupuestosOk }, nombresNivel, firmas] = await Promise.all([
+  const [{ data: cliente }, { data: pagosRaw }, { data: catalogo }, { data: usuarios }, { data: presupuestosOk }, nombresNivel, firmas] = await Promise.all([
     supabase.from('clients').select('*').eq('client_id', client_id).single(),
     supabase
       .from('payments')
-      .select('*')
+      .select(COLUMNAS_PAGO)
       .eq('client_id', client_id)
-      .order('fecha', { ascending: false }),
+      .order('fecha', { ascending: false })
+      // Un cliente con facturación mensual son doce filas al año: el techo no está
+      // aquí para recortar, está para que no dependa de lo que decida PostgREST.
+      .limit(TOPE_VER_MAS),
     supabase
       .from('modulos_catalogo')
       .select(`clave, nombre, descripcion, ${COLUMNAS_PRECIO}, es_base, tipo`)
@@ -126,13 +126,17 @@ export default async function ClienteDetallePage({
   const precioMes   = precioMensualEfectivo(cliente)
   const suscripcion = suscripcionLabel(precioMes, cliente.ciclo_facturacion ?? 'mensual', descuentoAnual, moneda)
   const cuotaCatalogo = Number((moneda === 'EUR' ? cliente.precio_mensual_eur : cliente.precio_mensual_usd) ?? 0) || 0
-  const confirmados = (pagos ?? []).filter(p => p.estado !== 'por_confirmar')
+  // La lista de columnas es una constante, así que el cliente de Supabase no puede
+  // inferir la forma de la fila: se declara aquí, una vez, y no en cada uso. El
+  // resumen de la derecha enseña además el período cubierto, que la tabla no lleva.
+  const pagos = (pagosRaw ?? []) as unknown as PagoFichaConPeriodo[]
+  const confirmados = pagos.filter(p => p.estado !== 'por_confirmar')
   const totalPagado = sumarPorMoneda(confirmados)
-  const pendienteConfirmar = sumarPorMoneda((pagos ?? []).filter(p => p.estado === 'por_confirmar'))
+  const pendienteConfirmar = sumarPorMoneda(pagos.filter(p => p.estado === 'por_confirmar'))
   const ultimoPago  = confirmados[0] ?? null
   // Lo que espera en cada pestaña. Son los únicos números que se pintan en las
   // solapas: si no hay nada pendiente no hay número (ver `ClienteTabs`).
-  const pagosPorConfirmar = (pagos ?? []).filter(p => p.estado === 'por_confirmar').length
+  const pagosPorConfirmar = pagos.filter(p => p.estado === 'por_confirmar').length
   const tiposFirmados = new Set(firmas.map(f => f.tipo))
   const docsPendientes = DOCS_LEGALES.filter(d => !tiposFirmados.has(d.tipo)).length
   const presupuestosRef = (presupuestosOk ?? []).map(p => ({
@@ -156,7 +160,7 @@ export default async function ClienteDetallePage({
       : parseInt(await getSetting('ia_cupo_conversaciones', '500'), 10) || 500
     const { data: uso } = await supabase
       .from('ia_uso').select('conversaciones, tokens_in, tokens_out')
-      .eq('client_id', client_id).eq('periodo', periodoIa()).maybeSingle()
+      .eq('client_id', client_id).eq('periodo', mesEnTz()).maybeSingle()
     const cfg = (cliente.ia_config && typeof cliente.ia_config === 'object') ? cliente.ia_config as Record<string, unknown> : {}
     const ov = Number(cfg.cupo)
     iaData = {
@@ -362,7 +366,7 @@ export default async function ClienteDetallePage({
               cupoOverride={iaData.cupoOverride}
               conversaciones={iaData.conversaciones}
               tokens={iaData.tokens}
-              periodo={periodoIa()}
+              periodo={mesEnTz()}
             />
           )}
           </>
@@ -377,18 +381,18 @@ export default async function ClienteDetallePage({
               <div className="card-header">
                 <h2 className="card-title">Historial de pagos</h2>
                 <span className="badge badge-neutral">
-                  {pagos?.length ?? 0} pago{pagos?.length !== 1 ? 's' : ''}
+                  {pagos.length} pago{pagos.length !== 1 ? 's' : ''}
                 </span>
               </div>
 
-              {!pagos || pagos.length === 0 ? (
+              {pagos.length === 0 ? (
                 <div className="table-empty table-empty-sm">
                   <CreditCard size={36} strokeWidth={1.5} />
                   <p>Sin pagos registrados aún.</p>
                 </div>
               ) : (
                 <PagosClienteTabla
-                  pagos={pagos as PagoFicha[]}
+                  pagos={pagos}
                   clienteNombre={cliente.nombre_empresa ?? client_id}
                   presupuestos={presupuestosRef}
                   puedeGestionar={puedePagos}
@@ -421,7 +425,7 @@ export default async function ClienteDetallePage({
                 <span className="detail-field-value">
                   {ultimoPago ? (
                     <span className="pago-detalle-stack">
-                      <span><strong>{importeClaux(ultimoPago.monto, ultimoPago.moneda)}</strong> · {METODO_LABEL[ultimoPago.metodo] ?? ultimoPago.metodo}</span>
+                      <span><strong>{importeClaux(ultimoPago.monto, ultimoPago.moneda)}</strong> · {METODO_PAGO_LABEL[ultimoPago.metodo ?? ''] ?? ultimoPago.metodo}</span>
                       <span className="text-xs-muted">
                         Registrado: {formatFecha(ultimoPago.fecha)}
                       </span>
@@ -437,12 +441,12 @@ export default async function ClienteDetallePage({
               <div className="detail-field">
                 <span className="detail-field-label">Método preferido</span>
                 <span className="detail-field-value">
-                  {ultimoPago ? (METODO_LABEL[ultimoPago.metodo] ?? ultimoPago.metodo ?? '—') : '—'}
+                  {ultimoPago ? (METODO_PAGO_LABEL[ultimoPago.metodo ?? ''] ?? ultimoPago.metodo ?? '—') : '—'}
                 </span>
               </div>
               <div className="detail-field">
                 <span className="detail-field-label">Número de pagos</span>
-                <span className="detail-field-value">{pagos?.length ?? 0}</span>
+                <span className="detail-field-value">{pagos.length}</span>
               </div>
             </div>
 
@@ -455,7 +459,7 @@ export default async function ClienteDetallePage({
             <PresupuestosClienteCard
               clientId={client_id}
               nombreEmpresa={cliente.nombre_empresa ?? client_id}
-              tienePagoConfiguracion={(pagos ?? []).some(p => p.concepto === 'configuracion')}
+              tienePagoConfiguracion={pagos.some(p => p.concepto === 'configuracion')}
               catalogo={catalogo ?? []}
               nombresNivel={nombresNivel}
               descuentoAnualPct={descuentoAnual}

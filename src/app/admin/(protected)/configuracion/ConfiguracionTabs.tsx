@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Tabs from '@/components/Tabs'
 
-type TabId = 'cuenta' | 'facturacion' | 'presupuesto' | 'legales'
+type TabId = 'proveedor' | 'facturacion' | 'presupuesto' | 'legales'
 
 /**
  * Envoltorio cliente de la página de Configuración: gestiona la pestaña activa
@@ -11,12 +11,16 @@ type TabId = 'cuenta' | 'facturacion' | 'presupuesto' | 'legales'
  * Server Component (page.tsx) y llegan como props ReactNode.
  */
 export default function ConfiguracionTabs({
-  cuenta,
+  proveedor,
   facturacion,
   presupuesto,
   legales,
 }: {
-  cuenta: React.ReactNode
+  /** La identificación legal de CLAUX: es lo que sale impreso en el contrato y el NDA
+   *  que firma el cliente. Aquí estuvo también el perfil de quien mira y su contraseña,
+   *  que no son configuración de CLAUX sino datos propios: viven en `/admin/perfil`,
+   *  colgando del menú de cuenta como en el portal. */
+  proveedor: React.ReactNode
   /** Lo recurrente: descuento anual y días de prueba. */
   facturacion: React.ReactNode
   /** Pestaña propia: los precios de la instalación son una tabla larga y no tienen nada que
@@ -25,7 +29,7 @@ export default function ConfiguracionTabs({
   presupuesto: React.ReactNode
   legales: React.ReactNode
 }) {
-  const [tab, setTab] = useState<TabId>('cuenta')
+  const [tab, setTab] = useState<TabId>('proveedor')
 
   return (
     <>
@@ -34,14 +38,14 @@ export default function ConfiguracionTabs({
         active={tab}
         onChange={setTab}
         tabs={[
-          { id: 'cuenta', label: 'Cuenta' },
+          { id: 'proveedor', label: 'Proveedor' },
           { id: 'facturacion', label: 'Facturación' },
           { id: 'presupuesto', label: 'Presupuesto' },
           { id: 'legales', label: 'Textos legales' },
         ]}
       />
       <div className="config-panel">
-        {tab === 'cuenta' && cuenta}
+        {tab === 'proveedor' && proveedor}
         {tab === 'facturacion' && facturacion}
         {tab === 'presupuesto' && presupuesto}
         {tab === 'legales' && legales}

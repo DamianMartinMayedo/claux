@@ -1,11 +1,8 @@
 'use client'
 
-import { X } from 'lucide-react'
 import { useState, useCallback } from 'react'
-import { createPortal } from 'react-dom'
-import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import FormHelp from '@/components/portal/FormHelp'
-import { useMounted } from '@/lib/use-mounted'
+import ModalShell from '@/components/portal/ModalShell'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
 import {
   crearUsuarioAdmin,
@@ -28,7 +25,6 @@ export default function UsuarioModal({
   onClose: (guardado: boolean) => void
 }) {
   const editando = !!usuario
-  const mounted = useMounted()
 
   const [nombre, setNombre]     = useState(usuario?.nombre ?? '')
   const [email, setEmail]       = useState(usuario?.email ?? '')
@@ -42,7 +38,6 @@ export default function UsuarioModal({
   const [loading, setLoading]   = useState(false)
 
   const close = useCallback(() => onClose(false), [onClose])
-  useModalKeyboard(true, close)
 
   function togglePermiso(key: SeccionKey) {
     setPermisos(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
@@ -72,123 +67,119 @@ export default function UsuarioModal({
   }
 
   const modal = (
-    <div className="modal-backdrop">
-      <div className="modal modal-560">
-        <div className="modal-header">
-          <h2 className="modal-title">{editando ? 'Editar usuario' : 'Nuevo usuario'}</h2>
-          <button onClick={close} className="modal-close" aria-label="Cerrar">
-            <X size={18} />
-          </button>
+    <ModalShell
+      title={editando ? 'Editar usuario' : 'Nuevo usuario'}
+      size="modal-560"
+      onClose={close}
+    >
+
+      <form onSubmit={handleSubmit}>
+        <div className="modal-body">
+          <div className="input-group">
+            <label htmlFor="u-nombre">Nombre <span className="required">*</span></label>
+            <input id="u-nombre" className="input" required value={nombre}
+              onChange={e => setNombre(e.target.value)} placeholder="Ej: Claudia" />
+          </div>
+
+          <div className="input-group">
+            <div className="form-label-with-help">
+              <label htmlFor="u-email">Correo <span className="required">*</span></label>
+              {editando && <FormHelp text="El correo no se puede cambiar." label="Por qué no se puede cambiar el correo" />}
+            </div>
+            <input id="u-email" type="email" className="input" required value={email}
+              disabled={editando}
+              onChange={e => setEmail(e.target.value)} placeholder="persona@claux.es" />
+          </div>
+
+          <div className="seg-field">
+            <span className="seg-field-label">Rol</span>
+            <div className="seg">
+              {(['vendedor', 'super_admin'] as const).map(r => (
+                <label key={r} className="seg-opt">
+                  <input type="radio" name="rol" value={r} checked={rol === r} onChange={() => setRol(r)} />
+                  <span>{ROL_LABEL[r]}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="input-group">
+            <div className="form-label-with-help">
+              <label htmlFor="u-pass">
+                {editando ? 'Nueva contraseña (opcional)' : 'Contraseña'} {!editando && <span className="required">*</span>}
+              </label>
+              <FormHelp
+                text={editando
+                  ? 'Si la rellenas, se regenera la contraseña de acceso de este usuario.'
+                  : 'Se la comunicas a la persona; podrá cambiarla luego.'}
+                label="Información sobre la contraseña" />
+            </div>
+            <div className="grid-cols-2">
+              <input id="u-pass" type="text" className="input" value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder={editando ? 'Dejar vacío para no cambiarla' : 'Mínimo 8 caracteres'} />
+              <button type="button" className="btn btn-secondary" onClick={() => setPassword(generarPassword())}>
+                Generar
+              </button>
+            </div>
+          </div>
+
+          {editando && (
+            <label className="checkbox-group">
+              <input type="checkbox" checked={activo} onChange={e => setActivo(e.target.checked)} />
+              <span className="checkbox-label">Usuario activo (puede iniciar sesión)</span>
+            </label>
+          )}
+
+          {rol === 'vendedor' ? (
+            <div className="input-group">
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAvanzado(v => !v)}>
+                {avanzado ? 'Ocultar configuración avanzada' : 'Configuración avanzada de accesos'}
+              </button>
+              <span className="input-hint">
+                Por defecto: Solicitudes, Presupuestos y Clientes (solo lectura). Amplía solo
+                si hace falta, o quítalas todas para que solo lea el manual.
+              </span>
+              {avanzado && (
+                <div className="mod-list">
+                  <p className="mod-list-label">Secciones a las que puede acceder</p>
+                  {SECCIONES.map(s => (
+                    <label key={s.key} className="checkbox-group">
+                      <input type="checkbox" checked={permisos.includes(s.key)} onChange={() => togglePermiso(s.key)} />
+                      <span className="checkbox-label">{s.label}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="alert alert-info">
+              Un <strong>Super Admin</strong> tiene acceso total al panel.
+            </div>
+          )}
+
+          {/* Así se da de alta a quien revende CLAUX de puertas afuera: mismo rol
+              que el vendedor del equipo, sin ninguna sección marcada. */}
+          {rol === 'vendedor' && permisos.length === 0 && (
+            <div className="alert alert-info">
+              Sin ninguna sección, este vendedor <strong>no entra al panel</strong>: entra por{' '}
+              <code>claux.es/partners</code> con este mismo correo y solo lee el manual en su
+              capa, sin costes, márgenes ni hoja de ruta.
+            </div>
+          )}
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="modal-body">
-            <div className="input-group">
-              <label htmlFor="u-nombre">Nombre <span className="required">*</span></label>
-              <input id="u-nombre" className="input" required value={nombre}
-                onChange={e => setNombre(e.target.value)} placeholder="Ej: Claudia" />
-            </div>
-
-            <div className="input-group">
-              <div className="form-label-with-help">
-                <label htmlFor="u-email">Correo <span className="required">*</span></label>
-                {editando && <FormHelp text="El correo no se puede cambiar." label="Por qué no se puede cambiar el correo" />}
-              </div>
-              <input id="u-email" type="email" className="input" required value={email}
-                disabled={editando}
-                onChange={e => setEmail(e.target.value)} placeholder="persona@claux.es" />
-            </div>
-
-            <div className="seg-field">
-              <span className="seg-field-label">Rol</span>
-              <div className="seg">
-                {(['vendedor', 'super_admin'] as const).map(r => (
-                  <label key={r} className="seg-opt">
-                    <input type="radio" name="rol" value={r} checked={rol === r} onChange={() => setRol(r)} />
-                    <span>{ROL_LABEL[r]}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="input-group">
-              <div className="form-label-with-help">
-                <label htmlFor="u-pass">
-                  {editando ? 'Nueva contraseña (opcional)' : 'Contraseña'} {!editando && <span className="required">*</span>}
-                </label>
-                <FormHelp
-                  text={editando
-                    ? 'Si la rellenas, se regenera la contraseña de acceso de este usuario.'
-                    : 'Se la comunicas a la persona; podrá cambiarla luego.'}
-                  label="Información sobre la contraseña" />
-              </div>
-              <div className="grid-cols-2">
-                <input id="u-pass" type="text" className="input" value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder={editando ? 'Dejar vacío para no cambiarla' : 'Mínimo 8 caracteres'} />
-                <button type="button" className="btn btn-secondary" onClick={() => setPassword(generarPassword())}>
-                  Generar
-                </button>
-              </div>
-            </div>
-
-            {editando && (
-              <label className="checkbox-group">
-                <input type="checkbox" checked={activo} onChange={e => setActivo(e.target.checked)} />
-                <span className="checkbox-label">Usuario activo (puede iniciar sesión)</span>
-              </label>
-            )}
-
-            {rol === 'vendedor' ? (
-              <div className="input-group">
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAvanzado(v => !v)}>
-                  {avanzado ? 'Ocultar configuración avanzada' : 'Configuración avanzada de accesos'}
-                </button>
-                <span className="input-hint">
-                  Por defecto: Solicitudes, Presupuestos y Clientes (solo lectura). Amplía solo
-                  si hace falta, o quítalas todas para que solo lea el manual.
-                </span>
-                {avanzado && (
-                  <div className="mod-list">
-                    <p className="mod-list-label">Secciones a las que puede acceder</p>
-                    {SECCIONES.map(s => (
-                      <label key={s.key} className="checkbox-group">
-                        <input type="checkbox" checked={permisos.includes(s.key)} onChange={() => togglePermiso(s.key)} />
-                        <span className="checkbox-label">{s.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="alert alert-info">
-                Un <strong>Super Admin</strong> tiene acceso total al panel.
-              </div>
-            )}
-
-            {/* Así se da de alta a quien revende CLAUX de puertas afuera: mismo rol
-                que el vendedor del equipo, sin ninguna sección marcada. */}
-            {rol === 'vendedor' && permisos.length === 0 && (
-              <div className="alert alert-info">
-                Sin ninguna sección, este vendedor <strong>no entra al panel</strong>: entra por{' '}
-                <code>claux.es/partners</code> con este mismo correo y solo lee el manual en su
-                capa, sin costes, márgenes ni hoja de ruta.
-              </div>
-            )}
-          </div>
-
-          <div className="modal-footer">
-            <button type="button" className="btn btn-secondary" onClick={close}>Cancelar</button>
-            <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading
-                ? <><span className="spinner" /> Guardando...</>
-                : (editando ? 'Guardar cambios' : 'Crear usuario')}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className="modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={close}>Cancelar</button>
+          <button type="submit" className="btn btn-primary" disabled={loading}>
+            {loading
+              ? <><span className="spinner" /> Guardando...</>
+              : (editando ? 'Guardar cambios' : 'Crear usuario')}
+          </button>
+        </div>
+      </form>
+    </ModalShell>
   )
 
-  return mounted ? createPortal(modal, document.body) : null
+  return modal
 }

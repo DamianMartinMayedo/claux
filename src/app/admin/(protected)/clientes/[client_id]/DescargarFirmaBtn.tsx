@@ -22,7 +22,7 @@ export default function DescargarFirmaBtn({
   }
 
   return (
-    <button type="button" className="ter-action-btn" disabled={isPending} onClick={handleClick} title="Descargar PDF firmado">
+    <button type="button" className="icon-btn" disabled={isPending} onClick={handleClick} title="Descargar PDF firmado">
       <Download size={16} />
     </button>
   )

@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { obtenerContextoAdmin } from '@/lib/roles-server'
 import { puedeAcceder, primeraRutaPermitida } from '@/lib/roles'
 import { getSetting } from '@/app/actions/settings'
+import { CORREO_POR_DEFECTO } from '@/lib/settings'
 import { listarPlantillas } from '@/app/actions/email-plantillas'
 import { listarAvisos, listarPreferenciasAvisos } from '@/app/actions/admin/notificaciones'
 import { tiposVisibles } from '@/lib/notificaciones/admin/visibilidad'
@@ -27,11 +28,11 @@ export default async function NotificacionesPage() {
 
   const [diasAviso, emailAvisosInternos, emailAvisosLeads, emailContratacion, plantillas, avisos, preferencias, ...toggles] = await Promise.all([
     getSetting('dias_aviso', '5').then(v => parseInt(v, 10)),
-    getSetting('email_avisos_internos', 'contacto@claux.es'),
+    getSetting('email_avisos_internos', CORREO_POR_DEFECTO.email_avisos_internos),
     // Buzones que reciben SOLO los avisos de lead. Vacío = nadie más.
     getSetting('email_avisos_leads', ''),
     // Buzón comercial al que escribe el cliente desde el banner del dashboard.
-    getSetting('email_contratacion', 'contacto@claux.es'),
+    getSetting('email_contratacion', CORREO_POR_DEFECTO.email_contratacion),
     listarPlantillas(),
     listarAvisos('todas', 100),
     // Devuelve [] si no es super_admin; la pestaña tampoco se ofrece.

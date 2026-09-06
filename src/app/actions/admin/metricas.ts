@@ -2,6 +2,8 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { COLUMNAS_PRECIO, precioModulo, type ModuloPrecios } from '@/lib/niveles'
 import { normalizarMonedaClaux } from '@/lib/moneda-claux'
+import { hoyEnTz, sumarDias, mesEnTz } from '@/lib/fecha-tz'
+import { TOPE_VER_MAS } from '@/lib/listados'
 
 // Módulo server-only: lecturas agregadas para las métricas del admin. Lo
 // consumen páginas ya protegidas (requireAccesoPagina('metricas') /
@@ -24,15 +26,12 @@ const TABLAS_CREACION: { modulo: string; label: string; tabla: string }[] = [
   { modulo: 'caja',           label: 'Tickets de caja',          tabla: 'caja_tickets' },
 ]
 
+// Corte de la ventana ("últimos 30 días"), en la zona del negocio. Con
+// `new Date()` + `toISOString()` el corte se hacía en UTC: a partir de las 19:00
+// en Cuba el servidor ya estaba en el día siguiente y la ventana se desplazaba
+// un día entero, justo en las horas de más actividad de un restaurante.
 function diaHace(dias: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() - dias)
-  return d.toISOString().slice(0, 10)
-}
-
-function periodoActual(): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Havana', year: 'numeric', month: '2-digit' })
-    .format(new Date()).slice(0, 7)
+  return sumarDias(hoyEnTz(), -dias)
 }
 
 export type AdopcionModulo = {
@@ -69,10 +68,15 @@ export async function obtenerMetricasGenerales(): Promise<MetricasGenerales> {
   const s7  = diaHace(7)
 
   const [{ data: clientes }, { data: catalogo }, { data: uso }, { data: ia }] = await Promise.all([
-    db.from('clients').select('client_id, estado, sector, modulos_activos, nivel, moneda_facturacion'),
+    // TECHO EXPLÍCITO. Estas cuatro consultas ALIMENTAN SUMAS, y una suma a la que
+    // le faltan filas no se ve rota: se ve más pequeña. Sin `.limit()` el corte lo
+    // pone PostgREST, y el día que CLAUX pase de ese número las métricas dirían
+    // menos ingreso y menos adopción sin que nada avise.
+    db.from('clients').select('client_id, estado, sector, modulos_activos, nivel, moneda_facturacion')
+      .limit(TOPE_VER_MAS),
     db.from('modulos_catalogo').select(`clave, nombre, tipo, ${COLUMNAS_PRECIO}, orden`).eq('activo', true).order('orden'),
-    db.from('uso_portal').select('client_id, user_id, modulo, hits, dia').gte('dia', s30),
-    db.from('ia_uso').select('conversaciones, tokens_in, tokens_out').eq('periodo', periodoActual()),
+    db.from('uso_portal').select('client_id, user_id, modulo, hits, dia').gte('dia', s30).limit(TOPE_VER_MAS),
+    db.from('ia_uso').select('conversaciones, tokens_in, tokens_out').eq('periodo', mesEnTz()).limit(TOPE_VER_MAS),
   ])
 
   const clientesArr = clientes ?? []

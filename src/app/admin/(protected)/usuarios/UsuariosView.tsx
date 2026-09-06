@@ -1,10 +1,13 @@
 'use client'
 
-import { AtSign, KeyRound, Pencil, Plus, Trash2, UserCog, X } from 'lucide-react'
+import { AtSign, KeyRound, Pencil, Plus, Trash2, UserCog } from 'lucide-react'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { RowActions } from '@/components/portal/RowActions'
+import { ConfirmDialog } from '@/components/portal/Dialog'
+import ModalShell from '@/components/portal/ModalShell'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { useOrden, ThOrden, type ColumnasOrden } from '@/components/TableSort'
 import { useToast } from '@/app/contexts/ToastContext'
 import {
   eliminarUsuarioAdmin,
@@ -19,6 +22,14 @@ import { ROL_LABEL, type RolAdmin } from '@/lib/roles'
 const ROL_BADGE: Record<RolAdmin, string> = {
   super_admin: 'badge-info',
   vendedor:    'badge-neutral',
+}
+
+const COLUMNAS: ColumnasOrden<UsuarioAdmin> = {
+  nombre: { label: 'Nombre', valor: u => u.nombre },
+  email:  { label: 'Correo', valor: u => u.email },
+  rol:    { label: 'Rol',    valor: u => ROL_LABEL[u.rol] },
+  estado: { label: 'Estado', valor: u => u.activo },
+  alta:   { label: 'Alta',   valor: u => u.created_at },
 }
 
 function fmtFecha(iso: string): string {
@@ -41,7 +52,9 @@ export default function UsuariosView({ usuarios }: { usuarios: UsuarioAdmin[] })
   const [aResetear, setAResetear]   = useState<UsuarioAdmin | null>(null)
   const [nuevaPass, setNuevaPass]   = useState('')
   const [reseteando, setReseteando] = useState(false)
-  const { pageItems, ...pag } = usePagination(usuarios)
+  // Por nombre: una lista de personas se busca por el nombre, no por cuándo se dio de alta.
+  const orden = useOrden(usuarios, COLUMNAS, { clave: 'nombre', dir: 'asc' })
+  const { pageItems, ...pag } = usePagination(orden.filas)
 
   function cerrarModal(guardado: boolean) {
     setModalNuevo(false)
@@ -104,18 +117,21 @@ export default function UsuariosView({ usuarios }: { usuarios: UsuarioAdmin[] })
             <table className="table">
               <thead>
                 <tr>
-                  <th>Nombre</th>
-                  <th>Correo</th>
-                  <th>Rol</th>
-                  <th>Estado</th>
-                  <th>Alta</th>
+                  <ThOrden orden={orden} clave="nombre" />
+                  <ThOrden orden={orden} clave="email" />
+                  <ThOrden orden={orden} clave="rol" />
+                  <ThOrden orden={orden} clave="estado" />
+                  <ThOrden orden={orden} clave="alta" />
                   <th className="col-actions"></th>
                 </tr>
               </thead>
               <tbody>
                 {pageItems.map(u => (
-                  <tr key={u.email} className="table-row-clickable"
-                    onClick={() => u.gestionable ? setEditando(u) : abrirResetear(u)}>
+                  <tr
+                    key={u.email}
+                    className={u.gestionable ? 'table-row-clickable' : undefined}
+                    onClick={u.gestionable ? () => setEditando(u) : undefined}
+                  >
                     <td data-label="Nombre">
                       {u.nombre}
                       {u.esBootstrap && <div className="table-cell-sub">Cuenta base</div>}
@@ -136,7 +152,7 @@ export default function UsuariosView({ usuarios }: { usuarios: UsuarioAdmin[] })
                       </span>
                     </td>
                     <td data-label="Alta" className="table-muted">{fmtFecha(u.created_at)}</td>
-                    <td className="col-actions">
+                    <td className="col-actions" onClick={e => e.stopPropagation()}>
                       <RowActions>
                         {u.gestionable && (
                           <button className="row-actions-item" onClick={() => setEditando(u)}>
@@ -177,63 +193,48 @@ export default function UsuariosView({ usuarios }: { usuarios: UsuarioAdmin[] })
       )}
 
       {aEliminar && (
-        <div className="modal-backdrop">
-          <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="modal-title">Eliminar usuario</h2>
-              <button onClick={() => setAEliminar(null)} className="modal-close" aria-label="Cerrar">
-                <X size={18} />
-              </button>
-            </div>
-            <div className="modal-body">
-              <p className="text-sm-muted">
-                ¿Seguro que quieres eliminar a <strong>{aEliminar.nombre}</strong> ({aEliminar.email})?
-                Se borrará también su cuenta de acceso. Esta acción no se puede deshacer.
-              </p>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setAEliminar(null)}>Cancelar</button>
-              <button className="btn btn-danger" disabled={borrando} onClick={confirmarEliminar}>
-                {borrando ? <><span className="spinner" /> Eliminando...</> : 'Eliminar'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          danger
+          title="Eliminar usuario"
+          body={<>
+            Se elimina a <strong>{aEliminar.nombre}</strong> ({aEliminar.email}) y su cuenta
+            de acceso. No se puede deshacer.
+          </>}
+          confirmLabel="Eliminar"
+          pendingLabel="Eliminando…"
+          pending={borrando}
+          onConfirm={confirmarEliminar}
+          onCancel={() => setAEliminar(null)}
+        />
       )}
 
       {aResetear && (
-        <div className="modal-backdrop">
-          <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="modal-title">Regenerar contraseña</h2>
-              <button onClick={() => setAResetear(null)} className="modal-close" aria-label="Cerrar">
-                <X size={18} />
-              </button>
-            </div>
-            <div className="modal-body">
-              <p className="text-sm-muted">
-                Nueva contraseña de acceso para <strong>{aResetear.nombre}</strong> ({aResetear.email}).
-              </p>
-              <div className="input-group">
-                <label htmlFor="reset-pass">Contraseña</label>
-                <div className="grid-cols-2">
-                  <input id="reset-pass" type="text" className="input" value={nuevaPass}
-                    onChange={e => setNuevaPass(e.target.value)} placeholder="Mínimo 8 caracteres" />
-                  <button type="button" className="btn btn-secondary" onClick={() => setNuevaPass(generarPassword())}>
-                    Generar
-                  </button>
-                </div>
-                <span className="input-hint">Comunícasela al usuario; podrá cambiarla luego.</span>
+        <ModalShell
+          title="Regenerar contraseña"
+          subtitle={`${aResetear.nombre} · ${aResetear.email}`}
+          size="modal-sm"
+          onClose={() => setAResetear(null)}
+        >
+          <div className="modal-body">
+            <div className="input-group">
+              <label htmlFor="reset-pass">Contraseña</label>
+              <div className="grid-cols-2">
+                <input id="reset-pass" type="text" className="input" value={nuevaPass}
+                  onChange={e => setNuevaPass(e.target.value)} placeholder="Mínimo 8 caracteres" />
+                <button type="button" className="btn btn-secondary" onClick={() => setNuevaPass(generarPassword())}>
+                  Generar
+                </button>
               </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setAResetear(null)}>Cancelar</button>
-              <button className="btn btn-primary" disabled={reseteando || nuevaPass.length < 8} onClick={confirmarResetear}>
-                {reseteando ? <><span className="spinner" /> Guardando...</> : 'Guardar contraseña'}
-              </button>
+              <span className="input-hint">Comunícasela al usuario; podrá cambiarla luego.</span>
             </div>
           </div>
-        </div>
+          <div className="modal-footer">
+            <button className="btn btn-secondary" onClick={() => setAResetear(null)}>Cancelar</button>
+            <button className="btn btn-primary" disabled={reseteando || nuevaPass.length < 8} onClick={confirmarResetear}>
+              {reseteando ? <><span className="spinner" /> Guardando...</> : 'Guardar contraseña'}
+            </button>
+          </div>
+        </ModalShell>
       )}
     </div>
   )

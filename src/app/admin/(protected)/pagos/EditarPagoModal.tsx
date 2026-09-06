@@ -1,12 +1,11 @@
 'use client'
 
-import { Pencil, X } from 'lucide-react'
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { editarPago } from '@/app/actions/pagos'
 import { toastError, toastSuccess } from '@/app/contexts/ToastContext'
-import { useModalKeyboard } from '@/lib/use-modal-keyboard'
+import ModalShell from '@/components/portal/ModalShell'
 import { useMounted } from '@/lib/use-mounted'
 import { MONEDAS_CLAUX, normalizarMonedaClaux, type MonedaClaux } from '@/lib/moneda-claux'
 
@@ -34,16 +33,25 @@ function formatDateES(dateStr: string): string {
   })
 }
 
+/**
+ * Editar un pago. Lo abre y lo cierra QUIEN LO USA (`onClose`), no él mismo: el
+ * disparador ya no es un botón-icono suelto en la celda sino una entrada del menú
+ * `<RowActions>` de la fila, y un componente que se pinta a sí mismo el botón no
+ * cabe dentro de ese menú. El estado inicial sale del `pago` que recibe, así que
+ * montarlo YA es abrirlo con los valores puestos — el `handleOpen` que reseteaba
+ * los campos a mano sobraba.
+ */
 export default function EditarPagoModal({
   pago,
   clienteNombre,
+  onClose,
 }: {
   pago: Pago
   clienteNombre: string
+  onClose: () => void
 }) {
   const esConfiguracion = pago.concepto === 'configuracion'
 
-  const [open, setOpen]     = useState(false)
   const [loading, setLoading] = useState(false)
   const mounted = useMounted()
 
@@ -57,24 +65,6 @@ export default function EditarPagoModal({
   const formRef = useRef<HTMLFormElement>(null)
   const router  = useRouter()
 
-  const handleClose = useCallback(() => {
-    setOpen(false); 
-  }, [])
-
-  useModalKeyboard(open, handleClose)
-
-  function handleOpen() {
-    // Resetear a valores actuales del pago
-    setMonto(String(pago.monto))
-    setMoneda(normalizarMonedaClaux(pago.moneda))
-    setMetodo(pago.metodo)
-    setFechaInicio(toYMD(pago.fecha_inicio_periodo))
-    setFechaFin(toYMD(pago.fecha_fin_periodo))
-    setNotas(pago.notas ?? '')
-    
-    setOpen(true)
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
@@ -84,159 +74,139 @@ export default function EditarPagoModal({
     toastSuccess(res.esUltimo
       ? 'Pago actualizado · Expiración sincronizada'
       : 'Pago actualizado')
-    setTimeout(() => { handleClose(); router.refresh() }, 1400)
+    // Se cierra al instante. Antes había un `setTimeout` de 1,4 s antes de cerrar y
+    // recargar: en una conexión lenta eso es un modal que no responde al guardar, y
+    // el aviso de que salió bien ya lo da el toast.
+    onClose()
+    router.refresh()
   }
 
   const modal = (
-    <div
-      className="modal-backdrop"
-     
+    <ModalShell
+      size="modal-520"
+      onClose={onClose}
+      title="Editar pago"
+      subtitle={`${pago.pago_id} · ${clienteNombre}`}
     >
-      <div className="modal modal-520">
-        <div className="modal-header">
-          <div>
-            <h2 className="modal-title">Editar pago</h2>
-            <p className="text-xs-muted">
-              {pago.pago_id} · {clienteNombre}
-            </p>
-          </div>
-          <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
-            <X size={18} />
-          </button>
-        </div>
+      <form ref={formRef} onSubmit={handleSubmit}>
+        <div className="modal-body">
+          <input type="hidden" name="pago_id" value={pago.pago_id} />
 
-        <form ref={formRef} onSubmit={handleSubmit}>
-          <div className="modal-body">
-            <input type="hidden" name="pago_id" value={pago.pago_id} />
-
-            {/* Concepto + Método */}
-            <div className="grid-cols-2">
-              <div className="input-group">
-                <label>Concepto</label>
-                <div className="input input-display">
-                  {esConfiguracion ? 'Configuración (pago único)' : 'Suscripción'}
-                </div>
-              </div>
-              <div className="input-group">
-                <label>Método <span className="required">*</span></label>
-                <select
-                  name="metodo"
-                  className="input"
-                  required
-                  value={metodo}
-                  onChange={e => setMetodo(e.target.value)}
-                >
-                  <option value="tropipay">TropiPay</option>
-                  <option value="transferencia">Transferencia</option>
-                  <option value="efectivo">Efectivo</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Monto y moneda: el importe sin su moneda no dice cuánto se cobró */}
-            <div className="grid-cols-2">
-              <div className="input-group">
-                <label>Monto <span className="required">*</span></label>
-                <input
-                  name="monto"
-                  type="number"
-                  step="any"
-                  min="0.01"
-                  className="input"
-                  required
-                  value={monto}
-                  onChange={e => setMonto(e.target.value)}
-                  placeholder="0.00"
-                />
-              </div>
-              <div className="input-group">
-                <label>Moneda <span className="required">*</span></label>
-                <select name="moneda" className="input" required value={moneda}
-                  onChange={e => setMoneda(e.target.value as MonedaClaux)}>
-                  {MONEDAS_CLAUX.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
-              </div>
-            </div>
-
-            {/* Período (solo suscripción) */}
-            {!esConfiguracion && (
-              <div className="grid-cols-2">
-                <div className="input-group">
-                  <label>Inicio período <span className="required">*</span></label>
-                  <input
-                    name="fecha_inicio_periodo"
-                    type="date"
-                    lang="es-ES"
-                    className="input"
-                    required
-                    value={fechaInicio}
-                    onChange={e => setFechaInicio(e.target.value)}
-                  />
-                  {fechaInicio && (
-                    <span className="text-xs-muted">
-                      {formatDateES(fechaInicio)}
-                    </span>
-                  )}
-                </div>
-                <div className="input-group">
-                  <label>Fin período <span className="required">*</span></label>
-                  <input
-                    name="fecha_fin_periodo"
-                    type="date"
-                    lang="es-ES"
-                    className="input"
-                    required
-                    value={fechaFin}
-                    onChange={e => setFechaFin(e.target.value)}
-                  />
-                  {fechaFin && (
-                    <span className="text-xs-muted">
-                      {formatDateES(fechaFin)}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Notas */}
+          {/* Concepto + Método */}
+          <div className="grid-cols-2">
             <div className="input-group">
-              <label>Notas</label>
-              <textarea
-                name="notas"
+              <label>Concepto</label>
+              <div className="input input-display">
+                {esConfiguracion ? 'Configuración (pago único)' : 'Suscripción'}
+              </div>
+            </div>
+            <div className="input-group">
+              <label>Método <span className="required">*</span></label>
+              <select
+                name="metodo"
                 className="input"
-                rows={2}
-                value={notas}
-                onChange={e => setNotas(e.target.value)}
-                placeholder="Referencia de pago, observaciones..."
+                required
+                value={metodo}
+                onChange={e => setMetodo(e.target.value)}
+              >
+                <option value="tropipay">TropiPay</option>
+                <option value="transferencia">Transferencia</option>
+                <option value="efectivo">Efectivo</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Monto y moneda: el importe sin su moneda no dice cuánto se cobró */}
+          <div className="grid-cols-2">
+            <div className="input-group">
+              <label>Monto <span className="required">*</span></label>
+              <input
+                name="monto"
+                type="number"
+                step="any"
+                min="0.01"
+                className="input"
+                required
+                value={monto}
+                onChange={e => setMonto(e.target.value)}
+                placeholder="0.00"
               />
             </div>
-
+            <div className="input-group">
+              <label>Moneda <span className="required">*</span></label>
+              <select name="moneda" className="input" required value={moneda}
+                onChange={e => setMoneda(e.target.value as MonedaClaux)}>
+                {MONEDAS_CLAUX.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
           </div>
 
-          <div className="modal-footer">
-            <button type="button" className="btn btn-secondary" onClick={handleClose}>
-              Cancelar
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? <><span className="spinner" /> Guardando...</> : 'Guardar cambios'}
-            </button>
+          {/* Período (solo suscripción) */}
+          {!esConfiguracion && (
+            <div className="grid-cols-2">
+              <div className="input-group">
+                <label>Inicio período <span className="required">*</span></label>
+                <input
+                  name="fecha_inicio_periodo"
+                  type="date"
+                  lang="es-ES"
+                  className="input"
+                  required
+                  value={fechaInicio}
+                  onChange={e => setFechaInicio(e.target.value)}
+                />
+                {fechaInicio && (
+                  <span className="text-xs-muted">
+                    {formatDateES(fechaInicio)}
+                  </span>
+                )}
+              </div>
+              <div className="input-group">
+                <label>Fin período <span className="required">*</span></label>
+                <input
+                  name="fecha_fin_periodo"
+                  type="date"
+                  lang="es-ES"
+                  className="input"
+                  required
+                  value={fechaFin}
+                  onChange={e => setFechaFin(e.target.value)}
+                />
+                {fechaFin && (
+                  <span className="text-xs-muted">
+                    {formatDateES(fechaFin)}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Notas */}
+          <div className="input-group">
+            <label>Notas</label>
+            <textarea
+              name="notas"
+              className="input"
+              rows={2}
+              value={notas}
+              onChange={e => setNotas(e.target.value)}
+              placeholder="Referencia de pago, observaciones..."
+            />
           </div>
-        </form>
-      </div>
-    </div>
+
+        </div>
+
+        <div className="modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={loading}>
+            Cancelar
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={loading}>
+            {loading ? <><span className="spinner" /> Guardando…</> : 'Guardar cambios'}
+          </button>
+        </div>
+      </form>
+    </ModalShell>
   )
 
-  return (
-    <>
-      <button
-        className="btn-icon"
-        onClick={handleOpen}
-        title="Editar pago"
-        aria-label="Editar pago"
-      >
-        <Pencil size={15} />
-      </button>
-      {mounted && open && createPortal(modal, document.body)}
-    </>
-  )
+  return mounted ? createPortal(modal, document.body) : null
 }

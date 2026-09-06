@@ -1,17 +1,15 @@
 'use client'
 
-import { AlertTriangle, Archive, ArchiveRestore, Ban, Clock, ClockAlert, DollarSign, Info, MoreVertical, Pencil, Trash2, X } from 'lucide-react'
+import { AlertTriangle, Archive, ArchiveRestore, Ban, Clock, ClockAlert, DollarSign, Info, MoreVertical, Pencil, Trash2 } from 'lucide-react'
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { cambiarEstadoCliente, aplicarGracia, retirarGracia, editarCliente, archivarCliente, desarchivarCliente, eliminarCliente } from '@/app/actions/clientes'
 import { estadoAlRetirarGracia } from '@/lib/clientes/ciclo-vida'
-import { esSocioHoy } from '@/lib/billing'
+import { esSocioHoy, METODO_PAGO_LABEL } from '@/lib/billing'
 import { MONEDAS_CLAUX, importeClaux, type MonedaClaux } from '@/lib/moneda-claux'
-import { hoyEnTz } from '@/lib/fecha-tz'
-import { useModalKeyboard } from '@/lib/use-modal-keyboard'
+import { hoyEnTz, sumarDias } from '@/lib/fecha-tz'
 import FormHelp from '@/components/portal/FormHelp'
-import { useMounted } from '@/lib/use-mounted'
+import ModalShell from '@/components/portal/ModalShell'
 import { MIGRACION_ESTADOS, MIGRACION_ESTADO_LABEL } from '@/lib/migracion'
 import { useToast } from '@/app/contexts/ToastContext'
 import { registrarPago, obtenerDatosPagoDefecto } from '@/app/actions/pagos'
@@ -24,10 +22,6 @@ const MOTIVOS_GRACIA = [
   { value: 'liquidez',   label: 'Problema de liquidez' },
   { value: 'otro',       label: 'Otro' },
 ]
-
-const METODO_LABEL: Record<string, string> = {
-  tropipay: 'TropiPay', transferencia: 'Transferencia', efectivo: 'Efectivo',
-}
 
 type UltimoPago = {
   monto: number
@@ -117,10 +111,11 @@ function formatDateES(dateStr: string): string {
   })
 }
 
+// «Hasta cuándo llega la gracia», calculado con el MISMO reloj que lo va a
+// escribir. Con `new Date()` era el del navegador: un admin en España a las dos
+// de la mañana leía un día y el servidor guardaba el anterior.
 function addDaysES(days: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() + days)
-  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })
+  return formatDateES(sumarDias(hoyEnTz(), days))
 }
 
 export default function AccionesHeader({ cliente, tienePagosConfirmados = false }: Props) {
@@ -132,7 +127,6 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
   const archivado = !!cliente.archivado_at
   const [menuMovilOpen, setMenuMovilOpen] = useState(false)
   const { success: toastSuccess, error: toastError } = useToast()
-  const mounted = useMounted()
 
   // Gracia
   const [diasGracia, setDiasGracia]         = useState('')
@@ -167,8 +161,6 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
     setDuracionDias(30); setCiclo('mensual'); setUltimoPago(null)
     setMoneda('USD'); setMontos({ USD: 0, EUR: 0 })
   }, [])
-
-  useModalKeyboard(!!modal, handleClose)
 
   // Cerrar menú móvil al hacer clic fuera
   const handleClickOutsideMenu = useCallback((e: MouseEvent) => {
@@ -354,7 +346,7 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
     && !!fechaInicio && !!fechaExpActual && fechaInicio < fechaExpActual
 
   const esActivo    = cliente.estado === 'ACTIVO' || cliente.estado === 'TRIAL'
-  const hoyYMD = toYMD(new Date())
+  const hoyYMD = hoyEnTz()
   const vencidoPorFecha = !!cliente.fecha_expiracion && cliente.fecha_expiracion.split('T')[0] <= hoyYMD
   const puedeGracia = vencidoPorFecha || ['VENCIDO', 'DESACTIVADO', 'GRACIA'].includes(cliente.estado)
 
@@ -379,371 +371,323 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
 
   // ── Modales (sin cambios respecto a la versión anterior) ──
   const modalGracia = (
-    <div className="modal-backdrop">
-      <div className="modal modal-md">
-        <div className="modal-header">
-          <h2 className="modal-title">Aplicar período especial</h2>
-          <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
-            <X size={18} />
-          </button>
-        </div>
-        <form ref={formGraciaRef} onSubmit={handleGracia}>
-          <input type="hidden" name="client_id" value={cliente.client_id} />
-          <div className="modal-body">
-            {clienteInfo}
-
-            <div className="grid-cols-2">
-              <div className="input-group">
-                <div className="form-label-with-help">
-                  <label>Días de acceso especial <span className="required">*</span></label>
-                  <FormHelp text="Entre 1 y 180 días." label="Rango de días permitido" />
-                </div>
-                <input
-                  name="dias"
-                  type="number"
-                  className="input"
-                  min="1"
-                  max="180"
-                  required
-                  placeholder="ej. 15"
-                  value={diasGracia}
-                  onChange={(e) => onDiasChange(e.target.value)}
-                />
-              </div>
-              <div className="input-group">
-                <label>Acceso hasta</label>
-                <div className="input input-display" style={{ color: fechaCalculada === '—' ? 'var(--color-text-muted)' : 'var(--color-text)' }}>
-                  {fechaCalculada}
-                </div>
-              </div>
-            </div>
-
-            <div className="input-group">
-              <label>Motivo <span className="required">*</span></label>
-              <select name="motivo" className="input" required defaultValue="">
-                <option value="" disabled>Selecciona un motivo</option>
-                {MOTIVOS_GRACIA.map(m => (
-                  <option key={m.value} value={m.value}>{m.label}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="input-group">
-              <label>Notas internas</label>
-              <textarea name="notas" className="input" rows={2} placeholder="Ej: cliente solicitó extensión hasta cobro de factura pendiente" />
-            </div>
-
-          </div>
-          <div className="modal-footer">
-            <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
-            <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? <><span className="spinner" /> Aplicando...</> : 'Aplicar período'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-
-  const modalSuspender = (
-    <div className="modal-backdrop">
-      <div className="modal modal-420">
-        <div className="modal-header">
-          <h2 className="modal-title">Desactivar cliente</h2>
-          <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
-            <X size={18} />
-          </button>
-        </div>
+    <ModalShell title="Aplicar período especial" size="modal-md" onClose={handleClose}>
+      <form ref={formGraciaRef} onSubmit={handleGracia}>
+        <input type="hidden" name="client_id" value={cliente.client_id} />
         <div className="modal-body">
           {clienteInfo}
-          <p className="text-sm-muted">
-            El cliente no podrá iniciar sesión mientras esté suspendido. Para reactivarlo, registra un pago o concede un período especial.
-          </p>
+
+          <div className="grid-cols-2">
+            <div className="input-group">
+              <div className="form-label-with-help">
+                <label>Días de acceso especial <span className="required">*</span></label>
+                <FormHelp text="Entre 1 y 180 días." label="Rango de días permitido" />
+              </div>
+              <input
+                name="dias"
+                type="number"
+                className="input"
+                min="1"
+                max="180"
+                required
+                placeholder="ej. 15"
+                value={diasGracia}
+                onChange={(e) => onDiasChange(e.target.value)}
+              />
+            </div>
+            <div className="input-group">
+              <label>Acceso hasta</label>
+              <div className={`input input-display${fechaCalculada === '—' ? ' is-vacio' : ''}`}>
+                {fechaCalculada}
+              </div>
+            </div>
+          </div>
+
+          <div className="input-group">
+            <label>Motivo <span className="required">*</span></label>
+            <select name="motivo" className="input" required defaultValue="">
+              <option value="" disabled>Selecciona un motivo</option>
+              {MOTIVOS_GRACIA.map(m => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="input-group">
+            <label>Notas internas</label>
+            <textarea name="notas" className="input" rows={2} placeholder="Ej: cliente solicitó extensión hasta cobro de factura pendiente" />
+          </div>
+
         </div>
         <div className="modal-footer">
           <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
-          <button
-            className="btn btn-danger"
-            onClick={handleSuspender}
-            disabled={loading}
-          >
-            {loading ? <><span className="spinner" /> Desactivando...</> : 'Desactivar'}
+          <button type="submit" className="btn btn-primary" disabled={loading}>
+            {loading ? <><span className="spinner" /> Aplicando...</> : 'Aplicar período'}
           </button>
         </div>
+      </form>
+    </ModalShell>
+  )
+
+  const modalSuspender = (
+    <ModalShell title="Desactivar cliente" size="modal-420" onClose={handleClose}>
+      <div className="modal-body">
+        {clienteInfo}
+        <p className="text-sm-muted">
+          El cliente no podrá iniciar sesión mientras esté suspendido. Para reactivarlo, registra un pago o concede un período especial.
+        </p>
       </div>
-    </div>
+      <div className="modal-footer">
+        <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
+        <button
+          className="btn btn-danger"
+          onClick={handleSuspender}
+          disabled={loading}
+        >
+          {loading ? <><span className="spinner" /> Desactivando...</> : 'Desactivar'}
+        </button>
+      </div>
+    </ModalShell>
   )
 
   const modalPago = (
-    <div className="modal-backdrop">
-      <div className="modal modal-540">
-        <div className="modal-header">
-          <h2 className="modal-title">Registrar pago</h2>
-          <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
-            <X size={18} />
+    <ModalShell title="Registrar pago" size="modal-540" onClose={handleClose}>
+      <form ref={formPagoRef} onSubmit={handlePago}>
+        <input type="hidden" name="client_id" value={cliente.client_id} />
+        <div className="modal-body">
+          {clienteInfo}
+
+          {loadingPago && (
+            <div className="loading-row">
+              <span className="spinner spinner-xs" /> Cargando datos de la suscripción…
+            </div>
+          )}
+
+          <div className="grid-cols-3">
+            <div className="input-group">
+              <label>Ciclo</label>
+              <div className="input input-display">
+                {ciclo === 'anual' ? 'Anual' : 'Mensual'} · {duracionDias} días
+              </div>
+            </div>
+            <div className="input-group">
+              <label>Moneda <span className="required">*</span></label>
+              <select name="moneda" className="input" required value={moneda}
+                onChange={e => onMonedaChange(e.target.value as MonedaClaux)}>
+                {MONEDAS_CLAUX.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+            <div className="input-group">
+              <label>Método <span className="required">*</span></label>
+              <select name="metodo" className="input" required defaultValue="transferencia">
+                {Object.entries(METODO_PAGO_LABEL).map(([val, lbl]) => (
+                  <option key={val} value={val}>{lbl}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="input-group">
+            <label>Monto a cobrar</label>
+            <div className="input input-display">{importeClaux(parseFloat(montoSugerido) || 0, moneda)}</div>
+            <input type="hidden" name="monto" value={montoSugerido} />
+            <span className="input-hint">
+              Precio configurado del cliente ({ciclo === 'anual' ? 'anual' : 'mensual'}).
+              {prorata && ` Ajustado por prorrateo: crédito ${importeClaux(prorata.credit, moneda)} sobre ${importeClaux(prorata.planPrice, moneda)}.`}
+              {solapeOtraMoneda && ` El período anterior se cobró en ${ultimoPago!.moneda}: no se prorratea entre monedas.`}
+            </span>
+          </div>
+
+          <div className="grid-cols-2">
+            <div className="input-group">
+              <label>Inicio período <span className="required">*</span></label>
+              <input
+                name="fecha_inicio_periodo"
+                type="date"
+                lang="es-ES"
+                className="input"
+                required
+                value={fechaInicio}
+                onChange={(e) => onInicioChange(e.target.value)}
+              />
+              {fechaInicio && (
+                <span className="input-hint">{formatDateES(fechaInicio)}</span>
+              )}
+            </div>
+            <div className="input-group">
+              <label>Fin período <span className="required">*</span></label>
+              <input
+                name="fecha_fin_periodo"
+                type="date"
+                lang="es-ES"
+                className="input"
+                required
+                value={fechaFin}
+                onChange={(e) => setFechaFin(e.target.value)}
+              />
+              {fechaFin && (
+                <span className="input-hint">{formatDateES(fechaFin)}</span>
+              )}
+            </div>
+          </div>
+
+          {alertaInicioTemprano && (
+            <div className="alert alert-warning alert-flex mt-neg-1">
+              <AlertTriangle size={15} className="flex-shrink-0 mt-px" />
+              <span>{alertaInicioTemprano}</span>
+            </div>
+          )}
+
+          {prorata && (
+            <div className="info-banner mt-2">
+              <Info aria-hidden />
+              <div className="pro-rata-details">
+                <strong>Desglose pro-rata ({prorata.overlapDays} días solapados)</strong>
+                <span>Tarifa diaria período anterior: {importeClaux(prorata.dailyRate, moneda)}/día</span>
+                <span>Crédito por días ya pagados: −{importeClaux(prorata.credit, moneda)}</span>
+                <span>
+                  <strong>Monto sugerido primer período: {importeClaux(prorata.suggestedNet, moneda)}</strong>
+                  {' '}(ajustado arriba en el campo Monto)
+                </span>
+              </div>
+            </div>
+          )}
+
+          <div className="input-group">
+            <label>Notas</label>
+            <textarea name="notas" className="input" rows={2} placeholder="Referencia de pago, observaciones…" />
+          </div>
+
+          {advertencia && (
+            <div className="alert alert-warning alert-flex">
+              <AlertTriangle size={15} className="flex-shrink-0 mt-px" />
+              <span>{advertencia}</span>
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
+          <button type="submit" className="btn btn-primary" disabled={loading || loadingPago}>
+            {loading ? <><span className="spinner" /> Registrando...</> : 'Registrar pago'}
           </button>
         </div>
-        <form ref={formPagoRef} onSubmit={handlePago}>
-          <input type="hidden" name="client_id" value={cliente.client_id} />
-          <div className="modal-body">
-            {clienteInfo}
-
-            {loadingPago && (
-              <div className="loading-row">
-                <span className="spinner spinner-xs" /> Cargando datos de la suscripción…
-              </div>
-            )}
-
-            <div className="grid-cols-3">
-              <div className="input-group">
-                <label>Ciclo</label>
-                <div className="input input-display">
-                  {ciclo === 'anual' ? 'Anual' : 'Mensual'} · {duracionDias} días
-                </div>
-              </div>
-              <div className="input-group">
-                <label>Moneda <span className="required">*</span></label>
-                <select name="moneda" className="input" required value={moneda}
-                  onChange={e => onMonedaChange(e.target.value as MonedaClaux)}>
-                  {MONEDAS_CLAUX.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
-              </div>
-              <div className="input-group">
-                <label>Método <span className="required">*</span></label>
-                <select name="metodo" className="input" required defaultValue="transferencia">
-                  {Object.entries(METODO_LABEL).map(([val, lbl]) => (
-                    <option key={val} value={val}>{lbl}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="input-group">
-              <label>Monto a cobrar</label>
-              <div className="input input-display">{importeClaux(parseFloat(montoSugerido) || 0, moneda)}</div>
-              <input type="hidden" name="monto" value={montoSugerido} />
-              <span className="input-hint">
-                Precio configurado del cliente ({ciclo === 'anual' ? 'anual' : 'mensual'}).
-                {prorata && ` Ajustado por prorrateo: crédito ${importeClaux(prorata.credit, moneda)} sobre ${importeClaux(prorata.planPrice, moneda)}.`}
-                {solapeOtraMoneda && ` El período anterior se cobró en ${ultimoPago!.moneda}: no se prorratea entre monedas.`}
-              </span>
-            </div>
-
-            <div className="grid-cols-2">
-              <div className="input-group">
-                <label>Inicio período <span className="required">*</span></label>
-                <input
-                  name="fecha_inicio_periodo"
-                  type="date"
-                  lang="es-ES"
-                  className="input"
-                  required
-                  value={fechaInicio}
-                  onChange={(e) => onInicioChange(e.target.value)}
-                />
-                {fechaInicio && (
-                  <span className="input-hint">{formatDateES(fechaInicio)}</span>
-                )}
-              </div>
-              <div className="input-group">
-                <label>Fin período <span className="required">*</span></label>
-                <input
-                  name="fecha_fin_periodo"
-                  type="date"
-                  lang="es-ES"
-                  className="input"
-                  required
-                  value={fechaFin}
-                  onChange={(e) => setFechaFin(e.target.value)}
-                />
-                {fechaFin && (
-                  <span className="input-hint">{formatDateES(fechaFin)}</span>
-                )}
-              </div>
-            </div>
-
-            {alertaInicioTemprano && (
-              <div className="alert alert-warning alert-flex mt-neg-1">
-                <AlertTriangle size={15} className="flex-shrink-0 mt-px" />
-                <span>{alertaInicioTemprano}</span>
-              </div>
-            )}
-
-            {prorata && (
-              <div className="info-banner mt-2">
-                <Info aria-hidden />
-                <div className="pro-rata-details">
-                  <strong>Desglose pro-rata ({prorata.overlapDays} días solapados)</strong>
-                  <span>Tarifa diaria período anterior: {importeClaux(prorata.dailyRate, moneda)}/día</span>
-                  <span>Crédito por días ya pagados: −{importeClaux(prorata.credit, moneda)}</span>
-                  <span>
-                    <strong>Monto sugerido primer período: {importeClaux(prorata.suggestedNet, moneda)}</strong>
-                    {' '}(ajustado arriba en el campo Monto)
-                  </span>
-                </div>
-              </div>
-            )}
-
-            <div className="input-group">
-              <label>Notas</label>
-              <textarea name="notas" className="input" rows={2} placeholder="Referencia de pago, observaciones…" />
-            </div>
-
-            {advertencia && (
-              <div className="alert alert-warning alert-flex">
-                <AlertTriangle size={15} className="flex-shrink-0 mt-px" />
-                <span>{advertencia}</span>
-              </div>
-            )}
-          </div>
-          <div className="modal-footer">
-            <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
-            <button type="submit" className="btn btn-primary" disabled={loading || loadingPago}>
-              {loading ? <><span className="spinner" /> Registrando...</> : 'Registrar pago'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </ModalShell>
   )
 
   // ── Modal: Editar cliente ──
   const modalEditar = (
-    <div className="modal-backdrop">
-      <div className="modal">
-        <div className="modal-header">
-          <h2 className="modal-title">Editar cliente</h2>
-          <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
-            <X size={18} />
+    <ModalShell title="Editar cliente" onClose={handleClose}>
+      <form ref={formEditarRef} onSubmit={handleEditar}>
+        <input type="hidden" name="client_id" value={cliente.client_id} />
+        <div className="modal-body">
+          <div className="input-group">
+            <label>Nombre de la empresa <span className="required">*</span></label>
+            <input name="nombre_empresa" className="input" required defaultValue={cliente.nombre_empresa} />
+          </div>
+          <div className="input-group">
+            <label>Nombre del contacto</label>
+            <input name="nombre_contacto" className="input" defaultValue={cliente.nombre_contacto ?? ''} />
+          </div>
+          <div className="input-group">
+            <label>Email del administrador <span className="required">*</span></label>
+            <input name="email_admin" type="email" className="input" required defaultValue={cliente.email_admin} />
+          </div>
+          <div className="input-group">
+            <label>Notas internas</label>
+            <textarea name="notas" className="input" rows={3} defaultValue={cliente.notas ?? ''} />
+          </div>
+          <label className="checkbox-group">
+            <input type="checkbox" name="es_prueba" value="true" defaultChecked={!!cliente.es_prueba} />
+            <span className="checkbox-label">Cliente de prueba (no cuenta en las estadísticas de CLAUX)</span>
+          </label>
+
+          {/* Importador de autoservicio (§5): situación de migración + interruptor de
+              emergencia. El estado gobierna el aviso de bienvenida y la visibilidad de
+              la herramienta para el cliente. */}
+          <div className="input-group">
+            <div className="form-label-with-help">
+              <label>Datos de un sistema anterior</label>
+              <FormHelp text="Gobierna el aviso de bienvenida y si el cliente ve la herramienta para importar. «Migración a cargo del equipo» la oculta mientras la hacéis vosotros; «completada» la vuelve a mostrar." label="Qué decide el estado de migración" />
+            </div>
+            <select name="migracion_estado" className="input" defaultValue={cliente.migracion_estado ?? 'sin_datos_previos'}>
+              {MIGRACION_ESTADOS.map(e => (
+                <option key={e} value={e}>{MIGRACION_ESTADO_LABEL[e]}</option>
+              ))}
+            </select>
+          </div>
+          <label className="checkbox-group">
+            <input type="checkbox" name="autoimport_activo" value="true" defaultChecked={cliente.autoimport_activo ?? true} />
+            <span className="checkbox-label">
+              Importación de autoservicio activa
+              <span className="input-hint">
+                Interruptor de emergencia. Desactívalo para que este cliente no pueda importar datos por su cuenta; el equipo sí puede, por impersonación.
+              </span>
+            </span>
+          </label>
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
+          <button type="submit" className="btn btn-primary" disabled={editLoading}>
+            {editLoading ? <><span className="spinner" /> Guardando…</> : 'Guardar cambios'}
           </button>
         </div>
-        <form ref={formEditarRef} onSubmit={handleEditar}>
-          <input type="hidden" name="client_id" value={cliente.client_id} />
-          <div className="modal-body">
-            <div className="input-group">
-              <label>Nombre de la empresa <span className="required">*</span></label>
-              <input name="nombre_empresa" className="input" required defaultValue={cliente.nombre_empresa} />
-            </div>
-            <div className="input-group">
-              <label>Nombre del contacto</label>
-              <input name="nombre_contacto" className="input" defaultValue={cliente.nombre_contacto ?? ''} />
-            </div>
-            <div className="input-group">
-              <label>Email del administrador <span className="required">*</span></label>
-              <input name="email_admin" type="email" className="input" required defaultValue={cliente.email_admin} />
-            </div>
-            <div className="input-group">
-              <label>Notas internas</label>
-              <textarea name="notas" className="input" rows={3} defaultValue={cliente.notas ?? ''} />
-            </div>
-            <label className="checkbox-group">
-              <input type="checkbox" name="es_prueba" value="true" defaultChecked={!!cliente.es_prueba} />
-              <span className="checkbox-label">Cliente de prueba (no cuenta en las estadísticas de CLAUX)</span>
-            </label>
-
-            {/* Importador de autoservicio (§5): situación de migración + interruptor de
-                emergencia. El estado gobierna el aviso de bienvenida y la visibilidad de
-                la herramienta para el cliente. */}
-            <div className="input-group">
-              <div className="form-label-with-help">
-                <label>Datos de un sistema anterior</label>
-                <FormHelp text="Gobierna el aviso de bienvenida y si el cliente ve la herramienta para importar. «Migración a cargo del equipo» la oculta mientras la hacéis vosotros; «completada» la vuelve a mostrar." label="Qué decide el estado de migración" />
-              </div>
-              <select name="migracion_estado" className="input" defaultValue={cliente.migracion_estado ?? 'sin_datos_previos'}>
-                {MIGRACION_ESTADOS.map(e => (
-                  <option key={e} value={e}>{MIGRACION_ESTADO_LABEL[e]}</option>
-                ))}
-              </select>
-            </div>
-            <label className="checkbox-group">
-              <input type="checkbox" name="autoimport_activo" value="true" defaultChecked={cliente.autoimport_activo ?? true} />
-              <span className="checkbox-label">
-                Importación de autoservicio activa
-                <span className="input-hint">
-                  Interruptor de emergencia. Desactívalo para que este cliente no pueda importar datos por su cuenta; el equipo sí puede, por impersonación.
-                </span>
-              </span>
-            </label>
-          </div>
-          <div className="modal-footer">
-            <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
-            <button type="submit" className="btn btn-primary" disabled={editLoading}>
-              {editLoading ? <><span className="spinner" /> Guardando…</> : 'Guardar cambios'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </ModalShell>
   )
 
   const modalArchivar = (
-    <div className="modal-backdrop">
-      <div className="modal modal-420">
-        <div className="modal-header">
-          <h2 className="modal-title">Archivar cliente</h2>
-          <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
-            <X size={18} />
-          </button>
-        </div>
-        <div className="modal-body">
-          {clienteInfo}
-          <p className="text-sm-muted">
-            Se ocultará de las listas activas, pero se conservan <strong>todos</strong> sus datos
-            (pagos, facturación e historial). Puedes desarchivarlo cuando quieras.
-          </p>
-        </div>
-        <div className="modal-footer">
-          <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
-          <button className="btn btn-primary" onClick={handleArchivar} disabled={loading}>
-            {loading ? <><span className="spinner" /> Archivando...</> : 'Archivar'}
-          </button>
-        </div>
+    <ModalShell title="Archivar cliente" size="modal-420" onClose={handleClose}>
+      <div className="modal-body">
+        {clienteInfo}
+        <p className="text-sm-muted">
+          Se ocultará de las listas activas, pero se conservan <strong>todos</strong> sus datos
+          (pagos, facturación e historial). Puedes desarchivarlo cuando quieras.
+        </p>
       </div>
-    </div>
+      <div className="modal-footer">
+        <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
+        <button className="btn btn-primary" onClick={handleArchivar} disabled={loading}>
+          {loading ? <><span className="spinner" /> Archivando...</> : 'Archivar'}
+        </button>
+      </div>
+    </ModalShell>
   )
 
   const modalBorrar = (
-    <div className="modal-backdrop">
-      <div className="modal modal-420">
-        <div className="modal-header">
-          <h2 className="modal-title">Borrar cliente</h2>
-          <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
-            <X size={18} />
-          </button>
+    <ModalShell title="Borrar cliente" size="modal-420" onClose={handleClose}>
+      <div className="modal-body">
+        {clienteInfo}
+        <div className="alert alert-error">
+          <strong>Acción irreversible.</strong> Se borrarán permanentemente TODOS los datos del
+          cliente: usuarios, ventas, inventario, reservas, caja, catálogo, presupuestos, etc.
+          No se puede deshacer.
         </div>
-        <div className="modal-body">
-          {clienteInfo}
-          <div className="alert alert-error">
-            <strong>Acción irreversible.</strong> Se borrarán permanentemente TODOS los datos del
-            cliente: usuarios, ventas, inventario, reservas, caja, catálogo, presupuestos, etc.
-            No se puede deshacer.
-          </div>
-          <div className="input-group">
-            <label htmlFor="confirm-nombre">
-              Escribe <strong>{cliente.nombre_empresa}</strong> para confirmar
-            </label>
-            <input
-              id="confirm-nombre"
-              className="input"
-              value={nombreConfirm}
-              onChange={(e) => setNombreConfirm(e.target.value)}
-              placeholder={cliente.nombre_empresa}
-              autoComplete="off"
-            />
-          </div>
-        </div>
-        <div className="modal-footer">
-          <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
-          <button
-            className="btn btn-danger"
-            onClick={handleEliminar}
-            disabled={loading || nombreConfirm.trim() !== cliente.nombre_empresa.trim()}
-          >
-            {loading ? <><span className="spinner" /> Borrando...</> : 'Borrar definitivamente'}
-          </button>
+        <div className="input-group">
+          <label htmlFor="confirm-nombre">
+            Escribe <strong>{cliente.nombre_empresa}</strong> para confirmar
+          </label>
+          <input
+            id="confirm-nombre"
+            className="input"
+            value={nombreConfirm}
+            onChange={(e) => setNombreConfirm(e.target.value)}
+            placeholder={cliente.nombre_empresa}
+            autoComplete="off"
+          />
         </div>
       </div>
-    </div>
+      <div className="modal-footer">
+        <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
+        <button
+          className="btn btn-danger"
+          onClick={handleEliminar}
+          disabled={loading || nombreConfirm.trim() !== cliente.nombre_empresa.trim()}
+        >
+          {loading ? <><span className="spinner" /> Borrando...</> : 'Borrar definitivamente'}
+        </button>
+      </div>
+    </ModalShell>
   )
 
   // Lo que va a pasar al retirar el período, calculado ANTES de pulsar y con la
@@ -762,61 +706,53 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
   const retirarDejaFuera = estadoTrasRetirar === 'DESACTIVADO'
 
   const modalQuitarGracia = (
-    <div className="modal-backdrop">
-      <div className="modal modal-420">
-        <div className="modal-header">
-          <h2 className="modal-title">Retirar período especial</h2>
-          <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
-            <X size={18} />
-          </button>
-        </div>
-        <div className="modal-body">
-          {clienteInfo}
-          {retirarDejaFuera ? (
-            /* El caso corriente y el peligroso: la gracia era lo único que lo
-               sostenía. Se dice con la palabra que duele —«pierde el acceso hoy
-               mismo»— y no con un «volverá a su estado anterior» que no significa
-               nada para quien está a punto de pulsar. */
-            <div className="alert alert-warning alert-flex">
-              <AlertTriangle size={15} className="flex-shrink-0 mt-px" />
-              <span>
-                Su fecha pagada ya venció, así que el período especial es lo único que le da
-                acceso. Al retirarlo queda <strong>DESACTIVADO</strong> y pierde el acceso al
-                portal hoy mismo. Para devolvérselo habría que registrar un pago o aplicarle
-                otro período.
-              </span>
-            </div>
-          ) : (
-            <p className="text-sm-muted">
-              Queda en <strong>{estadoTrasRetirar}</strong>
-              {/* `esSocioHoy` y no `cliente.es_socio`: la bandera sobrevive a su
-                  propia fecha. Con la condición ya caducada, la frase de socio
-                  explicaba el acceso con algo que ya no lo sostiene —lo sostiene
-                  la fecha pagada— y el admin leía un motivo falso justo antes de
-                  pulsar. La DECISIÓN de arriba ya iba bien; era el porqué el que
-                  se había quedado atrás. */}
-              {esSocioHoy(cliente, hoyEnTz())
-                ? ': es Socio CLAUX, y esa condición ya le da acceso por su cuenta.'
-                : ': su fecha pagada sigue vigente, así que no pierde acceso.'}
-            </p>
-          )}
+    <ModalShell title="Retirar período especial" size="modal-420" onClose={handleClose}>
+      <div className="modal-body">
+        {clienteInfo}
+        {retirarDejaFuera ? (
+          /* El caso corriente y el peligroso: la gracia era lo único que lo
+             sostenía. Se dice con la palabra que duele —«pierde el acceso hoy
+             mismo»— y no con un «volverá a su estado anterior» que no significa
+             nada para quien está a punto de pulsar. */
+          <div className="alert alert-warning alert-flex">
+            <AlertTriangle size={15} className="flex-shrink-0 mt-px" />
+            <span>
+              Su fecha pagada ya venció, así que el período especial es lo único que le da
+              acceso. Al retirarlo queda <strong>DESACTIVADO</strong> y pierde el acceso al
+              portal hoy mismo. Para devolvérselo habría que registrar un pago o aplicarle
+              otro período.
+            </span>
+          </div>
+        ) : (
           <p className="text-sm-muted">
-            Se borran el motivo y las notas del período. Esto no se puede deshacer: si vuelve
-            a necesitarlo, se le aplica uno nuevo.
+            Queda en <strong>{estadoTrasRetirar}</strong>
+            {/* `esSocioHoy` y no `cliente.es_socio`: la bandera sobrevive a su
+                propia fecha. Con la condición ya caducada, la frase de socio
+                explicaba el acceso con algo que ya no lo sostiene —lo sostiene
+                la fecha pagada— y el admin leía un motivo falso justo antes de
+                pulsar. La DECISIÓN de arriba ya iba bien; era el porqué el que
+                se había quedado atrás. */}
+            {esSocioHoy(cliente, hoyEnTz())
+              ? ': es Socio CLAUX, y esa condición ya le da acceso por su cuenta.'
+              : ': su fecha pagada sigue vigente, así que no pierde acceso.'}
           </p>
-        </div>
-        <div className="modal-footer">
-          <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
-          <button
-            className={`btn ${retirarDejaFuera ? 'btn-danger' : 'btn-primary'}`}
-            onClick={handleQuitarGracia}
-            disabled={loading}
-          >
-            {loading ? <><span className="spinner" /> Retirando...</> : 'Retirar período'}
-          </button>
-        </div>
+        )}
+        <p className="text-sm-muted">
+          Se borran el motivo y las notas del período. Esto no se puede deshacer: si vuelve
+          a necesitarlo, se le aplica uno nuevo.
+        </p>
       </div>
-    </div>
+      <div className="modal-footer">
+        <button type="button" className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
+        <button
+          className={`btn ${retirarDejaFuera ? 'btn-danger' : 'btn-primary'}`}
+          onClick={handleQuitarGracia}
+          disabled={loading}
+        >
+          {loading ? <><span className="spinner" /> Retirando...</> : 'Retirar período'}
+        </button>
+      </div>
+    </ModalShell>
   )
 
   const activeModal = modal === 'gracia' ? modalGracia
@@ -978,7 +914,7 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
         </div>
       </div>
 
-      {mounted && activeModal && createPortal(activeModal, document.body)}
+      {activeModal}
     </>
   )
 }

@@ -6,6 +6,9 @@ import { logActividad } from '@/lib/audit'
 import { SECCIONES, normalizarRol, type RolAdmin, type SeccionKey } from '@/lib/roles'
 import { revalidatePath } from 'next/cache'
 
+/** El equipo de CLAUX, no una lista que crezca sola. */
+const TECHO_ADMINS = 200
+
 export interface UsuarioAdmin {
   email:       string
   nombre:      string
@@ -55,9 +58,13 @@ export async function listarUsuariosAdmin(): Promise<UsuarioAdmin[]> {
   await requireSuperAdmin()
   const db = createAdminClient()
 
+  // Las DOS mitades con el mismo techo. `listUsers` ya venía con 200 por página y la
+  // tabla sin ninguno: con más de 200 admins, una mitad traía todo y la otra no, y el
+  // resultado era una lista de usuarios a la que le faltaban las fechas de alta.
   const [filasRes, authRes] = await Promise.all([
-    db.from('admin_users').select('email, nombre, rol, permisos, activo, created_at, email_publico, telefono_publico'),
-    db.auth.admin.listUsers({ page: 1, perPage: 200 }),
+    db.from('admin_users').select('email, nombre, rol, permisos, activo, created_at, email_publico, telefono_publico')
+      .limit(TECHO_ADMINS),
+    db.auth.admin.listUsers({ page: 1, perPage: TECHO_ADMINS }),
   ])
 
   const authByEmail = new Map<string, { nombre?: string; created_at: string }>()

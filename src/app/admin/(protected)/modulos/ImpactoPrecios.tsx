@@ -1,7 +1,8 @@
 'use client'
 
 import type { Nivel } from '@/lib/niveles'
-import { importeClaux } from '@/lib/moneda-claux'
+import { claveOrdenImporte, importeClaux } from '@/lib/moneda-claux'
+import { useOrden, ThOrden, type ColumnasOrden } from '@/components/TableSort'
 import type { ImpactoCliente } from '@/lib/catalogo-precios'
 
 /**
@@ -19,13 +20,25 @@ import type { ImpactoCliente } from '@/lib/catalogo-precios'
  */
 export type ImpactoFila = ImpactoCliente
 
+const COLUMNAS: ColumnasOrden<ImpactoFila> = {
+  cliente:  { label: 'Cliente',  valor: c => c.nombre_empresa },
+  nivel:    { label: 'Nivel',    valor: c => c.nivel },
+  antes:    { label: 'Ahora',    valor: c => claveOrdenImporte(c.antes, c.moneda) },
+  despues:  { label: 'Quedaría', valor: c => claveOrdenImporte(c.despues, c.moneda) },
+}
+
 export default function ImpactoPrecios(
   { impacto, nombresNivel }: { impacto: ImpactoFila[]; nombresNivel: Record<Nivel, string> },
 ) {
+  // Sin orden inicial: el que trae `impactoDeCambios` ya es el bueno —el cambio
+  // más gordo arriba, que es por lo que se mira esta tabla— y ninguna columna
+  // sabe reproducirlo. Ordenar por una y volver a pulsarla dos veces devuelve
+  // justo ahí. Va ANTES del retorno de la lista vacía: es un hook.
+  const orden = useOrden(impacto, COLUMNAS)
+
   if (!impacto.length) {
     return <p className="text-xs-muted">No le cambia la cuota a ningún cliente.</p>
   }
-
   const suben = impacto.filter(i => i.despues > i.antes).length
   const bajan = impacto.length - suben
 
@@ -45,14 +58,14 @@ export default function ImpactoPrecios(
         <table className="table">
           <thead>
             <tr>
-              <th>Cliente</th>
-              <th>Nivel</th>
-              <th className="col-num">Ahora</th>
-              <th className="col-num">Quedaría</th>
+              <ThOrden clave="cliente" orden={orden} />
+              <ThOrden clave="nivel" orden={orden} />
+              <ThOrden clave="antes" orden={orden} className="col-num" />
+              <ThOrden clave="despues" orden={orden} className="col-num" />
             </tr>
           </thead>
           <tbody>
-            {impacto.map(c => (
+            {orden.filas.map(c => (
               <tr key={c.client_id}>
                 <td data-label="Cliente">
                   <span className="impacto-cliente">

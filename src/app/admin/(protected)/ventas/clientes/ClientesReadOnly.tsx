@@ -1,9 +1,13 @@
 'use client'
 
-import { Search, Users } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { Users } from 'lucide-react'
+import { useMemo } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { suscripcionLabel, precioMensualEfectivo, monedaDelCliente, type CondicionesCliente } from '@/lib/billing'
 import { usePagination, TablePagination } from '@/components/TablePagination'
+import { useOrden, ThOrden, type ColumnasOrden } from '@/components/TableSort'
+import { claveOrdenImporte } from '@/lib/moneda-claux'
+import Filtros from '@/components/portal/Filtros'
 import VentasTabs from '@/components/admin/VentasTabs'
 import type { RolAdmin, SeccionKey } from '@/lib/roles'
 
@@ -22,6 +26,15 @@ export type ClienteRO = CondicionesCliente & {
   es_prueba: boolean | null
 }
 
+const COLUMNAS: ColumnasOrden<ClienteRO> = {
+  empresa:  { label: 'Empresa',  valor: c => c.nombre_empresa },
+  contacto: { label: 'Contacto', valor: c => c.nombre_contacto },
+  email:    { label: 'Email',    valor: c => c.email_admin },
+  // El importe con su moneda delante: la lista mezcla dólares y euros.
+  suscripcion: { label: 'Suscripción', valor: c => claveOrdenImporte(precioMensualEfectivo(c), monedaDelCliente(c)) },
+  estado:   { label: 'Estado',   valor: c => c.estado },
+}
+
 export default function ClientesReadOnly({
   clientes,
   descuentoAnualPct,
@@ -33,7 +46,10 @@ export default function ClientesReadOnly({
   rol: RolAdmin
   permisos: SeccionKey[]
 }) {
-  const [busqueda, setBusqueda] = useState('')
+  // La búsqueda vive en la URL, como en el resto de listados: en `useState` no
+  // sobrevivía a un refresco —ni a que se caiga la conexión, que en Cuba es lo
+  // normal— y no se podía enlazar.
+  const busqueda = useSearchParams().get('q') ?? ''
 
   const filtrados = useMemo(() => {
     const q = busqueda.toLowerCase()
@@ -46,7 +62,8 @@ export default function ClientesReadOnly({
     )
   }, [clientes, busqueda])
 
-  const { pageItems, ...pag } = usePagination(filtrados)
+  const orden = useOrden(filtrados, COLUMNAS, { clave: 'empresa', dir: 'asc' })
+  const { pageItems, ...pag } = usePagination(orden.filas)
 
   return (
     <div className="view-container">
@@ -59,17 +76,9 @@ export default function ClientesReadOnly({
 
       <VentasTabs rol={rol} permisos={permisos} />
 
-      <div className="filters-bar">
-        <div className="search-wrapper">
-          <Search />
-          <input
-            type="search" className="search-input"
-            placeholder="Buscar por empresa, contacto, email o ID…"
-            value={busqueda}
-            onChange={e => setBusqueda(e.target.value)}
-          />
-        </div>
-      </div>
+      {/* Sin filtros declarados: aquí solo se busca. La barra es la misma del
+          sistema para que el buscador se comporte igual que en todas partes. */}
+      <Filtros filtros={[]} q={busqueda} placeholder="Buscar por empresa, contacto, email o ID…" />
 
       {filtrados.length === 0 ? (
         <div className="table-wrapper">
@@ -84,11 +93,11 @@ export default function ClientesReadOnly({
             <table className="table">
               <thead>
                 <tr>
-                  <th>Empresa</th>
-                  <th>Contacto</th>
-                  <th>Email</th>
-                  <th>Suscripción</th>
-                  <th>Estado</th>
+                  <ThOrden orden={orden} clave="empresa" />
+                  <ThOrden orden={orden} clave="contacto" />
+                  <ThOrden orden={orden} clave="email" />
+                  <ThOrden orden={orden} clave="suscripcion" />
+                  <ThOrden orden={orden} clave="estado" />
                 </tr>
               </thead>
               <tbody>

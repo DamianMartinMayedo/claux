@@ -1,13 +1,11 @@
 'use client'
 
-import { Plus, X } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { useState, useRef, useCallback } from 'react'
-import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { crearNecesidad, editarNecesidad } from '@/app/actions/diagnostico-necesidades'
-import { useModalKeyboard } from '@/lib/use-modal-keyboard'
 import FormHelp from '@/components/portal/FormHelp'
-import { useMounted } from '@/lib/use-mounted'
+import ModalShell from '@/components/portal/ModalShell'
 import { useToast } from '@/app/contexts/ToastContext'
 
 export interface ModuloLite {
@@ -48,7 +46,6 @@ export default function NecesidadModal({
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
-  const mounted = useMounted()
 
   // Estado controlado para auto-slug (alta).
   const [etiqueta, setEtiqueta] = useState(necesidad?.etiqueta ?? '')
@@ -56,7 +53,6 @@ export default function NecesidadModal({
   const [claveEdited, setClaveEdited] = useState(esEdicion)
 
   const handleClose = useCallback(() => setOpen(false), [])
-  useModalKeyboard(open, handleClose)
 
   function handleEtiquetaChange(val: string) {
     setEtiqueta(val)
@@ -79,115 +75,111 @@ export default function NecesidadModal({
   }
 
   const modal = (
-    <div className="modal-backdrop">
-      <div className="modal modal-md">
-        <div className="modal-header">
-          <h2 className="modal-title">{esEdicion ? `Editar — ${necesidad!.clave}` : 'Nueva necesidad'}</h2>
-          <button onClick={handleClose} className="modal-close" aria-label="Cerrar">
-            <X size={18} />
-          </button>
-        </div>
-        <form ref={formRef} onSubmit={handleSubmit}>
-          {esEdicion && <input type="hidden" name="clave" value={necesidad!.clave} />}
-          <div className="modal-body">
+    <ModalShell
+      title={<>{esEdicion ? `Editar — ${necesidad!.clave}` : 'Nueva necesidad'}</>}
+      size="modal-md"
+      onClose={handleClose}
+    >
+      <form ref={formRef} onSubmit={handleSubmit}>
+        {esEdicion && <input type="hidden" name="clave" value={necesidad!.clave} />}
+        <div className="modal-body">
+          <div className="input-group">
+            <div className="form-label-with-help">
+              <label>
+                Lo que el cliente quiere <span className="required">*</span>
+              </label>
+              <FormHelp text="En lenguaje del cliente, no técnico." label="Cómo redactar la etiqueta" />
+            </div>
+            <input
+              name="etiqueta"
+              className="input"
+              required
+              placeholder="ej: Mejorar mis reservas o citas"
+              value={etiqueta}
+              onChange={(e) => handleEtiquetaChange(e.target.value)}
+            />
+          </div>
+
+          {!esEdicion && (
             <div className="input-group">
               <div className="form-label-with-help">
                 <label>
-                  Lo que el cliente quiere <span className="required">*</span>
+                  Clave <span className="required">*</span>
                 </label>
-                <FormHelp text="En lenguaje del cliente, no técnico." label="Cómo redactar la etiqueta" />
+                <FormHelp text="Identificador interno: minúsculas, números y _" label="Información sobre la clave" />
               </div>
               <input
-                name="etiqueta"
+                name="clave"
                 className="input"
                 required
-                placeholder="ej: Mejorar mis reservas o citas"
-                value={etiqueta}
-                onChange={(e) => handleEtiquetaChange(e.target.value)}
+                pattern="[a-z][a-z0-9_]*"
+                placeholder="ej: reservas"
+                value={clave}
+                onChange={(e) => {
+                  setClave(e.target.value)
+                  setClaveEdited(true)
+                }}
               />
             </div>
+          )}
 
-            {!esEdicion && (
-              <div className="input-group">
-                <div className="form-label-with-help">
-                  <label>
-                    Clave <span className="required">*</span>
-                  </label>
-                  <FormHelp text="Identificador interno: minúsculas, números y _" label="Información sobre la clave" />
-                </div>
-                <input
-                  name="clave"
-                  className="input"
-                  required
-                  pattern="[a-z][a-z0-9_]*"
-                  placeholder="ej: reservas"
-                  value={clave}
-                  onChange={(e) => {
-                    setClave(e.target.value)
-                    setClaveEdited(true)
-                  }}
-                />
-              </div>
-            )}
+          <div className="input-group">
+            <label>Descripción</label>
+            <input
+              name="descripcion"
+              className="input"
+              placeholder="Ayuda corta que ve el cliente bajo la opción…"
+              defaultValue={necesidad?.descripcion ?? ''}
+            />
+          </div>
 
-            <div className="input-group">
-              <label>Descripción</label>
-              <input
-                name="descripcion"
-                className="input"
-                placeholder="Ayuda corta que ve el cliente bajo la opción…"
-                defaultValue={necesidad?.descripcion ?? ''}
-              />
-            </div>
-
-            <div className="input-group">
-              <div className="form-label-with-help">
-                <label>
-                  Módulos que recomienda <span className="required">*</span>
-                </label>
-                <FormHelp text="Lo que ofrecemos cuando el cliente marca esta opción (la contabilidad es un módulo más)." label="Qué se recomienda" />
-              </div>
-              <div className="grid-cols-2">
-                {modulos.map((m) => (
-                  <label key={m.clave} className="module-check">
-                    <input
-                      type="checkbox"
-                      name="modulos"
-                      value={m.clave}
-                      defaultChecked={necesidad?.modulos.includes(m.clave) ?? false}
-                    />
-                    {m.nombre}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {esEdicion && (
-              <label className="module-check">
-                <input type="checkbox" name="activa" value="true" defaultChecked={necesidad!.activa} />
-                Activa (visible en el diagnóstico)
+          <div className="input-group">
+            <div className="form-label-with-help">
+              <label>
+                Módulos que recomienda <span className="required">*</span>
               </label>
+              <FormHelp text="Lo que ofrecemos cuando el cliente marca esta opción (la contabilidad es un módulo más)." label="Qué se recomienda" />
+            </div>
+            <div className="grid-cols-2">
+              {modulos.map((m) => (
+                <label key={m.clave} className="module-check">
+                  <input
+                    type="checkbox"
+                    name="modulos"
+                    value={m.clave}
+                    defaultChecked={necesidad?.modulos.includes(m.clave) ?? false}
+                  />
+                  {m.nombre}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {esEdicion && (
+            <label className="module-check">
+              <input type="checkbox" name="activa" value="true" defaultChecked={necesidad!.activa} />
+              Activa (visible en el diagnóstico)
+            </label>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={handleClose}>
+            Cancelar
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={loading}>
+            {loading ? (
+              <>
+                <span className="spinner" /> Guardando...
+              </>
+            ) : esEdicion ? (
+              'Guardar'
+            ) : (
+              'Crear necesidad'
             )}
-          </div>
-          <div className="modal-footer">
-            <button type="button" className="btn btn-secondary" onClick={handleClose}>
-              Cancelar
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? (
-                <>
-                  <span className="spinner" /> Guardando...
-                </>
-              ) : esEdicion ? (
-                'Guardar'
-              ) : (
-                'Crear necesidad'
-              )}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+          </button>
+        </div>
+      </form>
+    </ModalShell>
   )
 
   return (
@@ -202,7 +194,7 @@ export default function NecesidadModal({
           Nueva necesidad
         </button>
       )}
-      {mounted && open && createPortal(modal, document.body)}
+      {open && modal}
     </>
   )
 }

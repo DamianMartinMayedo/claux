@@ -152,7 +152,7 @@ export default function ModulosPageClient(
 
       <CatalogoTabs />
 
-      <div className="ter-toolbar">
+      <div className="filters-bar">
         <FilterPills
           items={MONEDA_PILLS}
           value={moneda}

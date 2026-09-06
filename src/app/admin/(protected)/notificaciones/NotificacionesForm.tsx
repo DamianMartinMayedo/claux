@@ -130,9 +130,9 @@ export default function NotificacionesForm({
 
             <div className="grid-cols-2">
               {/* ── Alertas del dashboard ── */}
-              <div className="notif-section">
-                <div className="notif-section-header">
-                  <div className="notif-section-icon notif-icon-active">
+              <div className="card notif-section">
+                <div className="card-header notif-section-header">
+                  <div className="metric-icon metric-icon-amber notif-section-icon">
                     <AlertTriangle size={18} />
                   </div>
                   <div>
@@ -168,9 +168,9 @@ export default function NotificacionesForm({
               </div>
 
               {/* ── Avisos internos al equipo ── */}
-              <div className="notif-section">
-                <div className="notif-section-header">
-                  <div className="notif-section-icon notif-icon-active">
+              <div className="card notif-section">
+                <div className="card-header notif-section-header">
+                  <div className="metric-icon metric-icon-amber notif-section-icon">
                     <Mail size={18} />
                   </div>
                   <div>
@@ -214,9 +214,9 @@ export default function NotificacionesForm({
               </div>
 
               {/* ── Contratación ── */}
-              <div className="notif-section">
-                <div className="notif-section-header">
-                  <div className="notif-section-icon notif-icon-active">
+              <div className="card notif-section">
+                <div className="card-header notif-section-header">
+                  <div className="metric-icon metric-icon-amber notif-section-icon">
                     <Mail size={18} />
                   </div>
                   <div>
@@ -253,9 +253,9 @@ export default function NotificacionesForm({
           </form>
 
           {/* ── Notificaciones automáticas a clientes (toggles inmediatos) ── */}
-          <div className="notif-section">
-            <div className="notif-section-header">
-              <div className="notif-section-icon notif-icon-active">
+          <div className="card notif-section">
+            <div className="card-header notif-section-header">
+              <div className="metric-icon metric-icon-amber notif-section-icon">
                 <Bell size={18} />
               </div>
               <div>

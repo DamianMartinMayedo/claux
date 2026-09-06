@@ -18,7 +18,7 @@ import { enviarEmail, enviarAvisoInterno, tipoEmailActivo } from '@/lib/email/en
 import { avisarClienteNuevo } from '@/lib/notificaciones/admin/eventos'
 import { notificarGraciaActivada } from '@/lib/notificaciones/eventos'
 import { esMigracionEstado, MIGRACION_ESTADOS_ALTA, type MigracionEstado } from '@/lib/migracion'
-import { COLUMNAS_EXENCION, desactivable, estadoAlRetirarGracia, socioMalSuspendido } from '@/lib/clientes/ciclo-vida'
+import { COLUMNAS_EXENCION, estadoAlRetirarGracia } from '@/lib/clientes/ciclo-vida'
 import { hoyEnTz, sumarDias } from '@/lib/fecha-tz'
 
 const LINK_PORTAL = 'https://claux.es/portal/login'
@@ -850,133 +850,6 @@ export async function editarCliente(formData: FormData) {
   revalidatePath('/admin/clientes')
   revalidatePath(`/admin/clientes/${client_id}`)
   return { ok: true as const }
-}
-
-// ── Desactivar clientes vencidos automáticamente ────────────────────
-// Busca clientes con período de gracia vencido o fecha de expiración pasada
-// y los suspende automáticamente. Se ejecuta al cargar el admin.
-export async function desactivarClientesVencidos(): Promise<{ ok: true; suspendidos: number }> {
-  await requirePermiso('clientes')
-  const supabase = await createClient()
-  // El hoy del NEGOCIO, no el del servidor. Este barrido corre en CADA carga del
-  // admin, a cualquier hora: con la fecha UTC, cualquier refresco entre las 20:00
-  // y la medianoche cubanas veía ya el día siguiente y suspendía esa misma tarde
-  // a quien vencía HOY. Su gemelo del cron usa exactamente el mismo reloj.
-  const hoy = hoyEnTz()
-
-  // Campos que dejan de tener sentido cuando la gracia termina.
-  const LIMPIAR_GRACIA = { fecha_fin_gracia: null, motivo_gracia: null, notas_gracia: null }
-
-  // 1. Clientes con GRACIA vencida → al estado que los sostenga POR DEBAJO. No a
-  // DESACTIVADO por defecto: quien tenía el mes pagado y encima recibió la gracia
-  // no pierde el mes porque se acabe el extra. Y el exento (prueba / socio) sale
-  // de GRACIA igual, en vez de quedarse ahí para siempre enseñando una fecha de
-  // período especial ya pasada. La regla va en JS y no en SQL porque es la MISMA
-  // función que usa el botón de la ficha y el barrido del cron: una regla con dos
-  // redacciones es una regla que se separa.
-  const { data: graciaRaw, error: errGracia } = await supabase
-    .from('clients')
-    .select(`client_id, nombre_empresa, fecha_expiracion, ${COLUMNAS_EXENCION}`)
-    .eq('estado', 'GRACIA')
-    .lt('fecha_fin_gracia', hoy)
-  const filasGracia = errGracia ? [] : (graciaRaw ?? [])
-
-  if (filasGracia.length > 0) {
-    // Agrupadas por destino para no escribir una a una.
-    const porDestino = new Map<string, string[]>()
-    for (const c of filasGracia) {
-      const destino = estadoAlRetirarGracia(c, hoy)
-      porDestino.set(destino, [...(porDestino.get(destino) ?? []), c.client_id])
-    }
-    for (const [estado, ids] of porDestino) {
-      await supabase.from('clients').update({ estado, ...LIMPIAR_GRACIA }).in('client_id', ids)
-    }
-
-    const { data: { user } } = await supabase.auth.getUser()
-    for (const c of filasGracia) {
-      const destino = estadoAlRetirarGracia(c, hoy)
-      await logActividad(supabase, {
-        user_email:  user?.email ?? 'sistema',
-        entity:      'cliente',
-        entity_id:   c.client_id,
-        action:      destino === 'DESACTIVADO' ? 'suspender' : 'gracia',
-        description: destino === 'DESACTIVADO'
-          ? `Desactivó automáticamente al cliente ${c.client_id} (${c.nombre_empresa}) — período de gracia vencido`
-          : `Cerró el período especial vencido del cliente ${c.client_id} (${c.nombre_empresa}) — queda en ${destino}`,
-      })
-    }
-  }
-  const graciaVencidos = filasGracia.filter(c => estadoAlRetirarGracia(c, hoy) === 'DESACTIVADO')
-  const graciaExentos  = filasGracia.length - graciaVencidos.length
-
-  // 2. Clientes con ACTIVO/TRIAL y fecha_expiracion < hoy → DESACTIVADO
-  const { data: expRaw, error: errExp } = await supabase
-    .from('clients')
-    .select(`client_id, nombre_empresa, ${COLUMNAS_EXENCION}`)
-    .in('estado', ['ACTIVO', 'TRIAL'])
-    .lt('fecha_expiracion', hoy)
-  const expVencidos = errExp ? [] : (expRaw ?? []).filter(desactivable)
-
-  if (expVencidos.length > 0) {
-    const clientIds = expVencidos.map(c => c.client_id)
-    await supabase
-      .from('clients')
-      .update({ estado: 'DESACTIVADO' })
-      .in('client_id', clientIds)
-
-    // Log de auditoría
-    const { data: { user } } = await supabase.auth.getUser()
-    for (const c of expVencidos) {
-      await logActividad(supabase, {
-        user_email:  user?.email ?? 'sistema',
-        entity:      'cliente',
-        entity_id:   c.client_id,
-        action:      'suspender',
-        description: `Desactivó automáticamente al cliente ${c.client_id} (${c.nombre_empresa}) — fecha de expiración vencida`,
-      })
-    }
-  }
-
-  // 3. La operación inversa: socio vigente que quedó DESACTIVADO/VENCIDO → ACTIVO.
-  // Un barrido que solo sabe suspender deja para siempre la contradicción que él
-  // mismo pudo escribir antes de que la exención existiera (así quedó DEUS el
-  // 2026-08-28, con producción corriendo todavía el código sin exención). El
-  // guardia del portal ya lo deja entrar, pero sin esto la ficha y el dashboard
-  // seguirían enseñando «suspendido» a un socio.
-  const { data: socioRaw, error: errSocio } = await supabase
-    .from('clients')
-    .select(`client_id, nombre_empresa, estado, ${COLUMNAS_EXENCION}`)
-    .in('estado', ['DESACTIVADO', 'VENCIDO'])
-    .eq('es_socio', true)
-  const rescatados = errSocio ? [] : (socioRaw ?? []).filter(c => socioMalSuspendido(c, hoy))
-
-  if (rescatados.length > 0) {
-    await supabase
-      .from('clients')
-      .update({ estado: 'ACTIVO' })
-      .in('client_id', rescatados.map(c => c.client_id))
-
-    const { data: { user } } = await supabase.auth.getUser()
-    for (const c of rescatados) {
-      await logActividad(supabase, {
-        user_email:  user?.email ?? 'sistema',
-        entity:      'cliente',
-        entity_id:   c.client_id,
-        action:      'reactivar',
-        description: `Reactivó al cliente ${c.client_id} (${c.nombre_empresa}) — es Socio CLAUX vigente y estaba en ${c.estado}`,
-      })
-    }
-  }
-
-  const totalSuspendidos = graciaVencidos.length + expVencidos.length
-
-  // Revalidar paths si hubo cambios
-  if (totalSuspendidos > 0 || rescatados.length > 0 || graciaExentos > 0) {
-    revalidatePath('/admin/clientes')
-    revalidatePath('/admin/dashboard')
-  }
-
-  return { ok: true, suspendidos: totalSuspendidos }
 }
 
 // ── Condiciones comerciales del cliente: descuento y Socio CLAUX ─────
