@@ -1,6 +1,7 @@
 'use client'
 
-import { Sparkles, X } from 'lucide-react'
+import { X } from 'lucide-react'
+import IaSparkle from '@/components/ia/IaSparkle'
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { editarModulo, previsualizarPrecio, sugerirTextosModuloIa } from '@/app/actions/modulos'
@@ -264,13 +265,13 @@ export default function EditarModuloModal({
               <span className="modal-section-label">Textos del catálogo</span>
               <button
                 type="button"
-                className="btn btn-secondary btn-sm"
+                className="btn btn-ia btn-sm"
                 disabled={iaPensando}
                 onClick={sugerirConIa}
               >
                 {iaPensando
                   ? <><span className="spinner spinner-sm" /> Redactando…</>
-                  : <><Sparkles size={14} strokeWidth={2} /> Sugerir con IA</>}
+                  : <><IaSparkle size={14} /> Sugerir con IA</>}
               </button>
             </div>
             <div className="input-group">

@@ -15,7 +15,8 @@ import {
   type CambioPrecio, type ImpactoCliente,
 } from '@/lib/catalogo-precios'
 import { sugerirTextosModulo, type TextosModulo } from '@/lib/ia/equipo'
-import { IaBolsaAgotada } from '@/lib/ia/interna'
+import { IaApagada, IaBolsaAgotada } from '@/lib/ia/interna'
+import { IA_SIN_RESPUESTA } from '@/lib/ia/propuesta'
 
 /**
  * Los SEIS precios del formulario (moneda × nivel, mig. 225), con el nombre de
@@ -412,7 +413,7 @@ export async function aplicarSiembra(
 // casillas y sigue haciendo falta pulsar Guardar. Consume la bolsa interna.
 export async function sugerirTextosModuloIa(
   clave: string,
-): Promise<{ ok: boolean; textos?: TextosModulo; error?: string }> {
+): Promise<{ ok: boolean; textos?: TextosModulo; error?: string; reintentar?: boolean }> {
   await requirePermiso('modulos')
   const supabase = await createClient()
 
@@ -444,10 +445,12 @@ export async function sugerirTextosModuloIa(
       beneficio:   mod.beneficio,
       resumen:     mod.resumen,
     })
-    if (!textos) return { ok: false, error: 'La IA no está disponible ahora mismo.' }
+    if (!textos) return { ok: false, error: IA_SIN_RESPUESTA, reintentar: true }
     return { ok: true, textos }
   } catch (e) {
-    if (e instanceof IaBolsaAgotada) return { ok: false, error: e.message }
+    // Bolsa agotada e interruptor apagado se dicen tal cual: no son averías y el
+    // mensaje explica qué hacer. Lo demás sube y sale como error de verdad.
+    if (e instanceof IaBolsaAgotada || e instanceof IaApagada) return { ok: false, error: e.message }
     throw e
   }
 }
