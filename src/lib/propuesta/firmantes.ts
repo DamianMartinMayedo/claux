@@ -18,7 +18,7 @@
 
 import 'server-only'
 import { leerSetting } from '@/lib/settings'
-import { CLAVES_PROVEEDOR } from '@/lib/documentos/proveedor'
+import { CLAVES_PROVEEDOR, DEFECTO_PROVEEDOR } from '@/lib/documentos/proveedor'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Db = any
@@ -48,8 +48,8 @@ const limpiar = (s: string | null | undefined) => (s ?? '').trim() || null
 /** El contacto de la empresa: el respaldo de todo el mundo. */
 export async function contactoEmpresa(): Promise<{ email: string | null; tel: string | null }> {
   const [email, tel] = await Promise.all([
-    leerSetting(CLAVES_PROVEEDOR.email, ''),
-    leerSetting(CLAVES_PROVEEDOR.telefono, ''),
+    leerSetting(CLAVES_PROVEEDOR.email, DEFECTO_PROVEEDOR.email),
+    leerSetting(CLAVES_PROVEEDOR.telefono, DEFECTO_PROVEEDOR.telefono),
   ])
   return { email: limpiar(email), tel: limpiar(tel) }
 }

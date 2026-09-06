@@ -6,6 +6,7 @@ import { requirePermiso } from '@/lib/admin-guard'
 import { logActividad } from '@/lib/audit'
 import { optimizarCaptura } from '@/lib/imagen/optimizar'
 import { avisoPropuestas, refrescarPropuestasConModulo } from '@/lib/propuesta/refrescar'
+import { hoyEnTz } from '@/lib/fecha-tz'
 
 // ── La biblioteca de capturas de producto ────────────────────────────────────
 //
@@ -205,7 +206,7 @@ export async function reemplazarCaptura(
   // la de ahora?»: reemplazar la imagen y dejarla marcada como vieja haría que
   // el contador de «por revisar» mintiera en el otro sentido.
   const { error } = await db.from('capturas_producto').update({
-    url: sub.url, path, ancho, alto, capturada_at: new Date().toISOString().slice(0, 10),
+    url: sub.url, path, ancho, alto, capturada_at: hoyEnTz(),
   }).eq('id', id)
   if (error) return { ok: false, error: error.message }
 

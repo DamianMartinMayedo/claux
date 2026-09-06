@@ -46,6 +46,20 @@ export function importeCiclo(precioMensual: number, ciclo: string, descuentoAnua
   return Math.round(m * 100) / 100
 }
 
+/**
+ * Cómo se llama cada forma de pagar, para leerla.
+ *
+ * Estaba escrita a mano en CINCO sitios —la lista de pagos, el historial de la ficha,
+ * la cabecera de acciones, la ficha del cliente y la facturación del portal—, o sea que
+ * el día que entre un método nuevo saldrá con su clave cruda («zelle») en las cuatro
+ * que nadie recuerde tocar. Los valores son los de `payments.metodo`.
+ */
+export const METODO_PAGO_LABEL: Record<string, string> = {
+  tropipay:      'TropiPay',
+  transferencia: 'Transferencia',
+  efectivo:      'Efectivo',
+}
+
 /** Etiqueta corta del ciclo para UI. */
 export function cicloLabel(ciclo: string): string {
   return ciclo === 'anual' ? 'Anual' : 'Mensual'
@@ -87,6 +101,16 @@ export interface CondicionesCliente {
 export const COLUMNAS_CONDICIONES =
   'precio_mensual_usd, precio_mensual_eur, moneda_facturacion, '
   + 'descuento_pct, descuento_desde, descuento_hasta, es_socio, socio_hasta'
+
+/**
+ * Columnas de `payments` que pinta un listado de cobros — la tabla de /admin/pagos y
+ * el historial de la ficha del cliente. Las dos pedían `select('*')`, así que viajaban
+ * al navegador columnas que ninguna de las dos enseña, `plan_id` incluida (inerte
+ * desde la mig. 018). Una sola lista para las dos, que es como no se separan.
+ */
+export const COLUMNAS_PAGO =
+  'pago_id, client_id, concepto, estado, monto, moneda, metodo, fecha, '
+  + 'fecha_inicio_periodo, fecha_fin_periodo, notas, presupuesto_id'
 
 /** En qué moneda se le factura a este cliente. */
 export function monedaDelCliente(c: Pick<CondicionesCliente, 'moneda_facturacion'>): MonedaClaux {

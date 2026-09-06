@@ -2,12 +2,16 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { hoyEnTz } from '@/lib/fecha-tz'
 import { COLUMNAS_EXENCION, desactivable, socioMalSuspendido, estadoAlRetirarGracia } from './ciclo-vida'
 
-// Barrido de clientes vencidos para el CRON (Fase 2). Corre con service_role, sin
-// sesión de Supabase Auth ni guard de rol — por eso NO reutiliza el action
-// `desactivarClientesVencidos` de src/app/actions/clientes.ts (que exige
-// requirePermiso + createClient). Ambos aplican la MISMA regla; si cambia la
-// política de vencimiento, actualizar los dos. El action sigue corriendo al abrir
-// el admin; este barrido mantiene el estado fresco a diario sin depender de eso.
+// Barrido de clientes vencidos. Único sitio donde vive la regla, y corre en el
+// cron diario (`/api/cron/recordatorios`, ver vercel.json) con service_role, sin
+// sesión de Supabase Auth ni guard de rol.
+//
+// Hasta el 2026-09-05 existía además un gemelo —el action `desactivarClientes
+// Vencidos`— colgado del render del layout protegido del admin: CADA carga de
+// página de un super_admin lanzaba el barrido entero (tres consultas y sus
+// updates) antes de pintar nada. Un mantenimiento diario cobrado como peaje en
+// cada navegación, y encima con la regla escrita dos veces: una regla con dos
+// redacciones es una regla que se separa. Se borró el gemelo.
 //
 // El bloqueo de acceso del portal es por FECHA (no por estado), así que un cliente
 // expirado ya queda bloqueado aunque su `estado` tarde en pasar a DESACTIVADO
@@ -27,8 +31,8 @@ export async function barrerVencidos(): Promise<{ suspendidos: number; rescatado
   // «Hoy» es el de La Habana, no el del servidor. Con la fecha UTC, entre las 20:00
   // y la medianoche cubanas ya es mañana para el servidor, y un cliente cuya fecha
   // vence HOY se suspendía esa misma tarde: perdía su última noche pagada. Este
-  // barrido corre a las 08:00 UTC (04:00 en Cuba, mismo día), pero su gemelo del
-  // admin corre a cualquier hora, y la regla tiene que ser una sola.
+  // barrido corre a las 08:00 UTC (04:00 en Cuba, mismo día), así que en UTC salía
+  // lo mismo por casualidad; bastaba un disparo manual por la tarde para romperlo.
   const hoy = hoyEnTz()
 
   // Campos que deja de tener sentido conservar cuando la gracia termina.

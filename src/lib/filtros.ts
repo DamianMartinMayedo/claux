@@ -42,6 +42,7 @@
 // `import type` a propósito: se borra al compilar, así que traer la FORMA del contrato de
 // exportación no arrastra el registro de tablas (que no es client-safe) al bundle.
 import type { FiltroExport } from '@/lib/exportar/tablas'
+import type { FiltroAdmin }  from '@/lib/exportar/tablas-admin'
 
 /** Una opción de un filtro: el valor que viaja y la palabra que lee el dueño. */
 export interface OpcionFiltro {
@@ -76,20 +77,36 @@ export type WidgetFiltro = 'pastillas' | 'select' | 'toggle'
 /**
  * Claves que viven SOLO en la URL y no son del contrato de exportación.
  *
- * Ahora mismo una: el `anio` de Nómina. El período de una nómina es el año, no unos días
- * sueltos, así que la pantalla filtra por año pero la descarga filtra por fecha — el año se
- * traduce a `desde`/`hasta` al generar el filtro. Va con `sinExportar` para que no viaje como
- * sí mismo y se ignore en silencio.
+ * · `anio` — el de Nómina. El período de una nómina es el año, no unos días sueltos, así que
+ *   la pantalla filtra por año pero la descarga filtra por fecha — el año se traduce a
+ *   `desde`/`hasta` al generar el filtro.
+ * · `pruebas` — las «posibles pruebas» de Solicitudes. No es un dato guardado sino una
+ *   corazonada que se calcula en la vista (nombre, teléfono, correo con pinta de prueba): el
+ *   servidor no sabe reproducirla.
+ *
+ * Las dos van con `sinExportar`, para que no viajen como sí mismas y se ignoren en silencio.
  */
-export type ClaveSoloUrl = 'anio'
+export type ClaveSoloUrl = 'anio' | 'pruebas'
+
+/**
+ * Las claves que puede llevar un filtro declarado: las del contrato de exportación del
+ * PORTAL, las del ADMIN y las que solo viven en la URL.
+ *
+ * Un solo tipo para las dos caras, no dos gemelos. La barra, los chips, el «Limpiar» y el
+ * resumen de la descarga son el MISMO código desde la revisión del admin; duplicar el tipo
+ * es la forma más rápida de que dejen de serlo, y el listado del admin volvería a filtrar
+ * en `useState` sin que nada lo impidiera.
+ */
+export type ClaveFiltro = keyof FiltroExport | keyof FiltroAdmin | ClaveSoloUrl
 
 export interface Filtro {
   /**
    * Clave del contrato de exportación (`empresa_id`, `estado`, `categoria`, `tercero`,
-   * `cuenta_id`, `almacen_id`, `motivo`, `tramo`, `archivadas`, `con_saldo`…). Es también
-   * el nombre del parámetro en la URL salvo que se diga otro en `param`.
+   * `cuenta_id`, `almacen_id`, `motivo`, `tramo`, `archivadas`, `con_saldo`… y en el admin
+   * `metodo`, `concepto`, `archivados`, `entidad`). Es también el nombre del parámetro en la
+   * URL salvo que se diga otro en `param`.
    */
-  clave: keyof FiltroExport | ClaveSoloUrl
+  clave: ClaveFiltro
   /** Nombre del parámetro en la URL, si no coincide con la clave (`empresa_id` → `empresa`). */
   param?: string
   /** Rótulo del filtro. En un `select` es su opción «todos» («Todas las categorías»). */
@@ -219,8 +236,10 @@ export function filtrosActivos(filtros: Filtro[]): FiltroActivo[] {
  * que escribir a mano y que se pueda quedar corto. Lo implícito SÍ viaja (es lo que
  * distingue la pestaña Gastos de la pestaña Cobros).
  */
-export function filtroExport(filtros: Filtro[], base?: FiltroExport): FiltroExport {
-  const out: FiltroExport = { ...base }
+export function filtroExport<T extends object = FiltroExport>(
+  filtros: Filtro[], base?: T,
+): T {
+  const out = { ...(base ?? {}) } as T
   for (const f of filtros) {
     if (f.ocultarSi || !f.valor || f.sinExportar) continue
     if (f.widget === 'toggle') {
@@ -268,11 +287,11 @@ export function vaAlServidor(f: Filtro, hayMas: boolean): boolean {
 export const PARAM_ESCALADA = 'srv'
 
 /** Lee de la URL los filtros que la página debe aplicar en la consulta. */
-export function filtrosDeUrl(
+export function filtrosDeUrl<T extends object = FiltroExport>(
   params: Record<string, string | undefined>,
-  claves: { clave: keyof FiltroExport; param?: string }[],
-): FiltroExport {
-  const out: FiltroExport = {}
+  claves: { clave: ClaveFiltro; param?: string }[],
+): T {
+  const out = {} as T
   if (params[PARAM_ESCALADA] !== '1') return out
   for (const c of claves) {
     const v = params[c.param ?? String(c.clave)]
@@ -282,7 +301,12 @@ export function filtrosDeUrl(
   return out
 }
 
-/** Las claves del contrato que son booleanas, no texto. */
-function esBooleano(clave: keyof FiltroExport): boolean {
-  return clave === 'archivadas' || clave === 'con_saldo' || clave === 'con_descuento'
+/**
+ * Las claves del contrato que son booleanas, no texto. `archivadas` es la del portal y
+ * `archivados` la del admin: son dos tablas distintas con la misma idea, y el día que se
+ * unifiquen sobra una línea de aquí.
+ */
+function esBooleano(clave: ClaveFiltro): boolean {
+  return clave === 'archivadas' || clave === 'archivados'
+      || clave === 'con_saldo'  || clave === 'con_descuento'
 }

@@ -3,7 +3,9 @@
 import { after } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { TOPE_VER_MAS } from '@/lib/listados'
 import { requirePermiso } from '@/lib/admin-guard'
+import { rateLimitOk } from '@/lib/rate-limit'
 import { logActividad } from '@/lib/audit'
 import { renderPlantilla } from '@/lib/email/render'
 import { enviarEmail, enviarAvisoInterno, tipoEmailActivo, TIPO_AVISO_LEAD } from '@/lib/email/enviar'
@@ -11,6 +13,7 @@ import { avisarLeadNuevo, avisarLeadPideContacto } from '@/lib/notificaciones/ad
 import { obtenerCatalogoPublico } from '@/lib/publico/catalogo'
 import { tamanoComoTexto } from '@/lib/publico/tamano'
 import { etiquetaModo } from '@/lib/publico/modos'
+import { leerCorreo } from '@/lib/settings'
 
 const LINK_AGENDA = 'https://calendar.app.google/nqrnpDat4JoYtd1Y8'
 
@@ -94,7 +97,12 @@ export async function listarDiagnosticos(): Promise<DiagnosticoLead[]> {
   const { data } = await db
     .from('diagnosticos')
     .select('id, nombre, telefono, email, sector, necesidades, modo_actual, modulos_rec, nivel_rec, tamano, estado, created_at, contacto_solicitado_at')
+    // TECHO EXPLÍCITO: sin `.limit()` lo pone PostgREST por su cuenta y recorta sin
+    // decir nada. Escrito aquí, el día que la cifra se acerque se ve en el código y no
+    // en una lista a la que le faltan filas.
+    // Y aquí importa más que en el resto: un lead lo crea CUALQUIERA desde la web.
     .order('created_at', { ascending: false })
+    .limit(TOPE_VER_MAS)
 
   // Los presupuestos de TODOS los leads en UNA consulta y se reparten en memoria:
   // son unas pocas filas y una consulta por lead convertiría la pantalla en 27.
@@ -103,6 +111,7 @@ export async function listarDiagnosticos(): Promise<DiagnosticoLead[]> {
     .select('id, diagnostico_id, nombre_negocio, client_id')
     .not('diagnostico_id', 'is', null)
     .order('id')
+    .limit(TOPE_VER_MAS)
 
   const porLead = new Map<number, PresupuestoDeLead[]>()
   for (const p of (presus ?? []) as (PresupuestoDeLead & { diagnostico_id: number })[]) {
@@ -143,6 +152,12 @@ interface GuardarDiagnosticoInput {
   nivelRec?: string | null
   /** Respuestas del paso de tamaño, para que quien llame sepa de dónde salió. */
   tamano?: Record<string, number>
+  /**
+   * Honeypot: un campo que el formulario pinta escondido y ninguna persona rellena.
+   * Con algo dentro se responde «ok» sin escribir nada — al bot no se le dice que se le
+   * ha visto, porque entonces prueba otra cosa.
+   */
+  hp?: string
 }
 
 // Guarda el lead y NADA MÁS. Ojo con lo que se añade aquí: esto corre al pulsar
@@ -152,6 +167,15 @@ export async function guardarDiagnostico(
   input: GuardarDiagnosticoInput
 ): Promise<{ ok: boolean; id?: number; error?: string }> {
   const { nombre, telefono, email, sector, necesidades, modoActual, modulosRec, nivelRec, tamano } = input
+
+  // FRENO. Esta acción es pública, sin sesión, y escribe con `createAdminClient()` —o sea,
+  // saltándose RLS— desde un formulario abierto a internet. Sin límite, llenar la tabla de
+  // diagnósticos y dispararnos los avisos internos es un bucle de diez líneas. Mismo par que
+  // usan las públicas del portal: honeypot + ventana por IP.
+  if (input.hp?.trim()) return { ok: true }
+  if (!await rateLimitOk('diagnostico_guardar', 5, 600)) {
+    return { ok: false, error: 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.' }
+  }
 
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -223,6 +247,13 @@ export async function solicitarContactoDiagnostico(
 ): Promise<{ ok: boolean; error?: string }> {
   if (!Number.isInteger(id) || id <= 0) return { ok: false, error: 'Solicitud no válida.' }
 
+  // El id es un bigserial adivinable (ver nota de arriba), así que el límite por IP es lo que
+  // impide recorrerlos: forzar el envío a un lead ajeno pasa a costar diez intentos por
+  // ventana en vez de todos los que quepan en un bucle.
+  if (!await rateLimitOk('diagnostico_contacto', 10, 600)) {
+    return { ok: false, error: 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.' }
+  }
+
   const db = createAdminClient()
 
   // Se traen TODOS los campos del lead, no solo los de contacto: el aviso interno
@@ -262,7 +293,7 @@ export async function solicitarContactoDiagnostico(
       await enviarEmail({
         to: email,
         from: 'CLAUX <contacto@claux.es>',
-        replyTo: 'contacto@claux.es',
+        replyTo: await leerCorreo('email_contratacion'),
         subject: asunto,
         html,
         tipo: 'diagnostico_cita',

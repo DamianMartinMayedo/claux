@@ -1,6 +1,6 @@
 import { getResend } from './client'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { leerSetting } from '@/lib/settings'
+import { leerSetting, leerCorreo, CORREO_POR_DEFECTO } from '@/lib/settings'
 import { envolverEmail, textoAHtml } from './layout'
 import { buzonesDe } from './buzones'
 import type { TipoEmail } from './variables'
@@ -119,12 +119,12 @@ export async function enviarAvisoInterno(params: {
   clientId?: string | null
 }): Promise<{ ok: boolean }> {
   const [internos, leads] = await Promise.all([
-    leerSetting('email_avisos_internos', 'contacto@claux.es'),
+    leerCorreo('email_avisos_internos'),
     params.tipo === TIPO_AVISO_LEAD ? leerSetting('email_avisos_leads', '') : Promise.resolve(''),
   ])
   // Set: si el mismo correo está en las dos listas, recibe UNA copia.
   const destino = [...new Set([
-    ...buzonesDe(internos, 'contacto@claux.es'),
+    ...buzonesDe(internos, CORREO_POR_DEFECTO.email_avisos_internos),
     ...buzonesDe(leads, ''),
   ])]
   return enviarEmail({

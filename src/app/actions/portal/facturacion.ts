@@ -2,7 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession }  from './auth'
-import { leerSetting }       from '@/lib/settings'
+import { leerSetting, leerCorreo } from '@/lib/settings'
 import { suscripcionLabel, precioMensualEfectivo, monedaDelCliente, esSocioHoy, COLUMNAS_CONDICIONES } from '@/lib/billing'
 import { type MonedaClaux } from '@/lib/moneda-claux'
 import { cargarContextoLimites, usoDeLimites, DIMENSIONES, OFERTA_NIVEL, type UsoDimension } from '@/lib/limites'
@@ -80,7 +80,7 @@ export async function obtenerFacturacion(): Promise<FacturacionData | null> {
   const ciclo       = cliente.ciclo_facturacion ?? 'mensual'
   const descuento   = parseInt(await leerSetting('descuento_anual_pct', '10'), 10) || 0
   const suscripcion = suscripcionLabel(precioMes, ciclo, descuento, moneda)
-  const emailSoporte = await leerSetting('email_soporte', 'soporte@claux.es')
+  const emailSoporte = await leerCorreo('email_soporte')
 
   // Su nivel y lo que le cabe. Hasta ahora el dueño solo se enteraba de en qué
   // nivel estaba el día que chocaba con un tope («el máximo de tu nivel Empresa»),

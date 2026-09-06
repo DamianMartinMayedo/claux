@@ -14,6 +14,17 @@ export function hoyEnTz(tz: string = TZ_NEGOCIO): string {
   }).format(new Date())
 }
 
+/**
+ * Mes de hoy (YYYY-MM) en la zona del negocio. Es la CLAVE de periodo del consumo
+ * de IA: la misma cadena que calcula la RPC `ia_uso_hit`, y la que decide si un
+ * cliente ha agotado el cupo del mes. Vivía copiada en cinco sitios —dos páginas
+ * del admin, las métricas y los dos módulos de `lib/ia`—; cinco redacciones de una
+ * regla son cinco sitios donde se puede cortar el mes un día antes.
+ */
+export function mesEnTz(tz: string = TZ_NEGOCIO): string {
+  return hoyEnTz(tz).slice(0, 7)
+}
+
 /** Hora actual (HH:MM, 24h) en la zona del negocio. */
 export function ahoraEnTz(tz: string = TZ_NEGOCIO): string {
   return new Intl.DateTimeFormat('en-GB', {

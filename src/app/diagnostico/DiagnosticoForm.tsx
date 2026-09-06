@@ -85,6 +85,9 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
   const [modoActual, setModoActual] = useState('')
   // Respuestas del paso de tamaño: clave de pregunta → índice del nivel que exige.
   const [tamano, setTamano] = useState<Record<string, number>>({})
+  // Honeypot: lo pinta escondido y solo lo rellenan los bots. Vive en el estado como
+  // cualquier otro campo para que viaje en la misma llamada.
+  const [hp, setHp] = useState('')
   const [nombre, setNombre] = useState('')
   const [telefono, setTelefono] = useState('')
   const [email, setEmail] = useState('')
@@ -156,6 +159,7 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
       modulosRec: claves,
       nivelRec: nivelRec?.clave ?? null,
       tamano,
+      hp,
     })
 
     setSubmitting(false)
@@ -415,6 +419,15 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
             Déjanos tus datos y te escribimos para preparar la puesta en marcha.
           </p>
           <div className="dg-form">
+            {/* El cepo. `aria-hidden` + `tabIndex={-1}` para que ni el lector de pantalla ni
+                el tabulador lleguen nunca: quien lo rellena no es una persona. */}
+            <div className="dg-sr-only" aria-hidden="true">
+              <label htmlFor="dg-hp">No rellenar</label>
+              <input
+                id="dg-hp" name="hp" tabIndex={-1} autoComplete="off"
+                value={hp} onChange={(e) => setHp(e.target.value)}
+              />
+            </div>
             <div className="dg-form-group">
               <label htmlFor="dg-nombre">
                 Nombre <span className="required">*</span>

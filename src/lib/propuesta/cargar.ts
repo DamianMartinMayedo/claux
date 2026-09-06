@@ -66,7 +66,7 @@ async function cargarAjustes(db: Db): Promise<AjustesPropuesta> {
  * `tamano` son índices de nivel y sector/necesidades son claves de sus tablas.
  * Sin el catálogo vivo, la diapositiva 2 diría «Sector: servicios».
  */
-async function cargarLead(db: Db, diagnosticoId: number): Promise<LeadResumen | null> {
+export async function cargarLead(db: Db, diagnosticoId: number): Promise<LeadResumen | null> {
   const { data: lead } = await db.from('diagnosticos')
     .select('sector, necesidades, modo_actual, tamano')
     .eq('id', diagnosticoId).maybeSingle()

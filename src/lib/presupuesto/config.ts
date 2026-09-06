@@ -53,6 +53,16 @@ export function etiquetaFase(num: NumeroFase): string {
   return FASES_INSTALACION.find(f => f.num === num)?.etiqueta ?? `Fase ${num}`
 }
 
+/**
+ * El número con el que el cliente ve el presupuesto: el `id` de la fila, vestido.
+ * Lo escribían a mano el PDF, el nombre del archivo descargado y las dos listas del
+ * admin, cada uno con su `padStart`; en cuanto uno se quedara corto, el mismo
+ * presupuesto tendría dos números.
+ */
+export function numeroPresupuesto(id: number | string): string {
+  return `PRE-${String(id).padStart(4, '0')}`
+}
+
 /** Clave del módulo base de contabilidad: se excluye de las horas extra de formación,
  *  que ya tiene sus horas base. */
 export const CLAVE_BASE = 'base'

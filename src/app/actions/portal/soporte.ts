@@ -7,7 +7,7 @@ import { crearNotificacion } from '@/lib/notificaciones/crear'
 import { avisarAmpliacionSolicitada, avisarSoporteNuevo } from '@/lib/notificaciones/admin/eventos'
 import { enviarEmail } from '@/lib/email/enviar'
 import { envolverEmail, textoAHtml } from '@/lib/email/layout'
-import { leerSetting } from '@/lib/settings'
+import { leerCorreo } from '@/lib/settings'
 
 export interface Faq {
   id:           number
@@ -135,7 +135,7 @@ export async function registrarInteresModulo(
 
   // Va al buzón COMERCIAL, no al de soporte: esto es una oportunidad de venta, no
   // una incidencia. `replyTo` al cliente para poder contestarle directamente.
-  const destino = await leerSetting('email_contratacion', 'contacto@claux.es')
+  const destino = await leerCorreo('email_contratacion')
   const cuerpo =
     `${empresa} quiere activar ${nombre}.\n\n` +
     `Cliente: ${empresa} (${session.client_id})\n` +
@@ -213,7 +213,7 @@ export async function pedirReactivacion(): Promise<{ ok: boolean; yaPedido?: boo
     asunto,
   })
 
-  const destino = await leerSetting('email_contratacion', 'contacto@claux.es')
+  const destino = await leerCorreo('email_contratacion')
   const cuerpo =
     `${empresa} quiere recuperar el acceso a su cuenta.\n\n` +
     `Cliente: ${empresa} (${session.client_id})\n` +
@@ -278,7 +278,7 @@ export async function enviarMensajeSoporte(
 
   // Notificación directa al buzón de soporte. replyTo = correo del cliente, así el
   // equipo puede responder desde el propio correo (o desde /admin/soporte).
-  const destinoSoporte = await leerSetting('email_soporte', 'soporte@claux.es')
+  const destinoSoporte = await leerCorreo('email_soporte')
   const cuerpo =
     `Nuevo mensaje de soporte.\n\n` +
     `Cliente: ${empresa} (${session.client_id})\n` +

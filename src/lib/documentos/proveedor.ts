@@ -23,14 +23,31 @@ export const CLAVES_PROVEEDOR = {
   iae:       'proveedor_iae',
 } as const
 
+/**
+ * El valor por defecto de cada clave, en UN sitio. Estaban tecleados dos veces
+ * —aquí y en la página de configuración que los edita—, y una tercera lectura
+ * (`contactoEmpresa`, para la propuesta) daba el email por VACÍO: el contrato
+ * enseñaba contacto@claux.es y la propuesta no enseñaba nada, con la misma fila
+ * sin guardar detrás. NIF, domicilio, teléfono e IAE nacen vacíos a propósito:
+ * la UI los marca «pendientes de completar» hasta que Claudia los rellene.
+ */
+export const DEFECTO_PROVEEDOR = {
+  nombre:    'Claudia Cuevas Alarcón',
+  nif:       '',
+  domicilio: '',
+  email:     'contacto@claux.es',
+  telefono:  '',
+  iae:       '',
+} as const
+
 export async function obtenerDatosProveedor(): Promise<DatosProveedor> {
   const [nombre, nif, domicilio, email, telefono, iae] = await Promise.all([
-    leerSetting(CLAVES_PROVEEDOR.nombre,    'Claudia Cuevas Alarcón'),
-    leerSetting(CLAVES_PROVEEDOR.nif,       ''),
-    leerSetting(CLAVES_PROVEEDOR.domicilio, ''),
-    leerSetting(CLAVES_PROVEEDOR.email,     'contacto@claux.es'),
-    leerSetting(CLAVES_PROVEEDOR.telefono,  ''),
-    leerSetting(CLAVES_PROVEEDOR.iae,       ''),
+    leerSetting(CLAVES_PROVEEDOR.nombre,    DEFECTO_PROVEEDOR.nombre),
+    leerSetting(CLAVES_PROVEEDOR.nif,       DEFECTO_PROVEEDOR.nif),
+    leerSetting(CLAVES_PROVEEDOR.domicilio, DEFECTO_PROVEEDOR.domicilio),
+    leerSetting(CLAVES_PROVEEDOR.email,     DEFECTO_PROVEEDOR.email),
+    leerSetting(CLAVES_PROVEEDOR.telefono,  DEFECTO_PROVEEDOR.telefono),
+    leerSetting(CLAVES_PROVEEDOR.iae,       DEFECTO_PROVEEDOR.iae),
   ])
   return { nombre, nif, domicilio, email, telefono, iae }
 }

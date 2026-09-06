@@ -49,6 +49,20 @@ export function importeClaux(
 }
 
 /**
+ * La clave por la que se ORDENA una columna de importes. Con la moneda delante,
+ * porque las listas del admin mezclan las dos: comparando los números pelados,
+ * 900 $ se pone por encima de 1.000 €, y la columna sale desordenada a la vista.
+ * Así cada moneda se agrupa y dentro manda el importe.
+ *
+ * Los céntimos van en entero y rellenados por la izquierda: es una comparación de
+ * texto, y sin el relleno «90» ganaría a «100».
+ */
+export function claveOrdenImporte(n: number | string | null | undefined, moneda: unknown): string {
+  const centavos = Math.round((Number(n) || 0) * 100)
+  return `${normalizarMonedaClaux(moneda)} ${String(centavos).padStart(12, '0')}`
+}
+
+/**
  * Totales por moneda, SIN convertir. $100 y €100 no hacen 200 de nada: son dos
  * cifras y se enseñan como dos. Lo usan el dashboard (MRR y cobros del mes), la
  * ficha del cliente y las métricas, que antes sumaban una sola columna.

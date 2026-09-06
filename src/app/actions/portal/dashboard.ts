@@ -9,7 +9,7 @@ import { estadoDocumentos }  from './documentos'
 import { obtenerEmpresas }   from './empresas'
 import { obtenerCuentasPorCobrar, obtenerCuentasPorPagar, type CuentasPageData } from './cobranza'
 import { modulosDeUsuario, calcularAcceso, type Permiso } from '@/lib/permisos'
-import { leerSetting }       from '@/lib/settings'
+import { leerSetting, leerCorreo } from '@/lib/settings'
 import { suscripcionLabel, precioMensualEfectivo, monedaDelCliente, esSocioHoy, COLUMNAS_CONDICIONES } from '@/lib/billing'
 import { etiquetaDimension, OFERTA_NIVEL, type Dimension } from '@/lib/limites'
 import { obtenerEtiquetasNegocio } from './sector'
@@ -1261,7 +1261,7 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
     puedeVer('base')           ? resumenTasas(db, cid, hoy)                   : Promise.resolve(undefined),
     obtenerEtiquetasNegocio(),
     leerSetting('descuento_anual_pct', '10'),
-    leerSetting('email_contratacion', 'contacto@claux.es'),
+    leerCorreo('email_contratacion'),
     // Qué ofrecer y en qué orden lo decide el catálogo comercial, no el código.
     db.from('modulos_catalogo').select('clave, tipo, orden').eq('activo', true),
     // Lo que este cliente ya pidió activar. Sin esto, «Te contactamos» vivía solo
