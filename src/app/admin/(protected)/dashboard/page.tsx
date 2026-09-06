@@ -10,13 +10,16 @@ import { totalPorMoneda, importesPorMoneda } from '@/lib/moneda-claux'
 import { COLUMNAS_EXENCION } from '@/lib/clientes/ciclo-vida'
 import { hoyEnTz, sumarDias } from '@/lib/fecha-tz'
 import { TOPE_VER_MAS } from '@/lib/listados'
+import { estadoFuncionesIa } from '@/lib/ia/interruptores'
 import ProximosVencer   from './ProximosVencer'
+import ParteDelDia      from './ParteDelDia'
 
 export default async function DashboardPage() {
   await requireAccesoPagina('dashboard')
   const supabase = await createClient()
 
   const DIAS_AVISO = parseInt(await getSetting('dias_aviso', '5'), 10)
+  const { parte_equipo: iaParte } = await estadoFuncionesIa(['parte_equipo'] as const)
 
   // El día lo pone el negocio (America/Havana), no el reloj del proceso. Con
   // `new Date()` + `toISOString()` el corte se hacía en UTC: media tarde en La
@@ -131,6 +134,9 @@ export default async function DashboardPage() {
           <h1 className="page-title">Dashboard</h1>
           <p className="page-subtitle">Resumen general del sistema CLAUX</p>
         </div>
+        {/* El parte del equipo (IA interna, se esconde con su interruptor): la
+            estrellita de la cabecera, como en el portal. */}
+        {iaParte && <ParteDelDia />}
       </div>
 
       {/* ── Fila 1: Total clientes · Activos · Suspendidos · Planes ── */}

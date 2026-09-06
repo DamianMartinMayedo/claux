@@ -20,6 +20,9 @@ import { notificarGraciaActivada } from '@/lib/notificaciones/eventos'
 import { esMigracionEstado, MIGRACION_ESTADOS_ALTA, type MigracionEstado } from '@/lib/migracion'
 import { COLUMNAS_EXENCION, estadoAlRetirarGracia } from '@/lib/clientes/ciclo-vida'
 import { hoyEnTz, sumarDias } from '@/lib/fecha-tz'
+import { resumirCliente } from '@/lib/ia/equipo'
+import { IaApagada, IaBolsaAgotada } from '@/lib/ia/interna'
+import { IA_SIN_RESPUESTA } from '@/lib/ia/propuesta'
 
 const LINK_PORTAL = 'https://claux.es/portal/login'
 
@@ -1049,5 +1052,93 @@ export async function simularNivel(client_id: string, nivel: string) {
     excedidas: uso.filter(u => u.excedido).map(u => ({
       etiqueta: u.etiqueta, usado: u.usado, limite: u.limite ?? 0,
     })),
+  }
+}
+
+// ── La ficha, leída para la llamada (Fase 8) ─────────────────────────────────
+//
+// «Cómo va este cliente y qué toca hacer con él», en el minuto antes de marcar el
+// teléfono. No escribe nada y no se guarda: es una lectura de lo que ya está en la
+// pantalla, puesta en orden para poder hablar. Si el siguiente paso merece
+// quedarse, se apunta a mano donde corresponda.
+//
+// SOLO ESTE CLIENTE viaja en el prompt (regla del plan, Fase 8): nunca la cartera.
+
+/** Filas que se le enseñan de cada cosa. Lo último es lo que cuenta en una llamada. */
+const FICHA_PAGOS   = 6
+const FICHA_SOPORTE = 5
+
+export async function resumirClienteIa(clientId: string): Promise<
+  { ok: true; estado: string[]; siguiente: string } | { ok: false; error: string; reintentar?: boolean }
+> {
+  await requirePermiso('clientes')
+  const db = createAdminClient()
+
+  const { data: cli } = await db.from('clients').select('*').eq('client_id', clientId).maybeSingle()
+  if (!cli) return { ok: false, error: 'Cliente no encontrado.' }
+
+  const hoy = hoyEnTz()
+  const [
+    { data: pagos }, { data: presus }, { data: msgs }, { data: uso }, { data: avisos }, { data: catalogo },
+  ] = await Promise.all([
+    db.from('payments').select('fecha, monto, moneda, estado')
+      .eq('client_id', clientId).order('fecha', { ascending: false }).limit(FICHA_PAGOS),
+    db.from('presupuestos_instalacion').select('id, estado, total_final, moneda, created_at')
+      .eq('client_id', clientId).order('created_at', { ascending: false }).limit(5),
+    db.from('soporte_mensajes').select('created_at, asunto, estado, prioridad')
+      .eq('client_id', clientId).order('created_at', { ascending: false }).limit(FICHA_SOPORTE),
+    db.from('uso_portal').select('dia')
+      .eq('client_id', clientId).order('dia', { ascending: false }).limit(1),
+    db.from('admin_notificaciones').select('titulo, severidad')
+      .eq('client_id', clientId).eq('resuelta', false)
+      .order('created_at', { ascending: false }).limit(8),
+    db.from('modulos_catalogo').select('clave, nombre').eq('activo', true),
+  ])
+
+  const moneda   = normalizarMonedaClaux(cli.moneda_facturacion)
+  const nombreDe = new Map(((catalogo ?? []) as { clave: string; nombre: string }[]).map(m => [m.clave, m.nombre]))
+  const modulos  = (Array.isArray(cli.modulos_activos) ? cli.modulos_activos as string[] : [])
+    .map(c => nombreDe.get(c) ?? c)
+
+  const alta = String(cli.created_at ?? '').slice(0, 10)
+  const dias = alta ? Math.round((Date.parse(`${hoy}T00:00:00Z`) - Date.parse(`${alta}T00:00:00Z`)) / 86_400_000) : null
+  const antiguedad = dias == null ? 'no consta cuándo se dio de alta'
+    : dias < 60 ? `con nosotros desde hace ${dias} días`
+    : `con nosotros desde hace ${Math.round(dias / 30)} meses`
+
+  const ultimoDia = ((uso ?? []) as { dia: string }[])[0]?.dia ?? null
+  const actividad = !ultimoDia
+    ? 'nadie de ese negocio ha entrado nunca al portal'
+    : ultimoDia === hoy
+      ? 'han entrado al portal hoy'
+      : `la última vez que entraron al portal fue el ${ultimoDia}`
+
+  try {
+    const r = await resumirCliente({
+      ficha: {
+        empresa:    cli.nombre_empresa,
+        estado:     cli.estado,
+        nivel:      nombreNivel(normalizarNivel(cli.nivel)),
+        antiguedad,
+        vence:      cli.fecha_expiracion ?? null,
+        socio:      esSocioHoy(cli),
+        modulos,
+        cuota:      importeClaux(Number(cli[moneda === 'EUR' ? 'precio_mensual_eur' : 'precio_mensual_usd']) || 0, moneda),
+        pagos: ((pagos ?? []) as { fecha: string; monto: number; moneda: string; estado: string }[])
+          .map(p => `${p.fecha} · ${importeClaux(Number(p.monto) || 0, normalizarMonedaClaux(p.moneda))} · ${p.estado}`),
+        presupuestos: ((presus ?? []) as { id: number; estado: string; total_final: number; moneda: string }[])
+          .map(p => `#${p.id} · ${p.estado} · ${importeClaux(Number(p.total_final) || 0, normalizarMonedaClaux(p.moneda))}`),
+        soporte: ((msgs ?? []) as { created_at: string; asunto: string; estado: string; prioridad: string | null }[])
+          .map(m => `${m.created_at.slice(0, 10)} · ${m.asunto} · ${m.estado}${m.prioridad ? ` · urgencia ${m.prioridad}` : ''}`),
+        actividad,
+        avisos: ((avisos ?? []) as { titulo: string; severidad: string }[])
+          .map(a => `[${a.severidad}] ${a.titulo}`),
+      },
+    })
+    if (!r) return { ok: false, error: IA_SIN_RESPUESTA, reintentar: true }
+    return { ok: true, estado: r.estado, siguiente: r.siguiente }
+  } catch (e) {
+    if (e instanceof IaBolsaAgotada || e instanceof IaApagada) return { ok: false, error: e.message }
+    throw e
   }
 }

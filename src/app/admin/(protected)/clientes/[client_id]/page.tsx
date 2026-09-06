@@ -13,6 +13,7 @@ import UsoClienteCard from './UsoClienteCard'
 import PresupuestosClienteCard from './PresupuestosClienteCard'
 import DocumentosClienteCard, { DOCS as DOCS_LEGALES } from './DocumentosClienteCard'
 import ClienteTabs from './ClienteTabs'
+import ResumenIaCliente from './ResumenIaCliente'
 import PagosClienteTabla, { type PagoFicha } from './PagosClienteTabla'
 import { ESTADO_BADGE } from '@/lib/badges'
 import { puedeAcceder } from '@/lib/roles'
@@ -24,6 +25,7 @@ import { listarFirmasCliente } from '@/app/actions/documentos-admin'
 import { COLUMNAS_PRECIO, normalizarNivel } from '@/lib/niveles'
 import { importeClaux, normalizarMonedaClaux, type MonedaClaux } from '@/lib/moneda-claux'
 import { mesEnTz } from '@/lib/fecha-tz'
+import { estadoFuncionesIa } from '@/lib/ia/interruptores'
 
 const MOTIVOS_GRACIA: Record<string, string> = {
   descuento: 'Descuento comercial',
@@ -118,6 +120,7 @@ export default async function ClienteDetallePage({
   if (!cliente) notFound()
 
   const descuentoAnual = parseInt(await getSetting('descuento_anual_pct', '10'), 10) || 0
+  const { cliente_resumen: iaResumen } = await estadoFuncionesIa(['cliente_resumen'] as const)
   // Lo que se le cobra (catálogo menos lo pactado; cero si es Socio CLAUX). `select('*')`
   // ya trae las columnas de condiciones, así que no hace falta otra consulta.
   // La moneda en la que se le factura HOY. Manda sobre qué caché se mira y en qué
@@ -268,6 +271,9 @@ export default async function ClienteDetallePage({
         docsPendientes={docsPendientes}
         resumen={
           <>
+          {/* ── Cómo va, para la llamada (IA interna, con su interruptor) ── */}
+          {iaResumen && <ResumenIaCliente clientId={cliente.client_id} />}
+
           {/* ── Información del cliente (ancho completo, grid horizontal) ── */}
           <div className="card">
             <h2 className="detail-section-title">Información del cliente</h2>

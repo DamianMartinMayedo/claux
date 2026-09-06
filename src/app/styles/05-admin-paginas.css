@@ -180,9 +180,12 @@
    directas de la página: se lo pone el panel. Con `gap` y no con `margin-bottom`,
    que dejaba un hueco colgando debajo de la última. */
 .cli-panel { display: flex; flex-direction: column; gap: var(--space-6); }
-/* El grid de pagos trae su propio `margin-bottom`, pensado para cuando iba suelto
-   en la página; dentro del panel se sumaría al `gap`. */
+/* El grid de pagos y la barra del botón de IA traen su propio `margin-bottom`,
+   pensado para cuando iban sueltos en la página; dentro del panel se sumaría al
+   `gap`. */
 .cli-panel > .detail-grid { margin-bottom: 0; }
+.cli-panel > .filters-bar { margin-bottom: 0; }
+.cli-panel > .iap { margin-top: 0; margin-bottom: 0; }
 
 
 /* Las fichas de detalle (.det-*) viven en 03-components.css: hoy las pinta el
