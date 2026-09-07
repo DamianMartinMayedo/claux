@@ -227,8 +227,20 @@ export default function SoporteAdminView({
     const res = await clasificarMensajeIa(verMsg.id)
     setClasifPensando(false)
     if (!res.ok) { toastErr(res.error ?? 'No se pudo clasificar.'); return }
-    toastOk('Mensaje clasificado. Revísalo.')
-    setVerMsg(null)
+
+    // La etiqueta se queda puesta en los tres selectores, con el mensaje delante.
+    // Cerrar el modal aquí era pedirle a alguien que repase a ciegas: para ver lo
+    // que la IA acababa de poner había que volver a abrir el mensaje.
+    const c = res.clasificacion
+    setVerMsg(v => (v ? {
+      ...v,
+      tema:           c.tema,
+      tipo:           c.tipo,
+      prioridad:      c.prioridad,
+      resumen:        c.resumen || null,
+      clasificado_ia: true,
+    } : v))
+    toastOk('Mensaje clasificado')
     router.refresh()
   }
 
@@ -476,7 +488,7 @@ export default function SoporteAdminView({
 
       {verMsg && (
         <ModalShell
-          size="modal-540"
+          size="modal-lg"
           title={`Mensaje de ${verMsg.nombre_empresa}`}
           subtitle={fmtFecha(verMsg.created_at)}
           onClose={() => setVerMsg(null)}

@@ -13,7 +13,7 @@ import { enviarEmail, tipoEmailActivo } from '@/lib/email/enviar'
 import { leerCorreo } from '@/lib/settings'
 import {
   borradorSoporte, proponerFaqs,
-  type FaqPropuesta, type PrioridadSoporte, type TipoSoporte,
+  type ClasificacionSoporte, type FaqPropuesta, type PrioridadSoporte, type TipoSoporte,
 } from '@/lib/ia/equipo'
 import { IA_SIN_RESPUESTA, selloIa, type PropuestaIa } from '@/lib/ia/propuesta'
 import { clasificarMensaje } from '@/lib/soporte/clasificar'
@@ -620,7 +620,10 @@ export async function borradorRespuestaIa(
 
 export async function clasificarMensajeIa(
   id: number,
-): Promise<{ ok: boolean; error?: string; reintentar?: boolean }> {
+): Promise<
+  | { ok: true; clasificacion: ClasificacionSoporte }
+  | { ok: false; error: string; reintentar?: boolean }
+> {
   await requirePermiso('soporte')
   if (!(await adminAutenticado())) return { ok: false, error: 'No autorizado.' }
 
@@ -635,12 +638,14 @@ export async function clasificarMensajeIa(
   try {
     const r = await clasificarMensaje({ id, asunto: msg.asunto, mensaje: msg.mensaje })
     if (!r) return { ok: false, error: IA_SIN_RESPUESTA, reintentar: true }
+    revalidatePath('/admin/soporte')
+    // Vuelve la etiqueta, no solo el «ok»: la pantalla la deja puesta en los tres
+    // selectores para repasarla ahí mismo, que es lo que se va a hacer con ella.
+    return { ok: true, clasificacion: r }
   } catch (e) {
     if (e instanceof IaBolsaAgotada || e instanceof IaApagada) return { ok: false, error: e.message }
     throw e
   }
-  revalidatePath('/admin/soporte')
-  return { ok: true }
 }
 
 export async function guardarClasificacionMensaje(args: {
