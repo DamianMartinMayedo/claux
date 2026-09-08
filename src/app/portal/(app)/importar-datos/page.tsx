@@ -9,15 +9,22 @@ import ImportarClienteWizard    from './ImportarClienteWizard'
 
 export const dynamic = 'force-dynamic'
 
-// Importador de AUTOSERVICIO: el cliente se importa SOLO (el del equipo, por
-// impersonación, vive en /portal/importar y no se toca). Regla única de visibilidad
-// (plan §6, en `accesoImportCliente`): `autoimport_activo` ∧ el usuario puede importar
-// algún módulo contratado ∧ `migracion_estado != 'a_cargo_equipo'`. No está en el
-// sidebar; se entra desde el menú de cuenta, con esta MISMA condición.
+// Importador de AUTOSERVICIO: el cliente se importa SOLO. El del equipo es otro
+// (/portal/importar) y no se toca. Regla única de visibilidad (plan §6, en
+// `accesoImportCliente`): `autoimport_activo` ∧ el usuario puede importar algún
+// módulo contratado ∧ `migracion_estado != 'a_cargo_equipo'`. No está en el sidebar;
+// se entra desde el menú de cuenta y desde la guía de puesta en marcha, con esta
+// MISMA condición.
+//
+// Impersonando SÍ se entra aquí. Antes se desviaba a /portal/importar, y eso dejaba
+// esta pantalla sin ninguna forma de revisarla: el menú de cuenta y la guía la
+// ofrecen impersonando (su regla no mira `imp`), así que el enlace existía y
+// rebotaba. Quien impersona ve el banner que le recuerda quién es, y el importador
+// del equipo —el bueno para HACER una migración, con sus entidades `soloEquipo`—
+// sigue en su sitio.
 export default async function ImportarDatosPage() {
   const session = await getPortalSession()
-  if (!session)    redirect('/portal/login')
-  if (session.imp) redirect('/portal/importar')   // el equipo usa su propio importador
+  if (!session) redirect('/portal/login')
 
   const acceso = await accesoImportCliente(session)
   if (!acceso.disponible) redirect('/portal/dashboard')
