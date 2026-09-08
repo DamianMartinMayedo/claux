@@ -39,13 +39,8 @@ const RAIZ = 'src'
 // Carpetas con registro propio o que no son texto de producto.
 const EXCLUIDAS = [
   'src/app/(academia)',
-  'src/app/(landing)',
   'src/lib/academia',
   'src/app/api',
-  // La home es la landing, aunque su metadata y su imagen social vivan sueltas
-  // en `src/app/` en vez de dentro de `(landing)`.
-  'src/app/layout.tsx',
-  'src/app/opengraph-image.tsx',
 ]
 
 // ── Excepciones justificadas ────────────────────────────────────────────────
@@ -68,7 +63,15 @@ const PERMITIDO = [
   { ruta: 'src/lib/reservas/', reglas: ['primera'], motivo: 'mensaje que el negocio firma ante su cliente final' },
   // El diagnóstico público es el embudo comercial: «le contactamos» es CLAUX
   // comprometiéndose con quien deja sus datos, no cercanía de interfaz.
-  { ruta: 'src/app/diagnostico/', reglas: ['primera'], motivo: 'embudo comercial: la empresa se compromete' },
+  { ruta: 'src/app/diagnostico/', reglas: ['primera', 'tuteo'], motivo: 'embudo comercial: la empresa se compromete, y tutea como la landing' },
+  // La landing NO es el producto: es el argumento de venta, y ahí el tuteo es una
+  // decisión del propietario (2026-09-08), no un descuido. Estaba EXCLUIDA entera y
+  // por eso nadie veía sus exclamaciones ni sus coloquialismos; ahora se le perdona
+  // el tuteo Y NADA MÁS. La metadata de la home y su imagen social viven sueltas en
+  // `src/app/` en vez de dentro de `(landing)`, así que van una a una.
+  { ruta: 'src/app/(landing)/',        reglas: ['tuteo'], motivo: 'argumento de venta: el tuteo es deliberado (§5.1)' },
+  { ruta: 'src/app/layout.tsx',        reglas: ['tuteo'], motivo: 'metadata de la home, que es la landing' },
+  { ruta: 'src/app/opengraph-image.tsx', reglas: ['tuteo'], motivo: 'imagen social de la home, que es la landing' },
 ]
 
 // ── Reglas ───────────────────────────────────────────────────────────────────

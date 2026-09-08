@@ -12,11 +12,11 @@ export const metadata: Metadata = {
   // `claux.app` no es de CLAUX (sirve otro producto). El dominio es `claux.es`.
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'https://claux.es'),
   title: {
-    default: 'CLAUX — Digitaliza el negocio',
+    default: 'CLAUX — Digitaliza tu negocio',
     template: '%s | CLAUX',
   },
   description:
-    'SaaS todo en uno para digitalizar el negocio. Contabilidad, menú digital QR, reservas, inventario y RRHH. Activas solo los módulos que necesitas.',
+    'SaaS todo en uno para digitalizar tu negocio. Contabilidad, menú digital QR, reservas, inventario y RRHH. Activas solo los módulos que necesitas.',
   keywords: ['CLAUX', 'ERP', 'SaaS', 'restaurantes', 'menú QR', 'reservas', 'contabilidad', 'digitalización', 'PYMES'],
   authors: [{ name: 'CLAUX' }],
   icons: {
@@ -27,9 +27,9 @@ export const metadata: Metadata = {
     apple: '/simbolo-180.png',
   },
   openGraph: {
-    title: 'CLAUX — Digitaliza el negocio',
+    title: 'CLAUX — Digitaliza tu negocio',
     description:
-      'SaaS todo en uno para digitalizar el negocio. Contabilidad, menú digital, reservas, inventario, RRHH y más.',
+      'SaaS todo en uno para digitalizar tu negocio. Contabilidad, menú digital, reservas, inventario, RRHH y más.',
     type: 'website',
     locale: 'es_ES',
     images: [{ url: '/logo_color.png', width: 1200, height: 630 }],

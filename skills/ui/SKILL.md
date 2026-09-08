@@ -197,9 +197,10 @@ alguien abre veinte veces al día, no una campaña ni un asistente simpático.
 - **De usted solo cuando el trato directo es inevitable**: correo, firma de documentos,
   respuestas de la IA y las páginas donde el negocio se dirige a su cliente final (reserva,
   citas, propuesta comercial). «Su suscripción vence el 3 de octubre.»
-- **Nunca de tú, en ninguna superficie.** Tampoco en las públicas del cliente final —bot
-  de Telegram, reserva, citas, catálogo QR, punto de venta—: ahí la voz es la del negocio
-  ante su cliente, y también es profesional.
+- **Nunca de tú en el producto.** Tampoco en las públicas del cliente final —bot de
+  Telegram, reserva, citas, catálogo QR, punto de venta—: ahí la voz es la del negocio
+  ante su cliente, y también es profesional. La única excepción es el **embudo comercial**
+  de CLAUX, más abajo.
 - **CLAUX no habla en primera persona.** Nada de «no pudimos», «te cargamos», «hemos
   reabierto», «escríbenos y lo vemos». El sujeto es el hecho o el sistema, no el equipo.
   La única excepción es **donde alguien firma y se compromete**, y son cinco sitios, no
@@ -211,6 +212,26 @@ alguien abre veinte veces al día, no una campaña ni un asistente simpático.
 - **Sin coloquialismos.** «Ojo», «a ojo», «a mano», «de golpe», «toca decidir», «casi
   listo», «si quieres», «no hace falta», «lo vemos», «en un momento», «de un tirón».
   Se dicen en seco: «a mano» → «manualmente»; «Ojo:» → se borra y se enuncia el hecho.
+
+### La excepción: el embudo comercial (decidido el 2026-09-08)
+
+La landing (`src/app/(landing)/`, más `layout.tsx` y `opengraph-image.tsx`, que son su
+metadata) y el diagnóstico (`src/app/diagnostico/`) **tutean, a propósito**. No son el
+producto: son el argumento de venta, y quien los lee todavía no es cliente —es un dueño
+de negocio que puede estar cocinando o cortando el pelo él mismo—. Ahí el usted de una
+empresa de software lee «esto no es para mí»; dentro del portal, en cambio, la formalidad
+lee «esto es serio». Son dos lectores distintos en dos momentos distintos.
+
+Lo que **no** cambia en el embudo: nada de adjetivos de folleto («personalizado para ti»,
+«soporte cercano», «precios justos» — no se pueden verificar y los copia cualquiera), ni
+exclamaciones, ni coloquialismos, ni euforia. Se vende con verbos y hechos: la mejor línea
+de la landing no tiene un solo adjetivo. Y una regla dura: **dentro de una demo o una
+captura de producto no se tutea ni se adorna**, porque una demo es una fotografía del
+producto y pintar un bot más simpático que el real es vender lo que no hay.
+
+El centinela lo refleja: la landing y el diagnóstico están en el ALLOWLIST de
+`scripts/audit-textos.mjs` con `reglas: ['tuteo']` —solo se les perdona eso—, no excluidos.
+Excluirlos fue el error anterior: nadie veía sus exclamaciones durante meses.
 
 ### Las reglas de siempre
 

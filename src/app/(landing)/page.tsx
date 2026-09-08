@@ -28,7 +28,7 @@ import {
 export const metadata: Metadata = {
   title: 'Digitaliza tu negocio',
   description:
-    'CLAUX es la plataforma todo en uno para digitalizar tu negocio: contabilidad, catálogo con QR, reservas y un asistente con IA. Activas solo los módulos que necesitas y pagas por lo que usas. Empieza con tu diagnóstico gratis.',
+    'Contabilidad, catálogo con QR, reservas y asistente con IA en una sola plataforma. Activas solo los módulos que necesitas y pagas por lo que usas.',
   alternates: { canonical: '/' },
   openGraph: {
     title: 'CLAUX — Digitaliza tu negocio',
@@ -108,7 +108,7 @@ function Hero() {
         </a>
       </div>
       <p className="ld-hero-trust">
-        Sin permanencia · Personalizado para ti · Soporte cercano
+        Sin permanencia · Configuración a medida · Soporte directo
       </p>
     </section>
   )
@@ -129,10 +129,16 @@ function ValueSection() {
             cinco herramientas» — un número inventado que le pide al visitante que
             se reconozca en un problema que a lo mejor no tiene. Ahora dice lo que
             «en un solo lugar» significa de verdad, que es lo único que el título
-            no puede decir: que el dato viaja solo. */}
+            no puede decir: que el dato viaja solo.
+            Y lo dice en general y nada más. Aquí estuvo el ejemplo del mostrador
+            (venta → cuentas → almacén): concreto y cierto, pero de un módulo, y en
+            un subtítulo que habla del sistema entero eso encoge la promesa. Un
+            subtítulo general se queda general; los ejemplos, en la tarjeta o en la
+            pregunta del módulo que les toca. La lista de módulos tampoco se repite:
+            la acaba de dar el hero. */}
         <p className="ld-section-text">
-          Lo que cobras en el mostrador ya está en tus cuentas y descontado del
-          almacén, sin volver a teclearlo.
+          No son programas sueltos: los módulos que actives trabajan conectados y
+          cada dato se escribe una vez.
         </p>
       </Reveal>
 
@@ -141,13 +147,13 @@ function ValueSection() {
           icon={<CalculatorIcon />}
           color="teal"
           title="Contabilidad simple y completa"
-          text="Ventas, gastos, tesorería y reportes. Sin registros dobles ni complicaciones."
+          text="Ventas, gastos, tesorería y reportes. Sin registros dobles."
         />
         <ValueItem
           icon={<PuzzleIcon />}
           color="amber"
           title="Solo lo que necesitas"
-          text="Cada módulo funciona independiente: activas y pagas solo por lo que necesitas."
+          text="Cada módulo funciona por separado: activas y pagas solo los que uses."
         />
         <ValueItem
           icon={<CajaIcon />}
@@ -159,7 +165,7 @@ function ValueSection() {
           icon={<DossierIcon />}
           color="indigo"
           title="Tus números, listos para enseñar"
-          text="Convierte tu contabilidad en una presentación para inversores: un enlace para enseñar y un PDF para enviar."
+          text="Tu contabilidad convertida en una presentación para inversores: un enlace y un PDF."
         />
         <ValueItem
           icon={<AiChatIcon />}
@@ -272,7 +278,7 @@ function NivelesSection({ niveles }: { niveles: NivelPublico[] }) {
   return (
     <section className="ld-section ld-section-niveles" id="niveles">
       <Reveal stagger className="ld-section-head">
-        <div className="ld-section-label">Tamaño de tu negocio</div>
+        <div className="ld-section-label">Capacidad</div>
         <h2 className="ld-section-title">Tres niveles, adaptados a tu negocio</h2>
         {/* UNA línea, y la única que el rótulo y el título no dicen ya. Aquí había
             tres frases que repetían «eliges por el tamaño» por tercera vez y
@@ -454,15 +460,14 @@ function IaSection() {
           <div className="ld-section-label ld-spotlight-label">Asistente con IA · Módulo opcional</div>
           <h2 className="ld-spotlight-title">El asistente que atiende por ti</h2>
           <p className="ld-spotlight-text">
-            Un chat con IA que habla con tus clientes por Telegram y desde tu
-            propio catálogo: responde dudas y toma reservas y pedidos conversando
-            en lenguaje natural. Y a ti te ayuda a decidir, con los números de tu
-            negocio delante.
+            Un chat con IA que atiende a tus clientes por Telegram y desde tu
+            catálogo: responde dudas y toma reservas y pedidos en lenguaje
+            natural. Y a ti te ayuda a decidir, con los números delante.
           </p>
           <ul className="ld-spotlight-list">
             <li>
               <CheckIcon size={18} />
-              Atiende a tus clientes 24/7 por Telegram y en tu catálogo
+              Atiende 24/7, también con el negocio cerrado
             </li>
             <li>
               <CheckIcon size={18} />
@@ -489,14 +494,14 @@ function IaSection() {
               <span>¿Tienen mesa para 4 esta noche?</span>
             </div>
             <div className="ld-chat-row ld-chat-out">
-              <span>¡Sí! A las 20:30 o 21:00. ¿Te reservo una?</span>
+              <span>Sí, a las 20:30 o a las 21:00. ¿A nombre de quién?</span>
             </div>
             <div className="ld-chat-row ld-chat-in">
               <CalendarIcon size={16} />
-              <span>Las 20:30, gracias</span>
+              <span>Ana. Las 20:30</span>
             </div>
             <div className="ld-chat-row ld-chat-out">
-              <span>Reservada para 4 a las 20:30. ¡Te esperamos!</span>
+              <span>Resumen: hoy a las 20:30, 4 personas, a nombre de Ana. ¿Confirmar reserva?</span>
             </div>
           </div>
         </div>
@@ -529,7 +534,7 @@ function StepsSection() {
           <h3>Te lo dejamos listo</h3>
           <p>
             Configuramos tus módulos, tu catálogo y tus canales. Tú solo revisas y
-            validas: llave en mano.
+            validas.
           </p>
         </div>
         <div className="ld-step">
@@ -555,26 +560,33 @@ function StepsSection() {
 /* ════════════════════════════════════════════════ FAQ ════ */
 
 function FaqSection() {
+  /* El orden importa tanto como la respuesta: abría con «¿La caja funciona sin
+     conexión?» y la segunda volvía a poner el punto de venta de ejemplo, así que
+     las dos primeras cosas que leía el visitante lo dejaban con la idea de que
+     CLAUX es una caja registradora offline. Es un módulo, y uno bueno, pero uno.
+     Ahora primero lo que define al sistema —que se adapta al sector y que se
+     contrata por partes— y la caja después, donde es una ventaja concreta y no
+     el retrato del producto. */
   const faqs = [
     {
-      q: '¿La caja funciona sin conexión?',
-      a: 'Sí. El punto de venta cobra, registra las ventas y cierra caja offline. Cuando vuelve la conexión, se sincroniza solo.',
+      q: '¿Sirve para mi tipo de negocio?',
+      a: 'Sí. Restaurantes, peluquerías, gimnasios, clínicas, tiendas y servicios: el sistema se adapta con la terminología de cada sector.',
     },
     {
-      q: '¿Tengo que contratar todo de golpe?',
-      a: 'No. Cada módulo funciona solo: puedes empezar con el punto de venta y no llevar contabilidad, o al revés. Pagas solo por lo que actives.',
+      q: '¿Tengo que contratarlo todo a la vez?',
+      a: 'No. Cada módulo funciona solo: puedes empezar por las reservas y añadir la contabilidad más adelante, o al revés. Pagas solo por lo que actives.',
     },
     {
       q: '¿Puedo enseñarle mis números a un inversor?',
       a: 'Sí. El Dossier convierte tu contabilidad en una presentación con enlace web y un estado de resultados en PDF, a partir de los datos que ya tienes.',
     },
     {
-      q: '¿Necesito tener WhatsApp Business?',
-      a: 'No hace falta. Las reservas y la atención al cliente funcionan por Telegram, y también desde tu propio catálogo digital.',
+      q: '¿La caja funciona sin conexión?',
+      a: 'Sí. El punto de venta cobra, registra las ventas y cierra caja offline. Cuando vuelve la conexión, se sincroniza solo.',
     },
     {
-      q: '¿Sirve para mi tipo de negocio?',
-      a: 'Sí. Restaurantes, peluquerías, gimnasios, clínicas, tiendas y servicios: el sistema se adapta con la terminología de cada sector.',
+      q: '¿Necesito tener WhatsApp Business?',
+      a: 'No es necesario. Las reservas y la atención al cliente funcionan por Telegram, y también desde tu propio catálogo digital.',
     },
     {
       q: '¿Cómo empiezo?',
