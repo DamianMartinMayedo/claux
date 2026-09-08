@@ -4,17 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPortalSession } from './auth'
 import { comprobarLimite } from '@/lib/limites'
-
-// Paleta moderna de identidad de empresa. Saturada y a media-oscuridad (no
-// pastel) para que la inicial blanca del avatar/badge siempre contraste, y bien
-// repartida en la rueda para distinguir empresas de un vistazo. Si cambia, hay
-// que sincronizar COLORES en EmpresasGrid.tsx y mapear los tonos viejos en una
-// migración (ver 075_paleta_colores_empresas.sql).
-const COLORES_EMPRESA = [
-  '#00AFAA', '#2563EB', '#7C3AED', '#C026D3',
-  '#E11D48', '#EA580C', '#16A34A', '#64748B',
-  '#FFBF00',
-]
+import { COLORES_EMPRESA } from '@/lib/colores-empresa'
 
 export interface Empresa {
   empresa_id:        string

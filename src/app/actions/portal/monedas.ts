@@ -49,6 +49,8 @@ export interface Par {
 export interface MonedaOpcion {
   codigo:  string
   nombre?: string
+  /** Lo pide el modal de empresa, que enseña «USD — Dólar ($)» en su selector. */
+  simbolo?: string
 }
 
 // ── Constantes internas ───────────────────────────────────────────────────────
@@ -108,7 +110,7 @@ export async function obtenerMonedasActivas(): Promise<MonedaOpcion[]> {
   const db = createAdminClient()
   const { data } = await db
     .from('monedas')
-    .select('codigo, nombre')
+    .select('codigo, nombre, simbolo')
     .eq('client_id', session.client_id)
     .eq('activa', true)
     .order('es_consolidacion', { ascending: false })
