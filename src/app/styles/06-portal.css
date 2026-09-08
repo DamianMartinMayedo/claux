@@ -320,6 +320,26 @@
 .emp-letra-input-row { display: flex; align-items: center; gap: var(--space-3); }
 .emp-letra-input     { width: 80px; text-align: center; font-size: 18px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
 .emp-letra-input.is-invalid { border-color: var(--color-error); }
+
+/* Se llega al modal ENTERO desde el paso «Asigna la letra» de la puesta en
+   marcha, con la ficha ya rellena. Sin señalar el campo, el dueño abre un
+   formulario lleno y no sabe a qué venía: esto se lo dice. Un halo que late dos
+   veces y se queda quieto — un latido perpetuo, en un campo donde hay que
+   escribir, molesta más de lo que guía. Solo desde ese paso (`enfocar`): en la
+   página de Empresas la letra no se pide ni se resalta. */
+.emp-letra-senalada .emp-letra-input {
+  border-color: var(--color-primary);
+  animation: emp-letra-late 1.6s var(--ease) 2;
+}
+.emp-letra-senalada > label { color: var(--color-primary-text); }
+@keyframes emp-letra-late {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-primary) 0%, transparent); }
+  35%      { box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-primary) 28%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* El borde marcado basta para señalar; el latido se va. */
+  .emp-letra-senalada .emp-letra-input { animation: none; }
+}
 .emp-limite-cta { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
 .emp-limite-cta > button { flex-shrink: 0; }
 .emp-letra-hint      { font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.4; }
@@ -818,6 +838,16 @@
 .prf-label       { font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--color-text-muted); }
 .prf-value       { font-size: var(--text-sm); color: var(--color-text); }
 .prf-value-strong { font-weight: 600; }
+
+/* Pie del card de cuenta: un dato a la izquierda y su acción a la derecha. Hoy
+   solo lo usa la recuperación de la guía de puesta en marcha, que aparece
+   únicamente si el dueño la ocultó. */
+.prf-card-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: var(--space-3);
+  margin-top: var(--space-5); padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
 
 /* Badges de estado (reutilizados también en Facturación) */
 .prf-badge        { display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: var(--radius-full); }
@@ -3001,41 +3031,262 @@ a.dash-list-main:hover .dash-list-title { color: var(--color-primary); }
 .dash-cta-pie-link { font-weight: 600; color: var(--color-primary-text); text-decoration: none; }
 .dash-cta-pie-link:hover { text-decoration: underline; }
 
-/* ── Dashboard: checklist de puesta en marcha ──────────────────────────────────
-   Pasos base (empresa, moneda, almacén…) según módulos contratados. Fila horizontal
-   con scroll en móvil; pasos cumplidos tachados, pendientes como enlaces. */
+/* ── Dashboard: puesta en marcha del negocio ───────────────────────────────────
+   Lo primero que ve un cliente nuevo. Dos tamaños según lo que le falte, y el
+   tamaño ES el mensaje:
+
+     .onb-arranque → falta lo básico (moneda/empresa/letra): banda de marca a
+                     todo el ancho, EN LUGAR de los widgets. Sin esto la app no
+                     hace nada, y unos paneles vacíos no lo explican.
+     .onb-afinar   → solo queda la pregunta del importador: tarjeta normal y los
+                     widgets vuelven. Una pregunta no es motivo para tapar nada.
+
+   No hay tercer estado: cuando no queda ningún paso el bloque **desaparece**
+   (`calcularOnboarding` devuelve `null`). La guía se acaba, no se queda de adorno.
+
+   Móvil primero: una columna, el botón a todo el ancho y el bloque entero cabe
+   en 360 px. */
 .onb {
   margin: 0 0 var(--space-6);
-  padding: var(--space-4) var(--space-5);
   border-radius: var(--radius-lg);
-  background: var(--color-surface); border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
 }
-.onb-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
-.onb-title { font-size: var(--text-base); font-weight: 700; }
-.onb-progreso { font-size: var(--text-sm); color: var(--color-text-muted); flex-shrink: 0; }
-.onb-pasos {
-  display: flex; gap: var(--space-2); list-style: none; margin: 0; padding: 0;
-  overflow-x: auto; -webkit-overflow-scrolling: touch;
+
+/* ── Cabecera ── */
+.onb-cabecera {
+  display: flex; align-items: center; gap: var(--space-4);
+  padding: var(--space-5);
 }
+.onb-cabecera-txt { flex: 1 1 auto; min-width: 0; }
+.onb-titulo {
+  font-family: var(--font-display); font-size: var(--text-xl); font-weight: 700;
+  line-height: 1.2; margin: 0; color: var(--color-text);
+}
+.onb-sub { margin: var(--space-1) 0 0; font-size: var(--text-sm); color: var(--color-text-muted); }
+
+/* La banda del arranque usa el degradado de marca (los tonos `-active`, estables
+   en los dos temas y calculados para llevar blanco encima). Es lo único de la
+   pantalla que no son datos del negocio; vestida como un widget se leería como
+   uno más y se ignoraría. El blanco va EXPLÍCITO, no `--color-text-inv`: ese gira
+   con el tema y en oscuro dejaba el titular en carbón sobre teal. */
+.onb-arranque { border-color: transparent; box-shadow: var(--shadow-md); }
+.onb-arranque .onb-cabecera { background: var(--gradient-band); padding: var(--space-6) var(--space-5); }
+.onb-arranque .onb-titulo { font-size: var(--text-2xl); color: #fff; }
+.onb-arranque .onb-sub    { color: rgb(255 255 255 / 0.88); }
+
+/* «Ocultar»: acción de texto, sin caja. Está en los TRES estados —nadie tiene que
+   aguantar un bloque que no quiere— y lo obligatorio no se pierde al ocultarlo:
+   vuelve el aviso de prerrequisito del dashboard. */
+.onb-ocultar {
+  flex-shrink: 0; align-self: flex-start;
+  padding: 0; border: none; background: none;
+  font: inherit; font-size: var(--text-sm); font-weight: 600;
+  color: var(--color-text-muted); cursor: pointer;
+}
+.onb-ocultar:hover { color: var(--color-text); text-decoration: underline; text-underline-offset: 3px; }
+.onb-ocultar:disabled { opacity: 0.5; cursor: default; }
+.onb-arranque .onb-ocultar { color: rgb(255 255 255 / 0.82); }
+.onb-arranque .onb-ocultar:hover { color: #fff; }
+
+/* ── Anillo de progreso ──
+   `pathLength=100` en el SVG deja el perímetro en 100 unidades, así que el trazo
+   se recorta con `stroke-dasharray` como ATRIBUTO y no hace falta ningún `style=`
+   con 2πr calculado en JavaScript. El giro de −90° pone el arranque a las 12. */
+.onb-anillo {
+  position: relative; flex-shrink: 0;
+  width: 4rem; height: 4rem;
+  display: grid; place-items: center;
+}
+.onb-anillo-sm { width: 3rem; height: 3rem; }
+.onb-anillo svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.onb-anillo circle { fill: none; stroke-width: 4; }
+.onb-anillo-pista { stroke: var(--color-border); }
+.onb-anillo-valor {
+  stroke: var(--color-primary); stroke-linecap: round;
+  transition: stroke-dasharray 420ms var(--ease);
+}
+.onb-anillo.is-completo .onb-anillo-valor { stroke: var(--color-success); }
+.onb-anillo-txt {
+  position: relative; font-size: var(--text-sm); font-weight: 700;
+  color: var(--color-text); line-height: 1; white-space: nowrap;
+}
+.onb-anillo-de { font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); }
+/* Sobre la banda de marca el anillo se dibuja en blanco: el teal sobre el
+   degradado no se distingue, y el borde de la pista desaparece. */
+.onb-arranque .onb-anillo-pista { stroke: rgb(255 255 255 / 0.28); }
+.onb-arranque .onb-anillo-valor { stroke: #fff; }
+.onb-arranque .onb-anillo-txt   { color: #fff; }
+.onb-arranque .onb-anillo-de    { color: rgb(255 255 255 / 0.82); }
+
+/* ── La lista de pasos ── */
+.onb-lista, .onb-sublista { list-style: none; margin: 0; padding: 0; }
+.onb-lista { border-top: 1px solid var(--color-border); }
+.onb-arranque .onb-lista { border-top: none; background: var(--color-surface); }
+
 .onb-paso {
-  display: flex; align-items: center; gap: var(--space-2); flex: 0 0 auto;
-  padding: var(--space-2) var(--space-3);
+  display: flex; align-items: flex-start; gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-sm);
+}
+.onb-paso:last-child { border-bottom: none; }
+.onb-paso-icono {
+  display: flex; align-items: center; justify-content: center;
+  width: 2rem; height: 2rem; flex-shrink: 0;
   border-radius: var(--radius-md);
-  background: var(--color-surface-2); border: 1px solid var(--color-border);
-  font-size: var(--text-sm); color: var(--color-text); white-space: nowrap;
+  background: var(--color-surface-2); color: var(--color-text-muted);
 }
-.onb-num {
+.onb-paso-txt { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; }
+.onb-paso-titulo { font-weight: 600; color: var(--color-text); }
+.onb-paso-apoyo { font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.45; }
+.onb-paso-estado {
+  flex-shrink: 0; align-self: center;
+  font-size: var(--text-xs); font-weight: 600; color: var(--color-success);
+}
+
+/* UN solo paso activo: icono en color, línea de por qué y botón. Los demás,
+   atenuados y sin acción — una lista con ocho botones no dice por dónde empezar,
+   que es exactamente lo que un cliente nuevo necesita saber. */
+.onb-paso.is-activo { background: var(--color-primary-subtle); align-items: center; }
+.onb-paso.is-activo .onb-paso-icono { background: var(--color-primary); color: var(--color-text-inv); }
+.onb-paso.is-activo .onb-paso-titulo { font-weight: 700; }
+/* Los hechos se quedan A LA VISTA, solo atenuados: el dueño necesita poder
+   repasar lo que ya configuró (nada de tacharlos ni borrarlos). */
+.onb-paso.is-hecho .onb-paso-titulo { color: var(--color-text-muted); font-weight: 600; }
+.onb-paso.is-hecho .onb-paso-icono { background: var(--color-success-bg); color: var(--color-success); }
+/* Pendiente que este usuario NO puede resolver (lo crea el administrador). Se
+   enseña igual —explica por qué la app está muda— pero sin botón. */
+.onb-paso.is-ajeno .onb-paso-titulo { color: var(--color-text-muted); }
+
+.onb-paso-acciones {
+  display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; flex-wrap: wrap;
+}
+
+/* Los hechos, plegados cuando pasan de tres: si no, empujan el paso activo fuera
+   de la pantalla del móvil. */
+.onb-hechos-plegados { border-bottom: 1px solid var(--color-border); }
+.onb-hechos-boton {
+  display: flex; align-items: center; gap: var(--space-2); width: 100%;
+  padding: var(--space-3) var(--space-5);
+  border: none; background: none; font: inherit; font-size: var(--text-sm);
+  font-weight: 600; color: var(--color-text-muted); cursor: pointer; text-align: left;
+}
+.onb-hechos-boton:hover { color: var(--color-text); }
+.onb-hechos-check {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 1.4rem; height: 1.4rem; flex-shrink: 0;
+  width: 1.35rem; height: 1.35rem; flex-shrink: 0;
   border-radius: var(--radius-full);
-  background: var(--color-surface-offset); color: var(--color-text-muted);
-  font-size: var(--text-xs); font-weight: 700;
+  background: var(--color-success-bg); color: var(--color-success);
 }
-.onb-link { color: var(--color-primary-text); font-weight: 600; }
-.onb-link:hover { text-decoration: underline; }
-.onb-paso-hecho { border-color: var(--color-success); }
-.onb-paso-hecho .onb-num { background: var(--color-success-bg); color: var(--color-success); }
-.onb-paso-hecho .onb-label { color: var(--color-text-muted); text-decoration: line-through; }
+.onb-sublista .onb-paso { padding-left: var(--space-8); }
+
+
+/* ── El pliegue ──
+   `grid-template-rows: 0fr → 1fr`, que sí es animable, en vez de `display:none`
+   (salta en seco) o de un `max-height` inventado (si el contenido cambia, la
+   animación se corta). Mismo patrón que `.dash-cta-mas`. */
+.onb-plegable {
+  display: grid; grid-template-rows: 0fr; opacity: 0;
+  transition: grid-template-rows 260ms var(--ease), opacity 180ms var(--ease);
+}
+.onb-plegable.is-abierto { grid-template-rows: 1fr; opacity: 1; }
+.onb-plegable-caja { overflow: hidden; min-height: 0; }
+.onb-chevron { flex-shrink: 0; transition: transform var(--transition); }
+.onb-chevron.is-abierto { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) {
+  .onb-plegable, .onb-chevron, .onb-anillo-valor { transition: none; }
+}
+
+/* ── El modal del paso ──
+   Ya no hay formularios propios: cada paso abre EL MISMO modal de su página, con su
+   color, su logo y sus campos. Lo único que queda aquí es el cascarón que se pinta
+   mientras esos datos llegan — en Cuba tardan, y un modal en blanco parece roto. */
+.onb-modal-cargando {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 7rem;
+}
+
+/* ── La despedida ──
+   Hereda un segundo el hueco de la banda del arranque, con el MISMO degradado:
+   así se lee como el final de lo que había ahí, no como un aviso nuevo. Entra
+   subiendo, aguanta lo justo para leerse (3,4 s) y sale colapsando la altura,
+   para que el dashboard suba en lugar de dar un salto cuando el hueco se cierra.
+
+   Va sin botón de cerrar a propósito: no se le pide un clic más a quien acaba de
+   terminar de configurar su negocio. */
+.onb-fin {
+  margin: 0 0 var(--space-6);
+  border-radius: var(--radius-lg);
+  background: var(--gradient-band);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  /* Techo generoso para poder animar el cierre: `max-height` en vez de `height`
+     porque la altura real depende de si el titular parte en dos líneas. */
+  max-height: 20rem;
+  animation: onb-fin-entra 420ms var(--ease) both;
+}
+.onb-fin-cuerpo {
+  display: flex; align-items: center; justify-content: center;
+  gap: var(--space-4); padding: var(--space-8) var(--space-5);
+}
+/* Blanco explícito, no `--color-text-inv`: ese gira con el tema y el degradado
+   no (mismo motivo que en la banda del arranque, unas líneas más arriba). */
+.onb-fin-icono {
+  display: inline-flex; align-items: center; justify-content: center;
+  flex: 0 0 auto; width: 3rem; height: 3rem;
+  border-radius: var(--radius-full);
+  background: rgb(255 255 255 / 0.18);
+  color: #fff;
+  animation: onb-fin-sello 520ms var(--ease) 140ms both;
+}
+.onb-fin-titulo {
+  margin: 0; color: #fff;
+  font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 700;
+  line-height: 1.2; text-align: center;
+}
+
+/* La salida: se apaga y cierra el hueco a la vez. */
+.onb-fin.is-saliendo {
+  animation: none;
+  max-height: 0; margin-bottom: 0; opacity: 0;
+  transition: max-height 460ms var(--ease), margin-bottom 460ms var(--ease),
+              opacity 300ms var(--ease);
+}
+
+@keyframes onb-fin-entra {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes onb-fin-sello {
+  0%   { opacity: 0; transform: scale(0.4); }
+  60%  { opacity: 1; transform: scale(1.12); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Se queda y se va igual —el mensaje y el tiempo no cambian—, pero sin
+     movimiento: solo aparece y se desvanece. */
+  .onb-fin, .onb-fin-icono { animation: none; }
+  .onb-fin.is-saliendo { transition: opacity 300ms linear; }
+}
+
+@media (max-width: 640px) {
+  .onb-cabecera { padding: var(--space-4); gap: var(--space-3); flex-wrap: wrap; }
+  .onb-arranque .onb-cabecera { padding: var(--space-5) var(--space-4); }
+  .onb-arranque .onb-titulo { font-size: var(--text-xl); }
+  .onb-fin-cuerpo { padding: var(--space-6) var(--space-4); gap: var(--space-3); }
+  .onb-fin-icono { width: 2.5rem; height: 2.5rem; }
+  .onb-fin-titulo { font-size: var(--text-xl); }
+  .onb-paso { flex-wrap: wrap; padding: var(--space-3) var(--space-4); }
+  .onb-hechos-boton { padding-left: var(--space-4); padding-right: var(--space-4); }
+  .onb-sublista .onb-paso { padding-left: var(--space-6); }
+  /* El botón del paso activo, a todo el ancho: es el único objetivo de la
+     pantalla y el pulgar tiene que acertarlo sin mirar. */
+  .onb-paso-acciones { width: 100%; padding-left: calc(2rem + var(--space-3)); }
+  .onb-paso-acciones .btn { flex: 1 1 auto; justify-content: center; }
+}
 
 /* Accesos rápidos (fallback) */
 .dash-accesos { display: flex; flex-wrap: wrap; gap: var(--space-3); }

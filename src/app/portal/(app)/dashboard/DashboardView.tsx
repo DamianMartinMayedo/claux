@@ -1,7 +1,7 @@
 import { Calendar, CalendarDays } from 'lucide-react'
 import type { DashboardData } from '@/app/actions/portal/dashboard'
 import PrerequisitoAviso from '@/components/portal/PrerequisitoAviso'
-// En pausa (no convence de momento): checklist de onboarding ('./OnboardingChecklist').
+import Onboarding from './Onboarding'
 import { EmpresaTag } from '@/components/portal/EmpresaTag'
 import { fechaLarga } from './format'
 import ContabilidadWidget from './ContabilidadWidget'
@@ -13,7 +13,6 @@ import DossierWidget   from './DossierWidget'
 import AgendaWidget from './AgendaWidget'
 import AccesosRapidos from './AccesosRapidos'
 import ContratarMasBanner from './ContratarMasBanner'
-import ImportarBienvenidaBanner from './ImportarBienvenidaBanner'
 import PendienteFranja from './PendienteFranja'
 import DeudasWidget from './DeudasWidget'
 import TasasWidget  from './TasasWidget'
@@ -26,9 +25,13 @@ const ESTADO_BADGE: Record<string, string> = {
   DESACTIVADO: 'badge-error', VENCIDO: 'badge-error',
 }
 
-export default function DashboardView({ data, mostrarImportar }: { data: DashboardData; mostrarImportar: boolean }) {
-  const { contabilidad, deudas, tasas, inventario, puntoVenta, rrhh, servicios, dossier, catalogo, reservas, citas, etiquetas, suscripcion, nombreEmpresa, empresas, setupPendiente, fecha, accesos, pendiente, captacion } = data
+export default function DashboardView({ data }: { data: DashboardData }) {
+  const { contabilidad, deudas, tasas, inventario, puntoVenta, rrhh, servicios, dossier, catalogo, reservas, citas, etiquetas, suscripcion, nombreEmpresa, empresas, setupPendiente, onboarding, fecha, accesos, pendiente, captacion } = data
   const hayPaneles = Boolean(contabilidad || inventario || puntoVenta || rrhh || servicios || dossier || catalogo || reservas || citas)
+  // Mientras al negocio le falte lo básico, el bloque de puesta en marcha OCUPA el
+  // sitio de los widgets: unos paneles vacíos no explican por qué están vacíos, y
+  // ofrecerle contratar otro módulo a quien no ha configurado el primero es ruido.
+  const arrancando = onboarding?.estado === 'arranque'
 
   // ── Zonas ──────────────────────────────────────────────────────────────────
   // Cada widget declara dónde vive y cuánto pesa; el ancho lo reparte la zona
@@ -123,40 +126,48 @@ export default function DashboardView({ data, mostrarImportar }: { data: Dashboa
         </div>
       </div>
 
+      {/* Se monta SIEMPRE, también con `data` a null: el bloque tiene que seguir
+          vivo el instante en que deja de haber pasos para poder despedirse. Si lo
+          desmontara el padre, el último «Guardar» apagaría la guía en seco. */}
+      <Onboarding data={onboarding} />
+
+      {/* Red de seguridad: solo se pinta cuando el bloque NO está (el cliente lo
+          ocultó, o quien mira no es quien lo configura). Moneda y empresa hay que
+          crearlas igual, y sin este aviso la pantalla no diría por qué la app no
+          deja hacer nada. El loader ya lo apaga cuando el bloque se ve. */}
       {(setupPendiente.empresa || setupPendiente.moneda) && (
         <PrerequisitoAviso acciones={[
-          ...(setupPendiente.empresa ? [{ label: 'Crear empresa', href: '/portal/empresas' }] : []),
+          /* La MONEDA primero, aquí también: `empresas.moneda_funcional` es NOT NULL
+             y la pantalla de Empresas exige una moneda antes de dejar crear nada.
+             Ofrecer «Crear empresa» de primero mandaba a un callejón sin salida. */
           ...(setupPendiente.moneda  ? [{ label: 'Configurar moneda', href: '/portal/monedas' }] : []),
+          ...(setupPendiente.empresa ? [{ label: 'Crear empresa', href: '/portal/empresas' }] : []),
         ]}>
           {setupPendiente.empresa && setupPendiente.moneda
-            ? <>Para empezar a operar, crea <strong>tu empresa</strong> y configura <strong>una moneda</strong>.</>
+            ? <>Para empezar a operar, configura <strong>una moneda</strong> y crea <strong>tu empresa</strong>.</>
             : setupPendiente.empresa
               ? <>Para empezar a operar necesitas <strong>una empresa</strong>.</>
               : <>Configura <strong>una moneda</strong> para registrar importes, ventas y cobros.</>}
         </PrerequisitoAviso>
       )}
 
-      {/* Aviso de bienvenida al importador de autoservicio: debajo del prerrequisito
-          (crear empresa/moneda es más urgente), encima de los datos. Su visibilidad la
-          decide el servidor (migración pendiente + herramienta disponible); el descarte,
-          el usuario en su navegador. */}
-      <ImportarBienvenidaBanner mostrar={mostrarImportar} />
-
-      <div className="dash-zonas">
-        <PendienteFranja items={pendiente} />
-        <Zona titulo="Tu dinero"  tarjetas={zonaDinero} />
-        <Zona titulo="Tu día"     tarjetas={zonaDia} />
-        <Zona titulo="Tu negocio" tarjetas={zonaNegocio} />
-        {/* Los accesos rápidos solo tienen sentido cuando NO hay ningún panel:
-            con widgets delante, repetir el enlace del menú lateral es ruido. */}
-        {!hayPaneles && <AccesosRapidos accesos={accesos} />}
-        {/* Destacado con ≤2 módulos CON PANEL; con más, una línea al pie. */}
-        <ContratarMasBanner
-          faltan={captacion.faltan}
-          destacado={captacion.conPanel <= 2}
-          email={captacion.email}
-        />
-      </div>
+      {!arrancando && (
+        <div className="dash-zonas">
+          <PendienteFranja items={pendiente} />
+          <Zona titulo="Tu dinero"  tarjetas={zonaDinero} />
+          <Zona titulo="Tu día"     tarjetas={zonaDia} />
+          <Zona titulo="Tu negocio" tarjetas={zonaNegocio} />
+          {/* Los accesos rápidos solo tienen sentido cuando NO hay ningún panel:
+              con widgets delante, repetir el enlace del menú lateral es ruido. */}
+          {!hayPaneles && <AccesosRapidos accesos={accesos} />}
+          {/* Destacado con ≤2 módulos CON PANEL; con más, una línea al pie. */}
+          <ContratarMasBanner
+            faltan={captacion.faltan}
+            destacado={captacion.conPanel <= 2}
+            email={captacion.email}
+          />
+        </div>
+      )}
     </div>
   )
 }

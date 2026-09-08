@@ -6,6 +6,7 @@ import { getPortalSession }  from './auth'
 import { leerSetting }       from '@/lib/settings'
 import { suscripcionLabel, precioMensualEfectivo, monedaDelCliente, esSocioHoy, COLUMNAS_CONDICIONES } from '@/lib/billing'
 import { cargarContextoLimites } from '@/lib/limites'
+import { calcularOnboarding }  from '@/lib/onboarding/pasos'
 import { hashPasswordPortal } from '@/lib/portal-auth'
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
@@ -31,6 +32,13 @@ export interface PerfilData {
   nombre:       string | null
   rol:          string
   solo_lectura: boolean
+  /**
+   * El bloque de puesta en marcha está oculto **y todavía queda algo que enseñar**.
+   * Lo segundo importa desde que la guía se acaba sola: sin ello, quien la ocultó y
+   * después completó los tres pasos por su cuenta se quedaba con un «Volver a
+   * mostrarla» permanente que no habría mostrado nada.
+   */
+  onboarding_oculto: boolean
 }
 
 // ── Obtener perfil ────────────────────────────────────────────────────────────
@@ -43,7 +51,7 @@ export async function obtenerPerfil(): Promise<PerfilData | null> {
 
   const [{ data: cliente }, { data: usuario }] = await Promise.all([
     db.from('clients')
-      .select(`nombre_empresa, nombre_contacto, email_admin, estado, ${COLUMNAS_CONDICIONES}, ciclo_facturacion, fecha_expiracion, fecha_fin_gracia, nivel`)
+      .select(`nombre_empresa, nombre_contacto, email_admin, estado, ${COLUMNAS_CONDICIONES}, ciclo_facturacion, fecha_expiracion, fecha_fin_gracia, nivel, modulos_activos, onboarding_oculto_at, onboarding_import_no`)
       .eq('client_id', session.client_id)
       .single(),
     db.from('client_users')
@@ -53,6 +61,21 @@ export async function obtenerPerfil(): Promise<PerfilData | null> {
   ])
 
   if (!cliente || !usuario) return null
+
+  // ¿Ofrecer «Volver a mostrarla»? Solo si la guía tiene algo que enseñar. Se
+  // pregunta únicamente cuando está oculta, así que a quien no la ocultó nunca
+  // esto no le cuesta ni una consulta.
+  let ocultoConPasos = false
+  if (cliente.onboarding_oculto_at != null) {
+    const onb = await calcularOnboarding(db, {
+      cid: session.client_id,
+      session,
+      modulos:  Array.isArray(cliente.modulos_activos) ? cliente.modulos_activos : [],
+      ocultoAt: cliente.onboarding_oculto_at,
+      importNo: cliente.onboarding_import_no === true,
+    })
+    ocultoConPasos = onb != null
+  }
 
   // El nivel se enseña aquí y no solo en «Mi plan CLAUX»: esta ficha la ve todo
   // usuario del portal, y aquella solo el administrador de la empresa.
@@ -78,6 +101,7 @@ export async function obtenerPerfil(): Promise<PerfilData | null> {
     nombre:           usuario.nombre,
     rol:              usuario.rol,
     solo_lectura:     usuario.solo_lectura ?? false,
+    onboarding_oculto: ocultoConPasos,
   }
 }
 

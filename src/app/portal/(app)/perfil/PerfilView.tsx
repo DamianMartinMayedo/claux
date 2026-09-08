@@ -4,13 +4,14 @@ import { toastError, toastLoading, toastSuccess } from '@/app/contexts/ToastCont
 import { useState, useTransition } from 'react'
 import { useRouter }               from 'next/navigation'
 import { actualizarMiPerfil, type PerfilData } from '@/app/actions/portal/perfil'
+import { mostrarOnboarding }      from '@/app/actions/portal/onboarding'
 import { type IaPanel } from '@/app/actions/portal/ia'
 import { type EstadoDocumentos } from '@/app/actions/portal/documentos'
 import IaUsoCard from '@/components/portal/ia/IaUsoCard'
 import DocumentosFirmaCard from './DocumentosFirmaCard'
 import EnlacesLegales from '@/components/publico/EnlacesLegales'
 import CampoPassword from '@/components/CampoPassword'
-import { Lock } from 'lucide-react'
+import { Lock, Rocket } from 'lucide-react'
 import FormHelp from '@/components/portal/FormHelp'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -50,6 +51,20 @@ export default function PerfilView({ perfil, panelIa, documentos }: { perfil: Pe
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [showPwd,   setShowPwd]      = useState(false)
+  // Transición aparte de la del formulario: recuperar la guía no tiene por qué
+  // bloquear el botón de guardar el perfil, ni al revés.
+  const [recuperando, startRecuperar] = useTransition()
+
+  function handleRecuperar() {
+    const ld = toastLoading('Recuperando…')
+    startRecuperar(async () => {
+      const r = await mostrarOnboarding()
+      await ld.dismiss()
+      if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
+      toastSuccess('Guía de puesta en marcha activada')
+      router.refresh()
+    })
+  }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -143,6 +158,29 @@ export default function PerfilView({ perfil, panelIa, documentos }: { perfil: Pe
             </span>
           </div>
         </div>
+
+        {/* La guía de puesta en marcha se oculta desde el dashboard con un clic, y
+            este es el único sitio donde se recupera. Solo aparece si de verdad
+            está oculta: enseñarla siempre sería un botón que no hace nada para
+            casi todo el mundo. */}
+        {perfil.onboarding_oculto && perfil.rol === 'admin_empresa' && !perfil.solo_lectura && (
+          <div className="prf-card-footer">
+            <div className="prf-field">
+              <span className="prf-label">Guía de puesta en marcha</span>
+              <span className="prf-value">Oculta en el panel</span>
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={handleRecuperar}
+              disabled={recuperando}
+            >
+              {recuperando
+                ? <><span className="spinner spinner-sm" /> Recuperando…</>
+                : <><Rocket size={14} strokeWidth={2} /> Volver a mostrarla</>}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── Documentos y firmas (NDA, contrato, presupuesto) ── */}

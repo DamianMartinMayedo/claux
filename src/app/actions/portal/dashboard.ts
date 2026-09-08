@@ -13,6 +13,7 @@ import { leerSetting, leerCorreo } from '@/lib/settings'
 import { suscripcionLabel, precioMensualEfectivo, monedaDelCliente, esSocioHoy, COLUMNAS_CONDICIONES } from '@/lib/billing'
 import { etiquetaDimension, OFERTA_NIVEL, type Dimension } from '@/lib/limites'
 import { obtenerEtiquetasNegocio } from './sector'
+import { calcularOnboarding, onboardingVisible, type OnboardingData } from '@/lib/onboarding/pasos'
 import { estadoStock, pideAtencion } from '@/lib/inventario/stock'
 import { historialPorAcuerdo } from '@/lib/facturacion-suscripciones'
 import { valorarPorMoneda } from '@/lib/inventario/valoracion'
@@ -246,11 +247,6 @@ export interface Captacion {
 
 export interface EmpresaLite { empresa_id: string; nombre: string; color?: string | null }
 
-// Paso de puesta en marcha: dato base que el negocio debe crear para operar un
-// módulo (empresa, moneda, almacén…). Nada se pre-crea, así que el dashboard guía
-// los pasos fundamentales según los módulos contratados.
-export interface OnboardingPaso { clave: string; label: string; hecho: boolean; href: string }
-
 export interface DashboardData {
   nombreEmpresa: string
   empresas: EmpresaLite[]
@@ -258,6 +254,13 @@ export interface DashboardData {
   // ambos false para el resto). El dashboard muestra un aviso para crearlos sin
   // ocultar los widgets. `moneda` solo se marca si hay módulos que la usan.
   setupPendiente: { empresa: boolean; moneda: boolean }
+  /**
+   * Bloque de puesta en marcha (`lib/onboarding/pasos.ts`). `null` cuando no hay
+   * que pintarlo: oculto por el cliente, o usuario de solo lectura. Mientras se
+   * ve, el aviso de `setupPendiente` se calla — dicen lo mismo y el bloque lo
+   * dice mejor.
+   */
+  onboarding: OnboardingData | null
   fecha: string
   etiquetas: EtiquetasSector
   /**
@@ -1000,53 +1003,6 @@ async function resumenAgenda(db: Db, cid: string, hoy: string, tipo: 'reserva' |
   }
 }
 
-/* Checklist de onboarding EN PAUSA (no convence de momento). Para reactivarlo:
-   volver a añadir la llamada al Promise.all del loader y descomentar la sección en
-   DashboardView.tsx.
-// Pasos fundamentales de puesta en marcha, según los módulos contratados. Cuenta
-// solo lo que cada módulo necesita (evita queries de módulos no contratados). El
-// paso "empresa" y la letra de facturación salen de `empresas` (ya cargadas), sin
-// query extra. Los conteos usan head:true (baratos: no traen filas).
-async function resumenOnboarding(
-  db: Db, cid: string, modulos: string[],
-  empresas: { estado: string; letra_facturacion?: string | null }[],
-): Promise<OnboardingPaso[]> {
-  const tiene = (m: string) => modulos.includes(m)
-  const contar = async (tabla: string, filtrar: (q: Db) => Db): Promise<number> => {
-    const { count } = await filtrar(db.from(tabla).select('*', { count: 'exact', head: true }).eq('client_id', cid))
-    return count ?? 0
-  }
-  const necesitaMoneda = tiene('base') || tiene('rrhh') || tiene('catalogo_qr')
-
-  const [monedas, almacenes, productos, franjas, servicios, recursos, catalogo] = await Promise.all([
-    necesitaMoneda        ? contar('monedas', q => q.eq('activa', true)) : Promise.resolve(1),
-    tiene('inventario')   ? contar('almacenes', q => q)                  : Promise.resolve(1),
-    tiene('inventario')   ? contar('products', q => q)                   : Promise.resolve(1),
-    tiene('reservas_citas') ? contar('reserva_franjas', q => q)          : Promise.resolve(1),
-    tiene('agenda')       ? contar('servicios', q => q)                  : Promise.resolve(1),
-    tiene('agenda')       ? contar('recursos', q => q)                   : Promise.resolve(1),
-    tiene('catalogo_qr')  ? contar('catalogo_items', q => q)             : Promise.resolve(1),
-  ])
-
-  const pasos: OnboardingPaso[] = [
-    { clave: 'empresa', label: 'Crea tu empresa', hecho: empresas.length > 0, href: '/portal/empresas' },
-  ]
-  if (necesitaMoneda)  pasos.push({ clave: 'moneda',   label: 'Configura una moneda',        hecho: monedas > 0,   href: '/portal/monedas' })
-  if (tiene('base'))   pasos.push({ clave: 'letra',    label: 'Asigna letra de facturación', hecho: empresas.some(e => !!e.letra_facturacion), href: '/portal/empresas' })
-  if (tiene('inventario')) {
-    pasos.push({ clave: 'almacen',  label: 'Crea un almacén', hecho: almacenes > 0, href: '/portal/almacenes' })
-    pasos.push({ clave: 'producto', label: 'Añade un producto', hecho: productos > 0, href: '/portal/productos' })
-  }
-  if (tiene('reservas_citas')) pasos.push({ clave: 'franja', label: 'Crea una franja de reservas', hecho: franjas > 0, href: '/portal/reservas' })
-  if (tiene('agenda')) {
-    pasos.push({ clave: 'servicio', label: 'Añade un servicio',    hecho: servicios > 0, href: '/portal/citas' })
-    pasos.push({ clave: 'recurso',  label: 'Añade un profesional', hecho: recursos > 0,  href: '/portal/citas' })
-  }
-  if (tiene('catalogo_qr')) pasos.push({ clave: 'catalogo', label: 'Añade un ítem al catálogo', hecho: catalogo > 0, href: '/portal/catalogo' })
-  return pasos
-}
-*/
-
 /** Un dossier publicado con el snapshot más viejo que esto enseña números rancios. */
 /**
  * Estado del dossier. Una sola query a la cabecera: el widget no pinta cifras
@@ -1218,13 +1174,17 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
   // tiene contratado: módulos por permiso efectivo (mismo cálculo que el sidebar,
   // `calcularAcceso`) y datos acotados a sus empresas (igual que cada página del
   // portal). Así cada widget coincide con lo que encuentra al abrir el módulo.
-  const [{ data: cliente }, { data: usr }, filasUsuario, empresasAcc] = await Promise.all([
+  const [{ data: cliente }, { data: usr }, filasUsuario, empresasAcc, etiquetas] = await Promise.all([
     db.from('clients')
-      .select(`nombre_empresa, estado, modulos_activos, ${COLUMNAS_CONDICIONES}, ciclo_facturacion, fecha_expiracion, nivel`)
+      .select(`nombre_empresa, estado, modulos_activos, ${COLUMNAS_CONDICIONES}, ciclo_facturacion, fecha_expiracion, nivel, slug, onboarding_oculto_at, onboarding_import_no`)
       .eq('client_id', cid).single(),
     db.from('client_users').select('permiso_defecto').eq('user_id', session.user_id).maybeSingle(),
     modulosDeUsuario(db, session.user_id),
     obtenerEmpresas(),
+    // Sube a la PRIMERA tanda porque el bloque de puesta en marcha las necesita
+    // para nombrar sus pasos («Añade tu primer plato», «Añade un barbero») y ese
+    // cálculo va en la segunda. No depende de nada de aquí: no cuesta espera.
+    obtenerEtiquetasNegocio(),
   ])
   if (!cliente) return null
 
@@ -1242,7 +1202,11 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
   const idsFiltro     = empresaIds.length ? empresaIds : ['__none__']
   const empresasVista = empresasAcc.filter(e => e.estado === 'ACTIVO')
 
-  const [contabilidad, deudas, inventario, puntoVenta, gaveta, rrhh, reservas, citas, servicios, dossier, catalogo, tasas, etiquetas, descuentoRaw, emailContratacion, catalogoModulos, interesesPrevios, avisosLimite, nivelRow] = await Promise.all([
+  // El bloque de puesta en marcha solo se calcula si puede verse. A un cliente
+  // veterano (o a quien lo ocultó) no le cuesta ni una consulta.
+  const verOnboarding = onboardingVisible(session, cliente.onboarding_oculto_at ?? null)
+
+  const [contabilidad, deudas, inventario, puntoVenta, gaveta, rrhh, reservas, citas, servicios, dossier, catalogo, tasas, onboarding, descuentoRaw, emailContratacion, catalogoModulos, interesesPrevios, avisosLimite, nivelRow] = await Promise.all([
     puedeVer('base')           ? resumenContabilidad(db, cid, hoy, idsFiltro) : Promise.resolve(undefined),
     puedeVer('base')           ? resumenDeudas()                              : Promise.resolve(undefined),
     puedeVer('inventario')     ? resumenInventario(db, cid)                   : Promise.resolve(undefined),
@@ -1259,7 +1223,13 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
     puedeVer('catalogo_qr')    ? resumenCatalogo(db, cid)                     : Promise.resolve(undefined),
     // Las tasas acompañan a la contabilidad: es lo que convierte sus totales.
     puedeVer('base')           ? resumenTasas(db, cid, hoy)                   : Promise.resolve(undefined),
-    obtenerEtiquetasNegocio(),
+    verOnboarding
+      ? calcularOnboarding(db, {
+          cid, session, modulos: modulosActivos,
+          ocultoAt: cliente.onboarding_oculto_at ?? null,
+          importNo: cliente.onboarding_import_no === true,
+        })
+      : Promise.resolve(null),
     leerSetting('descuento_anual_pct', '10'),
     leerCorreo('email_contratacion'),
     // Qué ofrecer y en qué orden lo decide el catálogo comercial, no el código.
@@ -1283,11 +1253,19 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
     // tabla global de tres, dentro del Promise.all que ya estaba: no añade espera.
     db.from('niveles').select('nombre').eq('clave', cliente.nivel ?? 'inicial').maybeSingle(),
   ])
-  // Aviso de setup: datos base que solo el admin puede crear. Empresa siempre;
-  // moneda solo si hay módulos que la usan (base/rrhh/catálogo/dossier). La query
-  // de moneda se hace solo cuando aplica y para admin. (El checklist quedó en pausa.)
+  // Aviso de setup: datos base que solo el admin puede crear. Es la RED DE
+  // SEGURIDAD del bloque de puesta en marcha, no un duplicado: mientras el bloque
+  // se ve, este aviso se calla (lo dice mejor y con botones que resuelven); en
+  // cuanto el bloque desaparece —el cliente lo ocultó— vuelve, porque moneda y
+  // empresa hay que configurarlas igual. Sin él, un clic en «Ocultar» dejaría un
+  // panel mudo y una app que no deja hacer nada, sin nada que lo explique.
+  //
+  // La condición es `!verOnboarding` y no `!onboarding`: desde que la guía termina
+  // sola (devuelve `null` cuando no queda nada), preguntar por el resultado haría
+  // este conteo en el dashboard de todo cliente veterano, para avisar de algo que
+  // ya está hecho.
   let setupPendiente = { empresa: false, moneda: false }
-  if (session.rol === 'admin_empresa') {
+  if (session.rol === 'admin_empresa' && !verOnboarding) {
     const MODULOS_CON_MONEDA = ['base', 'rrhh', 'catalogo_qr', 'dossier']
     const necesitaMoneda = MODULOS_CON_MONEDA.some(m => modulosActivos.includes(m))
     let sinMoneda = false
@@ -1471,6 +1449,7 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
     nombreEmpresa: cliente.nombre_empresa,
     empresas: empresasVista.map(({ empresa_id, nombre, color }) => ({ empresa_id, nombre, color })),
     setupPendiente,
+    onboarding,
     fecha: hoy,
     etiquetas,
     modulosVisibles: visibles,
