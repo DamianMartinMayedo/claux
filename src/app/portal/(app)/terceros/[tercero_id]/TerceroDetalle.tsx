@@ -21,7 +21,7 @@ import CopiarAEmpresaModal from '@/components/portal/CopiarAEmpresaModal'
 import { RowActions } from '@/components/portal/RowActions'
 import Tabs, { type TabItem } from '@/components/Tabs'
 import { useOrden, ThOrden } from '@/components/TableSort'
-import { Activity, Archive, Copy, CreditCard, FileText, Mail, Package, Pencil, Phone, RotateCcw, Repeat } from 'lucide-react'
+import { Activity, Archive, Copy, CreditCard, Mail, Package, Pencil, Phone, RotateCcw, Repeat } from 'lucide-react'
 import type { TerceroSuscripcion } from '@/lib/suscripciones'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -192,21 +192,13 @@ function TabDatos({ data }: { data: TerceroDetalleData }) {
       )}
 
       {/* Contrato */}
-      {(tercero.num_contrato || tercero.contrato_url || tercero.fecha_inicio_contrato) && (
+      {(tercero.num_contrato || tercero.fecha_inicio_contrato) && (
         <div className="det-card">
           <div className="det-section-title">Contrato</div>
           <div className="det-field-grid">
             <Campo label="N° contrato"  value={tercero.num_contrato} />
             <Campo label="Inicio"       value={fmtFecha(tercero.fecha_inicio_contrato)} />
             <Campo label="Vencimiento"  value={fmtFecha(tercero.fecha_fin_contrato)} />
-            {tercero.contrato_url && (
-              <div>
-                <div className="det-label">Documento</div>
-                <a href={tercero.contrato_url} target="_blank" rel="noopener noreferrer" className="det-link-icon">
-                  <FileText size={13} strokeWidth={2} /> Ver contrato
-                </a>
-              </div>
-            )}
           </div>
         </div>
       )}

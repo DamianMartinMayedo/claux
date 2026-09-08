@@ -370,7 +370,7 @@ Ciclo de vida: **guardado → aprobado → instalado**, con `horas_reales` para 
 
 ### Deuda técnica conocida
 
-**Deuda técnica:** (1) migrar el hash de `client_users` de SHA-256+salt a scrypt/argon2 antes de tener clientes reales; (2) volcar el esquema base al repo (las migraciones empiezan en 001 sobre tablas creadas a mano); (3) sin RLS por tenant: **toda query nueva filtra por `client_id`**.
+**Deuda técnica:** (1) migrar el hash de `client_users` de SHA-256+salt a scrypt/argon2 antes de tener clientes reales; (2) volcar el esquema base al repo (las migraciones empiezan en 001 sobre tablas creadas a mano); (3) sin RLS por tenant: **toda query nueva filtra por `client_id`**; (4) **no hay sistema de adjuntos**: la subida de PDF del cliente (contrato del empleado y del tercero, bucket **público** `contratos`) se retiró entera el 2026-09-08 con la mig. **241** —servía un contrato laboral por HTTP 200 sin credencial, nadie borraba los ficheros y el uso real era un PDF del cliente de prueba—; las diez correcciones para rehacerlo bien están en la ficha **T8** de `docs/planes/mejoras-futuras.md`. Lo único que sube ficheros hoy son imágenes (logotipo, catálogo, capturas) y el PDF del documento firmado, que **lo genera la plataforma** y vive en el bucket privado `documentos-firmados` con URL firmada — ese es el patrón a copiar.
 
 ### Esquema y datos: trampas que ya mordieron
 

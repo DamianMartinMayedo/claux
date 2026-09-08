@@ -2,7 +2,7 @@
 
 import { toastError, toastLoading } from '@/app/contexts/ToastContext'
 import { useId, useState, useTransition } from 'react'
-import { ArrowRightLeft, FileText, X } from 'lucide-react'
+import { ArrowRightLeft, X } from 'lucide-react'
 import {
   guardarTercero,
   type Tercero,
@@ -255,7 +255,6 @@ export function TerceroFormModal({ tercero, empresas, monedas, defaultTipo, onCl
 
         <form onSubmit={handleSubmit}>
           {tercero && <input type="hidden" name="tercero_id"   value={tercero.tercero_id}  />}
-          {tercero && <input type="hidden" name="contrato_url" value={tercero.contrato_url ?? ''} />}
 
           <div className="modal-body">
 
@@ -411,23 +410,6 @@ export function TerceroFormModal({ tercero, empresas, monedas, defaultTipo, onCl
                   <label>Fecha fin</label>
                   <input className="input" type="date" name="fecha_fin_contrato"
                     defaultValue={tercero?.fecha_fin_contrato ?? ''} />
-                </div>
-                <div className="input-group ter-col-full">
-                  <div className="form-label-with-help">
-                    <label>
-                      {tercero?.contrato_url
-                        ? <>PDF del contrato{' '}
-                            <a href={tercero.contrato_url} target="_blank" rel="noopener noreferrer"
-                              className="ter-contrato-link">
-                              <FileText size={15} strokeWidth={2} /> Ver contrato actual
-                            </a>
-                          </>
-                        : 'PDF del contrato (opcional)'}
-                    </label>
-                    <FormHelp text="Formatos: PDF, JPG, PNG. Máx. 10 MB." label="Formatos admitidos" />
-                  </div>
-                  <input className="input input-file" type="file" name="contrato"
-                    accept=".pdf,.jpg,.jpeg,.png" />
                 </div>
               </div>
             </div>

@@ -42,7 +42,6 @@ export interface Tercero {
   moneda_defecto:         string | null
   via_primaria:           ViaPago | null
   via_secundaria:         ViaPago | null
-  contrato_url:           string | null
   num_contrato:           string | null
   fecha_inicio_contrato:  string | null
   fecha_fin_contrato:     string | null
@@ -163,35 +162,10 @@ export async function guardarTercero(
     return { ok: false, error: `La moneda "${moneda_defecto}" no está configurada en Monedas y Tasas.` }
   }
 
-  // ── Subir contrato si se adjuntó ──────────────────────────────────────────
-  const contratoFile = formData.get('contrato') as File | null
-  const existingUrl  = ((formData.get('contrato_url') as string) ?? '').trim() || null
-  let   contrato_url = existingUrl
-
-  if (contratoFile && contratoFile.size > 0) {
-    if (contratoFile.size > 4 * 1024 * 1024)
-      return { ok: false, error: 'El contrato no puede superar 4 MB.' }
-
-    const tiposOk = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']
-    if (!tiposOk.includes(contratoFile.type))
-      return { ok: false, error: 'Formato no válido. Usa PDF, JPG o PNG.' }
-
-    const ext    = contratoFile.name.split('.').pop()?.toLowerCase() || 'pdf'
-    const path   = `${session.client_id}/${tercero_id}.${ext}`
-    // Subir como Blob, no como Buffer: el Buffer se corrompe en el serverless de
-    // Vercel (recodificado a UTF-8). Ver memoria storage-upload-blob-no-buffer.
-    const buffer = Buffer.from(await contratoFile.arrayBuffer())
-    const blob   = new Blob([new Uint8Array(buffer)], { type: contratoFile.type })
-
-    const { error: upErr } = await db.storage
-      .from('contratos')
-      .upload(path, blob, { contentType: contratoFile.type, upsert: true })
-
-    if (upErr) return { ok: false, error: 'No se ha podido subir el contrato.' }
-
-    const { data: { publicUrl } } = db.storage.from('contratos').getPublicUrl(path)
-    contrato_url = publicUrl
-  }
+  // El contrato ya NO lleva fichero adjunto: la subida se retiró entera el
+  // 2026-09-08 (bucket público, ficheros huérfanos y ningún cliente usándola).
+  // Quedan el número y las fechas, que es la información que sí se consulta.
+  // El sistema de adjuntos, cuando toque: docs/planes/adjuntos-ficheros.md.
 
   // ── Campos comunes (núcleo compartido con el importador) ──────────────────
   const campos = construirCamposTercero({
@@ -211,7 +185,6 @@ export async function guardarTercero(
     moneda_defecto,
     via_primaria,
     via_secundaria,
-    contrato_url,
     num_contrato:          (formData.get('num_contrato')          as string) ?? '',
     fecha_inicio_contrato: (formData.get('fecha_inicio_contrato') as string) ?? '',
     fecha_fin_contrato:    (formData.get('fecha_fin_contrato')    as string) ?? '',

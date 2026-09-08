@@ -78,7 +78,6 @@ export interface TerceroInput {
   moneda_defecto?:        string | null
   via_primaria?:          ViaPago | null
   via_secundaria?:        ViaPago | null
-  contrato_url?:          string | null
   num_contrato?:          string | null
   fecha_inicio_contrato?: string | null
   fecha_fin_contrato?:    string | null
@@ -108,7 +107,6 @@ export function construirCamposTercero(input: TerceroInput) {
     moneda_defecto:        input.moneda_defecto ?? null,
     via_primaria:          (input.via_primaria ?? null) as object | null,
     via_secundaria:        (input.via_secundaria ?? null) as object | null,
-    contrato_url:          input.contrato_url ?? null,
     num_contrato:          s(input.num_contrato),
     fecha_inicio_contrato: s(input.fecha_inicio_contrato),
     fecha_fin_contrato:    s(input.fecha_fin_contrato),

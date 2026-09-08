@@ -1234,13 +1234,6 @@
 }
 .via-pago-swap-btn:hover { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-info-bg); }
 
-/* Contrato link en modal — v2 */
-.ter-contrato-link {
-  display: inline-flex; align-items: center; gap: 4px;
-  font-size: var(--text-xs); color: var(--color-primary);
-  text-decoration: none; margin-left: var(--space-2); font-weight: 600;
-}
-.ter-contrato-link:hover { text-decoration: underline; }
 .ter-via-stack  { display: flex; flex-direction: column; gap: 4px; }
 .ter-condicion  { font-size: var(--text-sm); white-space: nowrap; }
 
@@ -2023,12 +2016,6 @@
 .crear-tercero-link:hover { text-decoration: underline; }
 
 /* ── RRHH (Personal y nómina) ────────────────────────────────────────────── */
-/* Bloque "PDF actual" en el modal de editar contrato */
-.con-pdf-actual {
-  display: flex; flex-direction: column; gap: 2px;
-  padding: var(--space-2) var(--space-3); margin-bottom: var(--space-2);
-  background: var(--color-surface-2); border-radius: var(--radius-md);
-}
 .nom-input { max-width: 120px; padding: 6px 9px; font-size: var(--text-sm); text-align: right; }
 .nom-total {
   display: flex; align-items: center; justify-content: space-between;

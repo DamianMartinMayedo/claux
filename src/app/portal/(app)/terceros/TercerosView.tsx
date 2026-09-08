@@ -29,7 +29,7 @@ import { useOrden, ThOrden } from '@/components/TableSort'
 import TablaCargando                     from '@/components/portal/TablaCargando'
 import PrerequisitoAviso                 from '@/components/portal/PrerequisitoAviso'
 import { useEmpresas }                 from '@/components/portal/EmpresaColorContext'
-import { Archive, Copy, Eye, FileText, Mail, Pencil, Phone, Plus, RotateCcw, Users, X } from 'lucide-react'
+import { Archive, Copy, Eye, Mail, Pencil, Phone, Plus, RotateCcw, Users, X } from 'lucide-react'
 import ExportarMenu from '@/components/portal/ExportarMenu'
 import Filtros                         from '@/components/portal/Filtros'
 import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
@@ -410,16 +410,6 @@ export default function TercerosView({ data, puedeEditar }: { data: TercerosPage
                     <td className="col-actions">
                       <RowActions>
                         <button className="row-actions-item" onClick={() => router.push(`/portal/terceros/${t.tercero_id}`)}><Eye size={15} strokeWidth={2} /> Ver detalles</button>
-                        {t.contrato_url && (
-                          <a
-                            href={t.contrato_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="row-actions-item"
-                          >
-                            <FileText size={15} strokeWidth={2} /> Ver contrato
-                          </a>
-                        )}
                         {puedeEditar && (t.activo ? (
                           <>
                             <button className="row-actions-item" onClick={() => openEdit(t)}>

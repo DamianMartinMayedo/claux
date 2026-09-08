@@ -79,7 +79,6 @@ function ContratoModal({
   onSaved:    () => void
 }) {
   const [isPending, startTransition] = useTransition()
-  const [nuevoNombre, setNuevoNombre] = useState<string | null>(null)  // nombre del PDF recién elegido
   const esEdicion = !!contrato
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -135,27 +134,6 @@ function ContratoModal({
               <div className="input-group ter-col-span-2">
                 <label>Fin <span className="input-hint-inline">(opcional)</span></label>
                 <input className="input" name="fecha_fin" type="date" defaultValue={contrato?.fecha_fin?.split('T')[0] ?? ''} />
-              </div>
-
-              <div className="input-group ter-col-full">
-                <label>Documento PDF <span className="input-hint-inline">(opcional · máx. 10 MB)</span></label>
-                {esEdicion && contrato?.pdf_url && !nuevoNombre && (
-                  <div className="con-pdf-actual">
-                    <a href={contrato.pdf_url} target="_blank" rel="noopener noreferrer" className="link-primary det-meta-inline">
-                      <FileText size={14} strokeWidth={2} /> {contrato.pdf_nombre ?? 'Ver PDF actual'}
-                    </a>
-                    <span className="text-xs-muted">Un archivo nuevo reemplaza el actual.</span>
-                  </div>
-                )}
-                <input className="input" name="pdf" type="file" accept="application/pdf"
-                  onChange={e => setNuevoNombre(e.target.files?.[0]?.name ?? null)} />
-                <span className="input-hint">
-                  {nuevoNombre
-                    ? `Se subirá: ${nuevoNombre}`
-                    : esEdicion && contrato?.pdf_url
-                      ? 'Deja este campo vacío para conservar el PDF actual.'
-                      : 'Adjunta el PDF del contrato firmado (opcional).'}
-                </span>
               </div>
 
               <div className="input-group ter-col-full">
@@ -1017,7 +995,6 @@ export default function EmpleadoDetalleView({ detalle, puedeEditar }: { detalle:
   const ordContratos = useOrden(contratos, {
     tipo:      { label: 'Tipo',      valor: c => TIPO_CONTRATO_LABEL[c.tipo_contrato] },
     vigencia:  { label: 'Vigencia',  valor: c => c.fecha_inicio },
-    documento: { label: 'Documento', valor: c => c.pdf_nombre },
   })
 
   // Solo las que de verdad NO cuadran con sus conceptos: el desfase de SU línea lo
@@ -1171,7 +1148,7 @@ export default function EmpleadoDetalleView({ detalle, puedeEditar }: { detalle:
         {contratos.length === 0 ? (
           <div className="mon-empty">
             <FileText size={36} strokeWidth={1} opacity={0.2} />
-            <p>Sin contratos. Adjunta el PDF del contrato del empleado (puede tener varios).</p>
+            <p>Sin contratos. Un empleado puede tener varios.</p>
           </div>
         ) : (
           <div className="table-wrapper">
@@ -1180,7 +1157,6 @@ export default function EmpleadoDetalleView({ detalle, puedeEditar }: { detalle:
                 <tr>
                   <ThOrden orden={ordContratos} clave="tipo" />
                   <ThOrden orden={ordContratos} clave="vigencia" />
-                  <ThOrden orden={ordContratos} clave="documento" />
                   <th className="col-actions"></th>
                 </tr>
               </thead>
@@ -1192,11 +1168,6 @@ export default function EmpleadoDetalleView({ detalle, puedeEditar }: { detalle:
                       <div className="text-sm-muted">{PERIODICIDAD_LABEL[c.periodicidad]}{c.notas ? ` · ${c.notas}` : ''}</div>
                     </td>
                     <td data-label="Vigencia" className="text-sm-muted tes-nowrap">{formatFecha(c.fecha_inicio)} – {c.fecha_fin ? formatFecha(c.fecha_fin) : 'sin fin'}</td>
-                    <td data-label="Documento">
-                      {c.pdf_url
-                        ? <a href={c.pdf_url} target="_blank" rel="noopener noreferrer" className="link-primary det-meta-inline"><FileText size={14} strokeWidth={2} /> Ver PDF</a>
-                        : <span className="text-faint">Sin PDF</span>}
-                    </td>
                     <td className="col-actions">
                       {puedeEditar && (
                         <div className="table-actions">
@@ -1328,7 +1299,7 @@ export default function EmpleadoDetalleView({ detalle, puedeEditar }: { detalle:
               <button type="button" className="modal-close" onClick={() => setDelContrato(null)}><X size={16} strokeWidth={2} /></button>
             </div>
             <div className="modal-body">
-              <p className="modal-body-text">¿Eliminar este contrato{delContrato.pdf_nombre ? ` y su PDF (${delContrato.pdf_nombre})` : ''}? No se puede deshacer.</p>
+              <p className="modal-body-text">¿Eliminar este contrato? No se puede deshacer.</p>
             </div>
             <div className="modal-footer">
               <button type="button" className="btn btn-secondary" onClick={() => setDelContrato(null)}>Cancelar</button>

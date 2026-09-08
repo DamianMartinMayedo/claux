@@ -108,8 +108,6 @@ export interface Contrato {
   moneda:        string
   periodicidad:  Periodicidad
   notas:         string | null
-  pdf_url:       string | null
-  pdf_nombre:    string | null
   created_at:    string
 }
 
@@ -2527,25 +2525,10 @@ export async function eliminarEmpleadosEnLote(ids: string[]): Promise<ResultadoL
 // Los contratos son documentos externos: NO cierran a otros ni tocan el salario
 // del empleado (la nómina usa empleados.salario_base). Pueden coexistir varios.
 
-const PDF_MAX = 4 * 1024 * 1024
-
-// Sube el PDF de un contrato al bucket (como Blob — el Buffer se corrompe en el
-// serverless de Vercel, ver memoria storage-upload-blob-no-buffer) y devuelve
-// { url, nombre } o un error de validación.
-async function subirContratoPdf(
-  db: ReturnType<typeof createAdminClient>,
-  file: File,
-  path: string,
-): Promise<{ url: string; nombre: string } | { error: string }> {
-  if (file.type !== 'application/pdf') return { error: 'El contrato debe ser un archivo PDF.' }
-  if (file.size > PDF_MAX)             return { error: 'El PDF no puede superar los 4 MB.' }
-  const buffer = Buffer.from(await file.arrayBuffer())
-  const blob   = new Blob([new Uint8Array(buffer)], { type: 'application/pdf' })
-  const { error: upErr } = await db.storage.from('contratos')
-    .upload(path, blob, { contentType: 'application/pdf', upsert: true })
-  if (upErr) return { error: upErr.message }
-  return { url: db.storage.from('contratos').getPublicUrl(path).data.publicUrl, nombre: file.name }
-}
+// El contrato ya NO lleva PDF adjunto: la subida de ficheros se retiró entera de
+// la plataforma el 2026-09-08 (bucket público, ficheros huérfanos que nadie borraba
+// y ningún cliente usándola). Vuelve cuando haya un sistema de adjuntos de verdad:
+// docs/planes/adjuntos-ficheros.md.
 
 export async function guardarContrato(
   formData: FormData,
@@ -2561,7 +2544,6 @@ export async function guardarContrato(
   const periodi_raw  = (formData.get('periodicidad') as string)?.trim() as Periodicidad
   const salarioRaw   = parseFloat(formData.get('salario_base') as string)
   const notas        = (formData.get('notas')        as string)?.trim() || null
-  const file         = formData.get('pdf') as File | null
 
   if (!empleado_id) return { ok: false, error: 'Empleado no válido.' }
 
@@ -2580,15 +2562,6 @@ export async function guardarContrato(
 
   const contrato_id = generarContratoId()
 
-  // PDF adjunto (opcional)
-  let pdf_url:    string | null = null
-  let pdf_nombre: string | null = null
-  if (file && file.size > 0) {
-    const sub = await subirContratoPdf(db, file, `${session.client_id}/${empleado_id}/${contrato_id}.pdf`)
-    if ('error' in sub) return { ok: false, error: sub.error }
-    pdf_url = sub.url; pdf_nombre = sub.nombre
-  }
-
   const { error } = await db.from('contratos').insert({
     contrato_id,
     client_id:   session.client_id,
@@ -2600,8 +2573,6 @@ export async function guardarContrato(
     moneda:      empleado.moneda,
     periodicidad,
     notas,
-    pdf_url,
-    pdf_nombre,
   })
   if (error) return { ok: false, error: error.message }
 
@@ -2609,7 +2580,7 @@ export async function guardarContrato(
   return { ok: true }
 }
 
-// ── Actualizar contrato (editar campos y/o adjuntar/reemplazar el PDF) ───────────
+// ── Actualizar contrato ─────────────────────────────────────────────────────────
 export async function actualizarContrato(
   formData: FormData,
 ): Promise<{ ok: boolean; error?: string }> {
@@ -2623,7 +2594,6 @@ export async function actualizarContrato(
   const fecha_fin    = (formData.get('fecha_fin')    as string)?.trim() || null
   const periodi_raw  = (formData.get('periodicidad') as string)?.trim() as Periodicidad
   const notas        = (formData.get('notas')        as string)?.trim() || null
-  const file         = formData.get('pdf') as File | null
 
   if (!contrato_id) return { ok: false, error: 'Contrato no válido.' }
 
@@ -2633,23 +2603,14 @@ export async function actualizarContrato(
   const db = createAdminClient()
 
   const { data: contrato } = await db.from('contratos')
-    .select('empleado_id, pdf_url, pdf_nombre')
+    .select('empleado_id')
     .eq('contrato_id', contrato_id)
     .eq('client_id', session.client_id)
     .single()
   if (!contrato) return { ok: false, error: 'Contrato no encontrado.' }
 
-  // PDF: si adjunta uno nuevo, reemplaza (mismo path, upsert); si no, conserva el actual.
-  let pdf_url:    string | null = contrato.pdf_url as string | null
-  let pdf_nombre: string | null = contrato.pdf_nombre as string | null
-  if (file && file.size > 0) {
-    const sub = await subirContratoPdf(db, file, `${session.client_id}/${contrato.empleado_id}/${contrato_id}.pdf`)
-    if ('error' in sub) return { ok: false, error: sub.error }
-    pdf_url = sub.url; pdf_nombre = sub.nombre
-  }
-
   const { error } = await db.from('contratos')
-    .update({ tipo_contrato, fecha_inicio, fecha_fin, periodicidad, notas, pdf_url, pdf_nombre })
+    .update({ tipo_contrato, fecha_inicio, fecha_fin, periodicidad, notas })
     .eq('contrato_id', contrato_id)
     .eq('client_id', session.client_id)
   if (error) return { ok: false, error: error.message }
@@ -2673,10 +2634,6 @@ export async function eliminarContrato(contrato_id: string): Promise<{ ok: boole
     .eq('client_id', session.client_id)
     .single()
   if (!contrato) return { ok: false, error: 'Contrato no encontrado.' }
-
-  // Borra el PDF adjunto si existe (best-effort)
-  await db.storage.from('contratos')
-    .remove([`${session.client_id}/${contrato.empleado_id}/${contrato_id}.pdf`])
 
   const { error } = await db.from('contratos').delete()
     .eq('contrato_id', contrato_id)
