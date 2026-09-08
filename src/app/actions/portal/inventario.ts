@@ -197,7 +197,7 @@ export async function registrarMovimiento(
 ): Promise<{ ok: boolean; error?: string; movimiento_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const tipo        = ((formData.get('tipo')        as string) ?? '').trim() as TipoMovimiento
   const producto_id = ((formData.get('producto_id') as string) ?? '').trim()
@@ -213,15 +213,15 @@ export async function registrarMovimiento(
 
   if (!['ENTRADA', 'SALIDA', 'AJUSTE', 'TRANSFERENCIA'].includes(tipo))
     return { ok: false, error: 'Tipo de movimiento no válido.' }
-  if (!producto_id) return { ok: false, error: 'Selecciona un producto.' }
-  if (!almacen_id)  return { ok: false, error: 'Selecciona un almacén.' }
+  if (!producto_id) return { ok: false, error: 'Falta el producto.' }
+  if (!almacen_id)  return { ok: false, error: 'Falta el almacén.' }
   if (cantidadRaw === 0)
     return { ok: false, error: 'La cantidad debe ser un número distinto de cero.' }
   // La SALIDA es justo la que necesita un porqué —merma, rotura, autoconsumo— y era
   // la única que no lo pedía: quedaba como «—» en el ledger y la merma no se podía
   // sumar nunca. Obligatorio en SALIDA y AJUSTE; opcional en el resto.
   if ((tipo === 'SALIDA' || tipo === 'AJUSTE') && !motivo_tipo)
-    return { ok: false, error: 'Elige el motivo del movimiento.' }
+    return { ok: false, error: 'Falta el motivo del movimiento.' }
   // Fechar en el futuro no es un movimiento, es una intención: no hay stock que mover.
   if (fecha > hoyEnTz())
     return { ok: false, error: 'La fecha no puede ser futura.' }
@@ -253,7 +253,7 @@ export async function registrarMovimiento(
       return { ok: false, error: `El ajuste dejaría el stock en negativo. Disponible: ${disp}.` }
   }
   if (tipo === 'TRANSFERENCIA') {
-    if (!destino_id)              return { ok: false, error: 'Selecciona el almacén destino.' }
+    if (!destino_id)              return { ok: false, error: 'Falta el almacén destino.' }
     if (destino_id === almacen_id) return { ok: false, error: 'El destino debe ser distinto del origen.' }
     // Se valida que el destino sea del cliente, NO que sea de la misma empresa: mover
     // mercancía entre empresas es un flujo real y se permite. Lo que no puede ser es
@@ -289,7 +289,7 @@ export async function registrarMovimiento(
     revalidatePath('/portal/almacenes')
     return { ok: true, movimiento_id: res.movimiento_id }
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Error al registrar el movimiento.' }
+    return { ok: false, error: e instanceof Error ? e.message : 'No se ha podido registrar el movimiento.' }
   }
 }
 
@@ -305,7 +305,7 @@ export async function revertirMovimiento(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: m } = await db.from('movimientos_inventario').select('*')
@@ -373,7 +373,7 @@ export async function reconciliarStock(): Promise<{
 }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 

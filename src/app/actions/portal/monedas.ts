@@ -196,7 +196,7 @@ export async function guardarMoneda(
       es_consolidacion: false,
       activa:           true,
     })
-    if (error) return { ok: false, error: 'Error al crear la moneda.' }
+    if (error) return { ok: false, error: 'No se ha podido crear la moneda.' }
 
     // Generar pares canónicos con las monedas activas existentes
     const { data: existentes } = await db
@@ -239,10 +239,10 @@ export async function guardarMoneda(
           .eq('client_id', session.client_id).eq('moneda_funcional', codigoOriginal),
       ])
       if ((activas ?? 0) <= 1) {
-        return { ok: false, error: 'No puedes desactivar la única moneda activa. Configura otra moneda antes.' }
+        return { ok: false, error: 'No se puede desactivar la única moneda activa: antes hay que configurar otra.' }
       }
       if ((empresasVinculadas ?? 0) > 0) {
-        return { ok: false, error: 'No puedes desactivar esta moneda: está asignada a una empresa. Cambia primero su moneda funcional.' }
+        return { ok: false, error: 'No se puede desactivar esta moneda: está asignada a una empresa. Primero hay que cambiar su moneda funcional.' }
       }
     }
 
@@ -256,7 +256,7 @@ export async function guardarMoneda(
       .eq('client_id', session.client_id)
       .eq('codigo', codigoOriginal)
 
-    if (error) return { ok: false, error: 'Error al actualizar la moneda.' }
+    if (error) return { ok: false, error: 'No se ha podido actualizar la moneda.' }
   }
 
   revalidatePath('/portal/monedas')
@@ -298,7 +298,7 @@ export async function guardarPar(
     .eq('par_id', par_id)
     .eq('client_id', session.client_id)
 
-  if (errUpdate) return { ok: false, error: 'Error al actualizar la fuente.' }
+  if (errUpdate) return { ok: false, error: 'No se ha podido actualizar la fuente.' }
 
   if (fuente === 'MANUAL') {
     if (isNaN(tasaManual) || tasaManual <= 0) return { ok: false, error: 'La tasa debe ser mayor que cero.' }
@@ -310,7 +310,7 @@ export async function guardarPar(
       fuente:         'MANUAL',
       fecha:          hoy,
     })
-    if (error) return { ok: false, error: 'Error al guardar la tasa.' }
+    if (error) return { ok: false, error: 'No se ha podido guardar la tasa.' }
     revalidatePath('/portal/monedas')
     return { ok: true, tasa: tasaManual, fecha: hoy }
   }
@@ -529,7 +529,7 @@ export async function eliminarMoneda(
       .select('moneda_id', { count: 'exact', head: true })
       .eq('client_id', session.client_id).eq('activa', true)
     if ((activas ?? 0) <= 1) {
-      return { ok: false, error: 'No puedes eliminar la única moneda activa. Configura otra moneda antes.' }
+      return { ok: false, error: 'No se puede eliminar la única moneda activa: antes hay que configurar otra.' }
     }
   }
 
@@ -537,7 +537,7 @@ export async function eliminarMoneda(
     .select('empresa_id', { count: 'exact', head: true })
     .eq('client_id', session.client_id).eq('moneda_funcional', codigo)
   if ((empresasVinculadas ?? 0) > 0) {
-    return { ok: false, error: 'No puedes eliminar esta moneda: está asignada a una empresa. Cambia primero su moneda funcional.' }
+    return { ok: false, error: 'No se puede eliminar esta moneda: está asignada a una empresa. Primero hay que cambiar su moneda funcional.' }
   }
 
   const uso = await contarUsoMoneda(codigo)
@@ -546,7 +546,7 @@ export async function eliminarMoneda(
     if (!fusionarEn) {
       return { ok: false, error: `La usan ${uso.total} registro(s). Desactívala o fusiónala con otra moneda.` }
     }
-    if (fusionarEn === codigo) return { ok: false, error: 'Elige una moneda destino distinta.' }
+    if (fusionarEn === codigo) return { ok: false, error: 'Falta la moneda destino distinta.' }
 
     const { data: destino } = await db
       .from('monedas')
@@ -564,7 +564,7 @@ export async function eliminarMoneda(
         .update({ [ref.col]: fusionarEn })
         .eq('client_id', session.client_id)
         .eq(ref.col, codigo)
-      if (error) return { ok: false, error: `Error al fusionar en ${ref.entidad}.` }
+      if (error) return { ok: false, error: `No se ha podido fusionar en ${ref.entidad}.` }
     }
 
     // Los puntos de venta van aparte: `monedas_aceptadas` es text[] y NO lo cubre el bucle
@@ -586,7 +586,7 @@ export async function eliminarMoneda(
         .update({ monedas_aceptadas: nuevas })
         .eq('client_id', session.client_id)
         .eq('caja_id', caja.caja_id)
-      if (error) return { ok: false, error: 'Error al fusionar en Puntos de venta.' }
+      if (error) return { ok: false, error: 'No se ha podido fusionar en Puntos de venta.' }
     }
   }
 
@@ -601,7 +601,7 @@ export async function eliminarMoneda(
   const { error } = await db.from('monedas').delete()
     .eq('client_id', session.client_id)
     .eq('codigo', codigo)
-  if (error) return { ok: false, error: 'Error al eliminar la moneda.' }
+  if (error) return { ok: false, error: 'No se ha podido eliminar la moneda.' }
 
   revalidatePath('/portal/monedas')
   revalidatePath('/portal/empresas')

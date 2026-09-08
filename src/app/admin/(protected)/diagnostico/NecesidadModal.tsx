@@ -66,7 +66,7 @@ export default function NecesidadModal({
     const res = esEdicion ? await editarNecesidad(fd) : await crearNecesidad(fd)
     setLoading(false)
     if (!res.ok) {
-      toastError(res.error ?? 'Error al guardar')
+      toastError(res.error ?? 'No se ha podido guardar')
       return
     }
     toastSuccess(esEdicion ? 'Necesidad guardada' : 'Necesidad creada')
@@ -138,7 +138,7 @@ export default function NecesidadModal({
               <label>
                 Módulos que recomienda <span className="required">*</span>
               </label>
-              <FormHelp text="Lo que ofrecemos cuando el cliente marca esta opción (la contabilidad es un módulo más)." label="Qué se recomienda" />
+              <FormHelp text="Lo que se ofrece cuando el cliente marca esta opción (la contabilidad es un módulo más)." label="Qué se recomienda" />
             </div>
             <div className="grid-cols-2">
               {modulos.map((m) => (

@@ -351,11 +351,11 @@ function hojasDePlantilla(
   const clave:  CeldaEstilo = { fontWeight: 'bold' }
 
   const porDefecto = [
-    '1. Escribe tus datos en la hoja «Datos», debajo de la fila de cabeceras.',
-    '2. No cambies ni borres la primera fila (las cabeceras).',
-    '3. Las columnas con * son obligatorias; el resto puedes dejarlas en blanco.',
-    '4. La fila de ejemplo (en gris) puedes dejarla o borrarla: no se importa.',
-    '5. Guarda y súbelo en CLAUX → Importar datos. También se acepta CSV.',
+    '1. Los datos van en la hoja «Datos», debajo de la fila de cabeceras.',
+    '2. La primera fila (las cabeceras) no se cambia ni se borra.',
+    '3. Las columnas con * son obligatorias; el resto admite quedar en blanco.',
+    '4. La fila de ejemplo (en gris) puede quedarse o borrarse: no se importa.',
+    '5. Una vez guardado, se sube en CLAUX → Importar datos. También se acepta CSV.',
   ]
 
   const hojaAyuda: HojaExcel = {
@@ -822,11 +822,11 @@ export async function plantillaFacturasLiangApp(
     : []
 
   const [hojaDatos, hojaAyuda] = hojasDePlantilla(adaptador.etiqueta, campos, filas, [
-    '1. Este archivo ya trae tus facturas: número, fecha e importe salen de tu libro mayor.',
-    '2. Completa la columna «Cliente» (en gris) de cada línea: es lo único que el libro no dice.',
-    '3. Si conoces el vencimiento o lo ya cobrado, rellénalos; si no, déjalos en blanco.',
-    '4. No cambies ni borres la primera fila (las cabeceras).',
-    '5. Guarda y súbelo en CLAUX → Importar datos → Facturas de venta.',
+    '1. Este archivo ya trae las facturas: número, fecha e importe salen del libro mayor.',
+    '2. Falta la columna «Cliente» (en gris) de cada línea: es lo único que el libro no dice.',
+    '3. El vencimiento y lo ya cobrado se rellenan si constan; si no, quedan en blanco.',
+    '4. La primera fila (las cabeceras) no se cambia ni se borra.',
+    '5. Una vez guardado, se sube en CLAUX → Importar datos → Facturas de venta.',
   ])
   const base64 = await construirXlsxBase64([hojaDatos, hojaAyuda])
   return { ok: true, base64, nombre: `facturas-${migracion_id}.xlsx`, facturas: facturas.length, avisos }
@@ -901,8 +901,8 @@ export async function aplicarLoteImport(
   const huella = (lote.mapping as { origen?: OrigenLiangApp }).origen
   if (huella?.perfil === 'liangapp' && !huella.cuadre?.ok) {
     return { ok: false, error: !huella.cuadre?.con_estado
-      ? 'Falta el Estado de rendimiento financiero. Vuelve al reconocimiento y añádelo a los archivos.'
-      : 'La migración no cuadra con el Estado de rendimiento financiero. Vuelve al reconocimiento y aparta las cuentas que no cuadran.' }
+      ? 'Falta el Estado de rendimiento financiero: se añade a los archivos desde el reconocimiento.'
+      : 'La migración no cuadra con el Estado de rendimiento financiero: las cuentas que no cuadran se apartan desde el reconocimiento.' }
   }
 
   const trozo = await aplicarLoteFilas(

@@ -27,7 +27,7 @@ export default async function CapacidadCard({
         <div className="card-header"><h2 className="card-title">Capacidad del nivel</h2></div>
         <div className="alert alert-error">
           <strong className="alert-titulo">No se pudo contar el uso</strong>
-          {e instanceof Error ? e.message : 'Error desconocido'}
+          {e instanceof Error ? e.message : 'No se ha podido completar la operación'}
         </div>
       </div>
     )

@@ -28,6 +28,7 @@ const CENTINELAS = [
   ['guards',   'scripts/audit-admin-guards.mjs', 'acciones del admin sin guarda de sesión'],
   ['tablas',   'scripts/audit-tablas.mjs',   'tablas fuera del sistema (etiqueta móvil, menú de fila, orden)'],
   ['constantes', 'scripts/audit-constantes.mjs', 'modelos de IA y niveles nombrados y que no existen'],
+  ['textos',  'scripts/audit-textos.mjs',   'registro de los textos visibles: tuteo, coloquialismos, plantillas'],
 ]
 
 const correr = (script) => new Promise(listo => {

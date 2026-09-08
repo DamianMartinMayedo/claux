@@ -87,7 +87,7 @@ export default function AsesoresView({
       <div className="page-header">
         <div>
           <h1 className="page-title">Asesores</h1>
-          <p className="page-subtitle">Contactos a los que envías tus reportes financieros por correo.</p>
+          <p className="page-subtitle">Contactos a los que se envían los reportes financieros por correo.</p>
         </div>
         {puedeEditar && !form && (
           <button type="button" className="btn btn-primary" onClick={abrirAlta}>
@@ -133,7 +133,7 @@ export default function AsesoresView({
         <div className="card card-table">
           <div className="mon-empty">
             <Users size={36} strokeWidth={1} />
-            <p>Aún no tienes asesores. Añade uno para poder enviarle tus reportes.</p>
+            <p>Sin asesores registrados.</p>
           </div>
         </div>
       ) : lista.length > 0 && (

@@ -92,7 +92,7 @@ export default function EditarFacturaPage({ data, contexto }: Props) {
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
 
-    if (lineas.length === 0)                      { toastError('Añade al menos una línea.'); return }
+    if (lineas.length === 0)                      { toastError('Se requiere al menos una línea.'); return }
     if (lineas.some(l => !l.descripcion.trim()))  { toastError('Toda línea debe tener una descripción.'); return }
     if (ajustes.some(a => !a.nombre.trim()))      { toastError('Todo ajuste debe tener un nombre.'); return }
 
@@ -115,7 +115,7 @@ export default function EditarFacturaPage({ data, contexto }: Props) {
     startTransition(async () => {
       const res = await guardarFactura(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       router.push(`/portal/ventas/facturas/${factura.factura_id}`)
     })
   }

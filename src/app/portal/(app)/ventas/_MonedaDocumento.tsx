@@ -118,7 +118,7 @@ export function MonedaDocumento({
                   <li>Los ajustes en porcentaje no cambian: son relativos al subtotal.</li>
                 )}
               </ul>
-              <p>Después podrás corregir cualquier importe a mano.</p>
+              <p>Después se puede corregir cualquier importe manualmente.</p>
             </>
           }
         />

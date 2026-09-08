@@ -74,7 +74,7 @@ export default function NotificacionesForm({
     // ninguno. La lista de leads SÍ puede ir vacía —es un extra—; la del equipo
     // no: un aviso interno sin destino es un aviso perdido.
     if (emailAvisos.length === 0) {
-      setMsg({ ok: false, text: 'Hace falta al menos un correo de avisos internos.' })
+      setMsg({ ok: false, text: 'Se necesita al menos un correo de avisos internos.' })
       return
     }
     if (!EMAIL_RE.test(contrat)) {
@@ -90,8 +90,8 @@ export default function NotificacionesForm({
     ])
     setLoading(false)
     setMsg(r1.ok && r2.ok && r3.ok && r4.ok
-      ? { ok: true,  text: 'Configuración guardada correctamente.' }
-      : { ok: false, text: r1.error ?? r2.error ?? r3.error ?? r4.error ?? 'Error al guardar.' })
+      ? { ok: true,  text: 'Configuración guardada.' }
+      : { ok: false, text: r1.error ?? r2.error ?? r3.error ?? r4.error ?? 'No se ha podido guardar.' })
   }
 
   function handleToggle(tipo: TipoEmail, activo: boolean) {
@@ -187,7 +187,7 @@ export default function NotificacionesForm({
                     onChange={v => { setEmailAvisos(v); setMsg(null) }}
                     validar={validarCorreo}
                     describedBy="email-avisos-ayuda"
-                    placeholder="Escribe un correo y pulsa Enter"
+                    placeholder="Falta el correo y pulsa Enter"
                     etiquetaQuitar={v => `Quitar el correo ${v}`}
                   />
                   <p id="email-avisos-ayuda" className="form-hint">
@@ -203,7 +203,7 @@ export default function NotificacionesForm({
                     onChange={v => { setEmailLeads(v); setMsg(null) }}
                     validar={validarCorreo}
                     describedBy="email-leads-ayuda"
-                    placeholder="Escribe un correo y pulsa Enter"
+                    placeholder="Falta el correo y pulsa Enter"
                     etiquetaQuitar={v => `Quitar el correo ${v}`}
                   />
                   <p id="email-leads-ayuda" className="form-hint">

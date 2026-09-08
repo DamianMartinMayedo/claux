@@ -289,11 +289,11 @@ async function escanearSocios(db: Db, prefs: Prefs, hoy: string): Promise<number
       ? `${c.nombre_empresa} ya no es Socio CLAUX`
       : `${c.nombre_empresa} deja de ser Socio CLAUX ${cuando}`
     const cuerpo = vencido
-      ? `Su condición de socio terminó el ${fmtFechaEs(fecha)}. Vuelve al flujo normal: `
-        + 'se le empieza a facturar la cuota de su nivel y se le puede cortar por fecha. '
-        + 'Si sigue siendo socio, prorroga la fecha en su ficha.'
+      ? `Su condición de socio terminó el ${fmtFechaEs(fecha)}. Pasa al flujo normal: `
+        + 'se le factura la cuota de su nivel y se le puede cortar por fecha. '
+        + 'Si sigue siendo socio, la fecha se prorroga en su ficha.'
       : `Termina el ${fmtFechaEs(fecha)}${c.socio_motivo ? ` (${c.socio_motivo})` : ''}. `
-        + 'Toca decidir: prorrogar, pasarlo a cliente de pago o cerrar la relación. '
+        + 'Quedan tres salidas: prorrogar, pasarlo a cliente de pago o cerrar la relación. '
         + 'Ese día vuelve a facturársele la cuota de su nivel.'
 
     const ok = await crearAvisoAdmin({

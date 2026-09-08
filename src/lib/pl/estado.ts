@@ -123,17 +123,17 @@ export const ROL_PL_LABEL: Record<RolPL, string> = {
 
 /** Ayuda del selector de clasificación (pestaña Categorías y paso del dossier). */
 export const ROL_PL_AYUDA: Record<RolPL, string> = {
-  COSTE_VENTAS: 'Lo que te cuesta lo que vendes: mercancía, materia prima, el proveedor del servicio.',
-  PERSONAL:     'Sueldos, seguridad social y todo lo que cuesta tu gente.',
+  COSTE_VENTAS: 'Lo que cuesta lo que se vende: mercancía, materia prima, el proveedor del servicio.',
+  PERSONAL:     'Sueldos, seguridad social y todo lo que cuesta el personal.',
   OPERATIVO:    'Lo que cuesta tener el negocio abierto: alquiler, luz, transporte, publicidad.',
   OTRO:         'Impuestos, comisiones e intereses. Fuera del resultado operativo para no distorsionarlo.',
-  INVERSION:    'Lo que compras y te dura años: equipos, obra, vehículos, mobiliario.',
-  PATRIMONIO:   'Tu dinero entrando o saliendo del negocio. No es ingreso ni gasto.',
-  FINANCIACION: 'El dinero del préstamo y lo que devuelves de él. Los intereses no: esos sí son gasto.',
-  INGRESO_OPERATIVO: 'Dinero que ENTRA por lo que vendes, cobrado sin factura: mostrador, suscripciones.',
-  DEPRECIACION:      'El desgaste anual de lo que compraste una vez. Resta, pero no sale de tu caja.',
+  INVERSION:    'Lo que se compra y dura años: equipos, obra, vehículos, mobiliario.',
+  PATRIMONIO:   'Dinero del dueño entrando o saliendo del negocio. No es ingreso ni gasto.',
+  FINANCIACION: 'El dinero del préstamo y lo que se devuelve de él. Los intereses no: esos sí son gasto.',
+  INGRESO_OPERATIVO: 'Dinero que ENTRA por lo que se vende, cobrado sin factura: mostrador, suscripciones.',
+  DEPRECIACION:      'El desgaste anual de lo que se compró una vez. Resta, pero no sale de la caja.',
   IMPUESTO_UTILIDAD: 'El impuesto sobre la utilidad. Se calcula sobre el resultado, así que va debajo de él.',
-  INGRESO_OTRO:      'Dinero que entra sin ser lo que vendes: la tasa, un reembolso, vender algo usado.',
+  INGRESO_OTRO:      'Dinero que entra sin ser lo que se vende: la tasa, un reembolso, vender algo usado.',
 }
 
 /**
@@ -145,17 +145,17 @@ export const ROL_PL_AYUDA: Record<RolPL, string> = {
  * no el rol, en cuanto la clasificación se decide.
  */
 export const ROL_PL_EFECTO: Record<RolPL, string> = {
-  COSTE_VENTAS: 'Se restará de tus ventas para calcular tu margen bruto.',
-  PERSONAL:     'Se contará aparte, en el renglón de lo que te cuesta tu gente.',
+  COSTE_VENTAS: 'Se restará de las ventas para calcular el margen bruto.',
+  PERSONAL:     'Se contará aparte, en el renglón de lo que cuesta el personal.',
   OPERATIVO:    'Se contará como gasto de tener el negocio abierto.',
-  OTRO:         'Quedará fuera de tu resultado operativo, para no distorsionarlo.',
-  INVERSION:    'No restará de tu resultado: no te empobrece, cambias dinero por una cosa que te queda.',
-  PATRIMONIO:   'No restará de tu resultado: es dinero tuyo moviéndose, no dinero que el negocio gana o pierde.',
-  FINANCIACION: 'No restará de tu resultado: devolver lo prestado cancela una deuda, no es un gasto.',
-  INGRESO_OPERATIVO: 'Sumará a tus ingresos, junto a lo que facturas.',
-  DEPRECIACION:      'Restará en su propio renglón, para que se vea qué parte de tu gasto no es caja.',
+  OTRO:         'Quedará fuera del resultado operativo, para no distorsionarlo.',
+  INVERSION:    'No restará del resultado: no empobrece, cambia dinero por una cosa que queda.',
+  PATRIMONIO:   'No restará del resultado: es dinero del dueño moviéndose, no dinero que el negocio gana o pierde.',
+  FINANCIACION: 'No restará del resultado: devolver lo prestado cancela una deuda, no es un gasto.',
+  INGRESO_OPERATIVO: 'Sumará a los ingresos, junto a lo que se factura.',
+  DEPRECIACION:      'Restará en su propio renglón, para que se vea qué parte del gasto no es caja.',
   IMPUESTO_UTILIDAD: 'Restará al final, debajo del resultado sobre el que se calcula.',
-  INGRESO_OTRO:      'Sumará a tus ingresos, en un renglón aparte del de lo que vendes.',
+  INGRESO_OTRO:      'Sumará a los ingresos, en un renglón aparte del de lo que se vende.',
 }
 
 /**
@@ -169,18 +169,18 @@ export const ROL_PL_EFECTO: Record<RolPL, string> = {
 export const PREGUNTAS_ROL: { rol: RolPL; pregunta: string; ejemplo: string }[] = [
   {
     rol: 'COSTE_VENTAS',
-    pregunta: '¿Este gasto sube cuando vendes más?',
-    ejemplo: 'La mercancía que revendes, la materia prima, el proveedor que presta el servicio por ti.',
+    pregunta: '¿Este gasto sube cuando se vende más?',
+    ejemplo: 'La mercancía de reventa, la materia prima, el proveedor que presta el servicio.',
   },
   {
     rol: 'PERSONAL',
-    pregunta: '¿Es lo que te cuesta tu gente?',
+    pregunta: '¿Es lo que cuesta el personal?',
     ejemplo: 'Sueldos, seguridad social, la comida del personal, los estímulos.',
   },
   {
     rol: 'OTRO',
     pregunta: '¿Es un impuesto, una comisión del banco o un interés?',
-    ejemplo: 'No depende de cómo lleves el negocio, así que se cuenta aparte.',
+    ejemplo: 'No depende de cómo se lleve el negocio, así que se cuenta aparte.',
   },
 ]
 
@@ -197,8 +197,8 @@ export const PREGUNTAS_ROL: { rol: RolPL; pregunta: string; ejemplo: string }[] 
  * responde que no sin pensarla.
  */
 export const PREGUNTA_FUERA = {
-  pregunta: '¿Es dinero que sale de tu caja pero NO es un gasto del negocio?',
-  ejemplo: 'Comprar algo que te dura años, sacar dinero para ti, o devolver lo que te prestaron.',
+  pregunta: '¿Es dinero que sale de la caja pero NO es un gasto del negocio?',
+  ejemplo: 'Comprar algo que dura años, retirar dinero del negocio, o devolver un préstamo.',
 }
 
 /** Las tres salidas de la pregunta de arriba, dichas con lo que el dueño hace. */
@@ -216,7 +216,7 @@ export const OPCIONES_FUERA: { rol: RolFueraResultado; titulo: string; ejemplo: 
   {
     rol: 'FINANCIACION',
     titulo: 'Es un préstamo, o lo que devuelvo de él',
-    ejemplo: 'El dinero que te prestaron y las cuotas del principal. Los intereses no: esos sí son gasto.',
+    ejemplo: 'El dinero prestado y las cuotas del principal. Los intereses no: esos sí son gasto.',
   },
 ]
 
@@ -232,7 +232,7 @@ export const OPCIONES_FUERA: { rol: RolFueraResultado; titulo: string; ejemplo: 
 export const OPCION_INGRESO: { rol: RolIngreso; titulo: string; ejemplo: string } = {
   rol: 'INGRESO_OPERATIVO',
   titulo: 'No sale: es dinero que ENTRA',
-  ejemplo: 'El cierre del día en el mostrador, una suscripción que te pagan, un reembolso.',
+  ejemplo: 'El cierre del día en el mostrador, una suscripción cobrada, un reembolso.',
 }
 
 export function esRolPL(v: unknown): v is RolPL {

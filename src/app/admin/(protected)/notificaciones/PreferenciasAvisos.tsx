@@ -60,9 +60,9 @@ export default function PreferenciasAvisos({ inicial }: { inicial: PreferenciaAv
   return (
     <div className="card">
       <p className="ntf-prefs-intro">
-        Elige de qué avisamos al equipo y con cuánta insistencia. <strong>Solo en la campana</strong> no interrumpe;
-        <strong> Aviso flotante</strong> aparece un momento en pantalla; <strong>Urgente</strong> se queda hasta que
-        alguien lo atienda. Afecta a todo el equipo, no solo a ti.
+        Qué genera aviso al equipo y con cuánta insistencia. <strong>Solo en la campana</strong> no interrumpe;
+        <strong> Aviso flotante</strong> aparece un momento en pantalla; <strong>Urgente</strong> permanece hasta que
+        alguien lo atienda. Afecta a todo el equipo.
       </p>
 
       {agrupar(filas).map(([categoria, delGrupo]) => (

@@ -140,7 +140,7 @@ export default function EditarModeloIaModal({ modelo, onClose }: { modelo: Model
                   </label>
                   <p className="config-field-hint">
                     {usarEnv
-                      ? 'La clave vivirá en una variable de entorno que creas tú en Vercel (y en .env.local para local). Aquí solo pones su nombre; al guardar se borra la clave cifrada.'
+                      ? 'La clave vivirá en una variable de entorno creada en Vercel (y en .env.local para local). Aquí solo va su nombre; al guardar se borra la clave cifrada.'
                       : 'La clave se guarda cifrada en el sistema. Recomendado: no hay que tocar Vercel.'}
                   </p>
                 </div>

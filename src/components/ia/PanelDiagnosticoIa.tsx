@@ -57,7 +57,7 @@ export default function PanelDiagnosticoIa({
   titulo, lineas, cargando = false, error = null,
   cargandoTexto = 'Analizando…',
   vacio = 'No hay nada que señalar.',
-  descargo = 'Generado por IA a partir de tus datos · compruébalo antes de darlo por bueno.',
+  descargo = 'Generado por IA a partir de los datos · compruébalo antes de darlo por bueno.',
   onReintentar, onCerrar,
 }: Props) {
   return (

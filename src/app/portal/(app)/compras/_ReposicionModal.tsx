@@ -101,7 +101,7 @@ export function ReposicionModal({
             </div>
             <select id="rep-alm" className="input" value={almacenId}
               onChange={e => setAlmacenId(e.target.value)} disabled={isPending}>
-              <option value="">Elige el almacén…</option>
+              <option value="">— Seleccionar almacén —</option>
               {(data?.almacenes ?? []).map(a => (
                 <option key={a.almacen_id} value={a.almacen_id}>
                   {a.nombre}{a.faltan > 0 ? ` — le faltan ${a.faltan}` : ' — está completo'}
@@ -113,11 +113,11 @@ export function ReposicionModal({
           {cargando ? (
             <div className="ven-empty-mini">
               <span className="spinner spinner-sm" />{' '}
-              {almacenId ? 'Mirando qué falta…' : 'Cargando tus almacenes…'}
+              {almacenId ? 'Calculando qué falta…' : 'Cargando almacenes…'}
             </div>
           ) : !almacenId ? (
             <div className="ven-empty-mini">
-              Elige arriba el almacén que quieres reponer y aquí sale lo que le falta.
+              Al seleccionar arriba el almacén a reponer, aquí aparece lo que le falta.
             </div>
           ) : faltas.length === 0 ? (
             <div className="ven-empty-mini">

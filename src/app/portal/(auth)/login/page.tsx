@@ -55,7 +55,7 @@ export default function PortalLoginPage() {
           <div className="login-logo-group">
             <img src="/logo_color.svg" alt="CLAUX" height={48} />
           </div>
-          <p className="login-subtitle">Digitaliza tu negocio</p>
+          <p className="login-subtitle">Gestión integral para negocios</p>
         </div>
 
         <div className="card card-lg">
@@ -72,7 +72,7 @@ export default function PortalLoginPage() {
                     type="email"
                     name="email"
                     autoComplete="email"
-                    placeholder="tu@empresa.com"
+                    placeholder="nombre@empresa.com"
                     required
                   />
                 </div>
@@ -104,7 +104,7 @@ export default function PortalLoginPage() {
                   className="login-forgot-link"
                   onClick={() => { setModo('recuperar'); setError('') }}
                 >
-                  ¿Olvidaste tu contraseña?
+                  ¿Contraseña olvidada?
                 </button>
 
               </form>
@@ -133,8 +133,7 @@ export default function PortalLoginPage() {
               ) : (
                 <form onSubmit={handleRecuperar} className="login-form" noValidate>
                   <p className="text-sm-muted">
-                    Escribe el email con el que entras y te enviamos un enlace para
-                    ponerle una contraseña nueva.
+                    Con el correo de acceso se envía un enlace para definir una contraseña nueva.
                   </p>
 
                   <div className="form-group">
@@ -144,7 +143,7 @@ export default function PortalLoginPage() {
                       type="email"
                       name="email"
                       autoComplete="email"
-                      placeholder="tu@empresa.com"
+                      placeholder="nombre@empresa.com"
                       required
                     />
                   </div>

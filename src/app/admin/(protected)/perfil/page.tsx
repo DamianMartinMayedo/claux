@@ -30,7 +30,7 @@ export default async function PerfilAdminPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Mi perfil</h1>
-          <p className="page-subtitle">Tus datos de acceso al panel</p>
+          <p className="page-subtitle">Datos de acceso al panel</p>
         </div>
       </div>
 
@@ -43,7 +43,7 @@ export default async function PerfilAdminPage() {
             </div>
             <div>
               <h2 className="config-section-title">Perfil</h2>
-              <p className="config-section-sub">Datos de tu cuenta</p>
+              <p className="config-section-sub">Datos de la cuenta</p>
             </div>
           </div>
 
@@ -78,7 +78,7 @@ export default async function PerfilAdminPage() {
             <div>
               <p className="config-field-label">Contraseña</p>
               <p className="config-field-hint">
-                Recibirás un enlace en tu correo para establecer una nueva contraseña de forma segura.
+                El enlace para establecer una contraseña nueva llega al correo de la cuenta.
               </p>
             </div>
             <PerfilForm email={email} initialName={displayName} passwordOnly />

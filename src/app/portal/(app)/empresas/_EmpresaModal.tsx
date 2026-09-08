@@ -100,7 +100,7 @@ export default function EmpresaModal({
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (letraDuplicada) {
-      toastError(`La letra "${letra}" ya está asignada a otra empresa. Elige una distinta.`)
+      toastError(`La letra "${letra}" ya está asignada a otra empresa.`)
       return
     }
     const fd = new FormData(e.currentTarget)
@@ -111,7 +111,7 @@ export default function EmpresaModal({
     const ld = toastLoading(esEdicion ? 'Guardando…' : 'Creando…')
     startTransition(async () => {
       const result = await guardarEmpresa(fd)
-      if (!result.ok) { await ld.dismiss(); toastError(result.error ?? 'Error inesperado.'); return }
+      if (!result.ok) { await ld.dismiss(); toastError(result.error ?? 'No se ha podido completar la operación.'); return }
 
       if (logoFile && result.empresa_id) {
         const logoFd = new FormData()
@@ -168,7 +168,7 @@ export default function EmpresaModal({
                   <label>Moneda funcional <span className="required">*</span></label>
                   {esEdicion && (
                     <FormHelp
-                      text="Cuidado: si esta empresa ya tiene operaciones registradas, cambiar su moneda funcional puede descuadrar informes y saldos ya calculados. Cámbiala solo si sabes lo que haces."
+                      text="Si esta empresa ya tiene operaciones registradas, cambiar su moneda funcional puede descuadrar informes y saldos ya calculados."
                       label="Qué pasa si cambio la moneda funcional"
                     />
                   )}
@@ -176,7 +176,7 @@ export default function EmpresaModal({
                 {monedas.length === 0 ? (
                   <div className="prd-almacen-req">
                     <p className="input-hint">
-                      Toda empresa opera en una moneda, y todavía no tienes ninguna configurada.
+                      Toda empresa opera en una moneda, y no hay ninguna configurada.
                     </p>
                     <Link href="/portal/monedas" className="btn btn-primary btn-sm">
                       <Plus size={14} strokeWidth={2.5} /> Añadir una moneda
@@ -188,7 +188,7 @@ export default function EmpresaModal({
                       defaultValue={state.empresa?.moneda_funcional ?? ''}>
                       {/* value="" + disabled + required: el navegador para el envío aquí
                           en vez de dejar pasar un vacío que revienta más adelante. */}
-                      <option value="" disabled>Elige una moneda</option>
+                      <option value="" disabled>— Seleccionar moneda —</option>
                       {monedas.map(m => (
                         <option key={m.codigo} value={m.codigo}>{m.codigo} — {m.nombre}</option>
                       ))}
@@ -262,7 +262,7 @@ export default function EmpresaModal({
               <div className="input-group emp-full">
                 <div className="form-label-with-help">
                   <label htmlFor="emp-datos-pago">Cómo te pagan</label>
-                  <FormHelp text="Sale en tus facturas bajo «Cómo pagar». Si lo dejas vacío, ese bloque no se imprime." label="Dónde aparecen los datos de pago" />
+                  <FormHelp text="Sale en las facturas bajo «Cómo pagar». Si lo dejas vacío, ese bloque no se imprime." label="Dónde aparecen los datos de pago" />
                 </div>
                 <textarea
                   id="emp-datos-pago"
@@ -277,7 +277,7 @@ export default function EmpresaModal({
               <div className="input-group emp-full">
                 <div className="form-label-with-help">
                   <label htmlFor="emp-pie-factura">Pie de factura</label>
-                  <FormHelp text="Texto fijo al final de todas tus facturas." label="Qué es el pie de factura" />
+                  <FormHelp text="Texto fijo al final de todas las facturas." label="Qué es el pie de factura" />
                 </div>
                 <textarea
                   id="emp-pie-factura"
@@ -326,7 +326,7 @@ export default function EmpresaModal({
                       : <ImageIcon size={22} strokeWidth={1.5} className="text-muted" />}
                   </div>
                   <div className="logo-upload-info">
-                    <strong>Haz clic para subir el logo</strong>
+                    <strong>Subir el logo</strong>
                     <span>PNG, JPG o WebP · Máx. 2 MB · Fondo transparente recomendado</span>
                     {logoNombre && <span className="logo-filename">{logoNombre}</span>}
                   </div>

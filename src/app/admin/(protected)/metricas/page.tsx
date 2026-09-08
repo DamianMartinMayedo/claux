@@ -85,7 +85,7 @@ export default async function MetricasPage() {
         <div className="card">
           <h2 className="detail-section-title">Módulos más usados</h2>
           {m.modulosMasUsados.length === 0 ? (
-            <p className="text-sm-muted">Aún no hay actividad registrada.</p>
+            <p className="text-sm-muted">Sin actividad registrada.</p>
           ) : (
             <div className="table-wrapper table-wrapper-flush">
               <table className="table">

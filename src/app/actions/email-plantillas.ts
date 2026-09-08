@@ -68,6 +68,6 @@ export async function enviarPruebaPlantilla(tipo: TipoEmail): Promise<{ ok: bool
     html,
     tipo,
   })
-  if (!res.ok) return { ok: false, error: 'No se pudo enviar la prueba. Revisa la configuración de Resend.' }
+  if (!res.ok) return { ok: false, error: 'No se ha podido enviar la prueba: conviene revisar la configuración de Resend.' }
   return { ok: true }
 }

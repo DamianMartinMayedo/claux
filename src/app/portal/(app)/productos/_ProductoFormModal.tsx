@@ -147,7 +147,7 @@ export function UnidadSelect({ defaultValue, sugerida }: { defaultValue?: string
       {sel === '__otra__' && (
         <input className="input mt-2" type="text"
           value={custom} onChange={e => setCustom(e.target.value)}
-          placeholder="Escribe la unidad…" />
+          placeholder="Falta la unidad…" />
       )}
     </>
   )
@@ -230,7 +230,7 @@ export function ProductoFormModal({
    */
   async function sugerirConIa() {
     const nombre = nombreRef.current?.value.trim() ?? ''
-    if (!nombre) { toastError('Escribe primero el nombre.'); return }
+    if (!nombre) { toastError('Falta el nombre.'); return }
     setSugiriendo(true)
     // `tipo`, no `modo`: en el catálogo del mostrador el tipo lo elige el desplegable de
     // arriba, y pedirle a la IA la ficha de un producto para lo que es un servicio
@@ -251,7 +251,7 @@ export function ProductoFormModal({
       if (s.periodicidad) setPeriodicidad(s.periodicidad)
     }
     if (!s.descripcion && !s.unidad && !s.categoria_id && !s.es_suscribible) {
-      toastError('No pude sugerir nada con ese nombre. Rellena la ficha a mano.')
+      toastError('No se ha podido sugerir nada con ese nombre: la ficha se completa manualmente.')
     }
   }
 
@@ -301,7 +301,7 @@ export function ProductoFormModal({
     startTransition(async () => {
       const res = await guardarProducto(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       onSaved()
     })
   }
@@ -488,7 +488,7 @@ export function ProductoFormModal({
                 <span className="ter-form-section-title">Inventario</span>
                 {bloqueadoPorAlmacen ? (
                   <div className="prd-almacen-req">
-                    <p className="input-hint">Los productos físicos necesitan un <strong>almacén</strong> donde registrar su stock. Crea uno para poder guardar.</p>
+                    <p className="input-hint">Los productos físicos necesitan un <strong>almacén</strong> donde registrar su stock.</p>
                     <Link href="/portal/almacenes" className="btn btn-primary btn-sm"><Plus size={14} strokeWidth={2.5} /> Crear almacén</Link>
                   </div>
                 ) : (
@@ -506,7 +506,7 @@ export function ProductoFormModal({
                     <div className="input-group ter-col-span-3">
                       <div className="form-label-with-help">
                         <label>Stock mínimo (todos los almacenes)</label>
-                        <FormHelp text="Aviso cuando el stock baje de este nivel. Puedes afinarlo por almacén desde la ficha del producto." label="Información sobre el stock mínimo" />
+                        <FormHelp text="Aviso cuando el stock baje de este nivel. Se puede afinar por almacén desde la ficha del producto." label="Información sobre el stock mínimo" />
                       </div>
                       <input className="input" type="text" inputMode="decimal" name="stock_minimo"
                         defaultValue={textoNumeroEs(producto?.stock_minimo ?? 0)} placeholder="0" />

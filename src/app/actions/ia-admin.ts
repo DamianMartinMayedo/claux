@@ -35,7 +35,7 @@ export async function guardarConfigIaGlobal(args: {
   const interno = (args.modeloInterno || '').trim()
   if (interno) {
     const { data: m } = await db.from('ia_modelos').select('id, activo').eq('id', interno).maybeSingle()
-    if (!m?.activo) return { ok: false, error: `El modelo «${interno}» ya no está disponible. Elige otro en la lista.` }
+    if (!m?.activo) return { ok: false, error: `El modelo «${interno}» ya no está disponible.` }
   }
 
   const filas = [

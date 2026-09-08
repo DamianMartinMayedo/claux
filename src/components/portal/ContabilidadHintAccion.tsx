@@ -29,7 +29,7 @@ export default function ContabilidadHintAccion({ pedidoEl }: { pedidoEl?: string
       const r = await registrarInteresModulo('base', 'Contabilidad')
       if (!r.ok) { toastError(r.error ?? 'No se pudo enviar.'); return }
       setPedido('ahora')
-      toastSuccess('Recibido. Te contactamos enseguida.')
+      toastSuccess('Solicitud recibida.')
       void notificaciones?.refrescar()
     })
   }
@@ -38,7 +38,7 @@ export default function ContabilidadHintAccion({ pedidoEl }: { pedidoEl?: string
     return (
       <span className="modulo-sugerencia-hecho">
         <Check size={14} strokeWidth={2.5} aria-hidden="true" />
-        {pedido === 'ahora' ? 'Te contactamos' : `Pedido el ${pedido} · te contactamos`}
+        {pedido === 'ahora' ? 'Solicitud registrada' : `Pedido el ${pedido}`}
       </span>
     )
   }

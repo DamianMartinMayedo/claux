@@ -124,7 +124,7 @@ export function FichasLiangApp({
       <button type="button" className="imprt-mig-anadir" disabled={cargando || sinArchivos}
         onClick={() => masRef.current?.click()}>
         <Plus size={18} strokeWidth={2} />
-        <span>{sinArchivos ? 'Empieza otra vez para cambiar los archivos' : 'Añadir archivos'}</span>
+        <span>{sinArchivos ? 'Reiniciar para cambiar los archivos' : 'Añadir archivos'}</span>
       </button>
     </div>
   )
@@ -161,7 +161,7 @@ export function GruposLiangApp({
             <select className="input" value={valor} disabled={cargando}
               aria-label={`Categoría de ${g.etiqueta}`}
               onChange={e => onElegir(g.grupo, e.target.value)}>
-              <option value="">— Elige una categoría —</option>
+              <option value="">— Seleccionar categoría —</option>
               {sugeridas.length > 0 && (
                 <optgroup label="Propuestas">
                   {sugeridas.map(c => (
@@ -198,7 +198,7 @@ export function CuadreLiangApp({
   return (
     <div className="card card-table imprt-mig-cuadre">
       <div className="card-header">
-        <h2 className="card-title card-title-sm">Cuadre con tu contabilidad</h2>
+        <h2 className="card-title card-title-sm">Cuadre con la contabilidad</h2>
         <span className={`badge ${cuadra ? 'badge-success' : 'badge-warning'}`}>
           {!hayEstado ? 'Falta el estado' : cuadra ? 'Cuadra' : 'No cuadra'}
         </span>
@@ -206,12 +206,12 @@ export function CuadreLiangApp({
       {!enSitio && (!hayEstado ? (
         <div className="alert alert-warning">
           <AlertTriangle size={16} strokeWidth={2} />
-          Vuelve al reconocimiento y añade el Estado de rendimiento financiero del período: sin él la migración no se puede aplicar.
+          Falta el Estado de rendimiento financiero del período: sin él la migración no se puede aplicar. Se añade en el reconocimiento.
         </div>
       ) : !cuadra && (
         <div className="alert alert-warning">
           <AlertTriangle size={16} strokeWidth={2} />
-          Vuelve al reconocimiento y aparta las cuentas que no cuadran, o corrige sus archivos y vuelve a subirlos.
+          En el reconocimiento se apartan las cuentas que no cuadran; la alternativa es corregir sus archivos y subirlos de nuevo.
         </div>
       ))}
       <div className="table-wrapper">
@@ -221,7 +221,7 @@ export function CuadreLiangApp({
               <th className="col-num">Cuenta</th>
               <th>Concepto</th>
               <th className="col-num">Leído</th>
-              <th className="col-num">Tu estado</th>
+              <th className="col-num">Su estado</th>
               <th className="col-num">Diferencia</th>
               <th className="col-center">Cuadre</th>
             </tr>
@@ -234,7 +234,7 @@ export function CuadreLiangApp({
                   <td data-label="Cuenta" className="col-num">{f.cuenta}</td>
                   <td data-label="Concepto"><span className="cell-clamp" title={f.etiqueta}>{f.etiqueta}</span></td>
                   <td data-label="Leído" className="col-num">{formatearImporte(f.leido)}</td>
-                  <td data-label="Tu estado" className="col-num">{f.oficial === null ? '—' : formatearImporte(f.oficial)}</td>
+                  <td data-label="Su estado" className="col-num">{f.oficial === null ? '—' : formatearImporte(f.oficial)}</td>
                   <td data-label="Diferencia" className="col-num">{f.diferencia === null ? '—' : formatearImporte(f.diferencia)}</td>
                   <td data-label="Cuadre" className="col-center">
                     <span className={`badge ${fuera ? 'badge-neutral' : f.cuadra ? 'badge-success' : 'badge-warning'}`}>
@@ -249,7 +249,7 @@ export function CuadreLiangApp({
       </div>
       {mig.sinArchivo.length > 0 && (
         <div className="imprt-mig-falta">
-          <p className="text-xs-muted">Tu estado trae conceptos de los que no has subido el libro mayor:</p>
+          <p className="text-xs-muted">El estado trae conceptos sin libro mayor subido:</p>
           <ul className="imprt-mig-falta-lista">
             {mig.sinArchivo.map(s => (
               <li key={s.concepto}><span>{s.concepto}</span><strong>{formatearImporte(s.importe)}</strong></li>
@@ -260,7 +260,7 @@ export function CuadreLiangApp({
       {hayEstado && mig.utilidad.oficial !== null && (
         <p className="imprt-mig-utilidad">
           Resultado del período: <strong>{formatearImporte(mig.utilidad.reconstruida)}</strong> según lo subido,
-          {' '}<strong>{formatearImporte(mig.utilidad.oficial)}</strong> según tu estado.
+          {' '}<strong>{formatearImporte(mig.utilidad.oficial)}</strong> según el estado.
         </p>
       )}
     </div>
@@ -286,7 +286,7 @@ export function FacturasLiangApp({
         <span className="text-xs-muted">{facturas.length} · {formatearImporte(total)}</span>
       </div>
       <p className="modal-body-text">
-        Descarga la plantilla, completa el cliente de cada factura y súbela en Facturas de venta.
+        La plantilla se descarga, se completa el cliente de cada factura y se sube en Facturas de venta.
       </p>
       <div className="imprt-acciones">
         <button type="button" className="btn btn-secondary" onClick={onDescargar} disabled={bajando}>
@@ -331,12 +331,12 @@ export function AyudaLiangApp({ hayEstado }: { hayEstado: boolean }) {
         {hayEstado
           ? <>
               Ahora los <strong>libros mayores</strong> del período —uno por cuenta—, de la misma
-              empresa y el mismo período que el estado. Puedes subirlos todos a la vez.
+              empresa y el mismo período que el estado. Admite subirlos todos a la vez.
             </>
           : <>
               Empieza por el <strong>Estado de rendimiento financiero</strong> del período: es{' '}
-              <strong>obligatorio</strong>, porque es contra él como se cuadra lo migrado. Después
-              subes los libros mayores.
+              <strong>obligatorio</strong>, porque es contra él como se cuadra lo migrado. Los libros
+              mayores van después.
             </>}
       </span>
     </div>

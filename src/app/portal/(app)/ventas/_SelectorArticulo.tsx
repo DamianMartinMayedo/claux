@@ -63,7 +63,7 @@ export function SelectorArticulo({ productos, moneda, almacenId, onAnadir, onCer
           <div>
             <h2 className="modal-title">Elegir del catálogo</h2>
             <p className="text-xs-muted mt-1">
-              Marca todo lo que vendes y se añade de una vez, una línea por artículo.
+              Los artículos marcados se añaden de una vez, una línea por cada uno.
             </p>
           </div>
           <button type="button" className="modal-close" onClick={onCerrar} aria-label="Cerrar">×</button>
@@ -86,7 +86,7 @@ export function SelectorArticulo({ productos, moneda, almacenId, onAnadir, onCer
           {filtrados.length === 0 ? (
             <div className="ven-empty-mini mt-3">
               {productos.length === 0
-                ? 'Tu catálogo está vacío. Escribe las líneas a mano.'
+                ? 'El catálogo está vacío: las líneas se escriben manualmente.'
                 : 'Ningún artículo coincide.'}
             </div>
           ) : (

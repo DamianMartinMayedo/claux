@@ -4,7 +4,7 @@ import { ImageResponse } from 'next/og'
 // NOTA: ImageResponse (satori) SOLO admite estilos inline — es un renderizador
 // de imagen aparte del design system, no UI de la app, así que la regla de
 // "sin estilos inline" no aplica aquí. Colores de marca CLAUX.
-export const alt = 'CLAUX — Digitaliza tu negocio'
+export const alt = 'CLAUX — Digitaliza el negocio'
 export const size = { width: 1200, height: 630 }
 export const contentType = 'image/png'
 

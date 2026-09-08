@@ -53,17 +53,17 @@ export function textoAviso(d: DatosAviso): string {
 
   switch (d.estado) {
     case 'CONFIRMADA':
-      return `${hola}te confirmamos tu ${qué} del ${cuando} en ${d.negocio}. ¡Te esperamos!`
+      return `${hola}le confirmamos su ${qué} del ${cuando} en ${d.negocio}. Le esperamos.`
     case 'RECHAZADA':
-      return `${hola}lo sentimos: no podemos atender tu ${qué} del ${cuando} en ${d.negocio}. ¿Te viene bien otro momento?`
+      return `${hola}lamentamos no poder atender su ${qué} del ${cuando} en ${d.negocio}. ¿Le viene bien otro momento?`
     case 'CANCELADA':
-      return `${hola}tu ${qué} del ${cuando} en ${d.negocio} queda cancelada. Cuando quieras la volvemos a hacer.`
+      return `${hola}su ${qué} del ${cuando} en ${d.negocio} queda cancelada. Puede volver a solicitarla cuando lo desee.`
     case 'PENDIENTE':
-      return `${hola}hemos recibido tu ${qué} para el ${cuando} en ${d.negocio}. Te confirmamos enseguida.`
+      return `${hola}hemos recibido su ${qué} para el ${cuando} en ${d.negocio}. Le confirmamos en breve.`
     default:
       // ATENDIDA / NO_SHOW / CADUCADA son notas internas: si el dueño abre el chat
       // desde ahí, lo natural es un recordatorio neutro, no «no viniste».
-      return `${hola}te escribimos de ${d.negocio} por tu ${qué} del ${cuando}.`
+      return `${hola}le escribimos de ${d.negocio} por su ${qué} del ${cuando}.`
   }
 }
 

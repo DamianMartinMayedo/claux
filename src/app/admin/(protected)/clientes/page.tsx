@@ -87,7 +87,7 @@ export default async function ClientesPage() {
           <div className="table-empty">
             <Users size={40} strokeWidth={1.5} />
             <h3 className="table-empty-title">Sin clientes registrados</h3>
-            <p>Crea tu primer cliente con el botón de arriba.</p>
+            <p>El botón de arriba crea el primero.</p>
           </div>
         </div>
       ) : (

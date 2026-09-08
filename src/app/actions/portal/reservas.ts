@@ -268,7 +268,7 @@ export async function obtenerReservas(filtro?: FiltroListado): Promise<ReservaPa
 
   return {
     client_id: session.client_id,
-    negocio:  (cliRes.data?.nombre_empresa as string) ?? 'Tu negocio',
+    negocio:  (cliRes.data?.nombre_empresa as string) ?? 'El negocio',
     etiqueta_reservas: etiquetas.reservas,
     reservas, franjas, bot_config, slug,
     cierres, reglas, tieneIa,
@@ -301,7 +301,7 @@ export async function crearReserva(
 ): Promise<ResultadoAgenda> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('reservas_citas'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('reservas_citas'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const franja_id      = (formData.get('franja_id')      as string)?.trim()
   const fecha          = (formData.get('fecha')           as string)?.trim()
@@ -311,7 +311,7 @@ export async function crearReserva(
   const telefono       = (formData.get('telefono')        as string)?.trim() || null
   const notas          = (formData.get('notas')           as string)?.trim() || null
 
-  if (!franja_id)       return { ok: false, error: 'Debes seleccionar un turno.' }
+  if (!franja_id)       return { ok: false, error: 'Falta el turno.' }
   if (!fecha)           return { ok: false, error: 'La fecha es obligatoria.' }
   if (fecha < hoy())    return { ok: false, error: 'No se puede crear una reserva en una fecha pasada.' }
   if (!nombre_cliente)  return { ok: false, error: 'El nombre del cliente es obligatorio.' }
@@ -322,7 +322,7 @@ export async function crearReserva(
   const personas = isNaN(personasRaw) || personasRaw < 1 ? 1 : personasRaw
   const hora     = horaRaw
 
-  if (fecha === hoy() && hora <= horaAhora()) return { ok: false, error: 'Esa hora ya pasó. Elige una hora futura.' }
+  if (fecha === hoy() && hora <= horaAhora()) return { ok: false, error: 'La hora ya pasó.' }
 
   const db = createAdminClient()
 
@@ -352,7 +352,7 @@ export async function crearReserva(
   if (error) return { ok: false, error: error.message }
   const result = data as ResultadoAgenda
   if (!result.ok) {
-    return { ok: false, error: result.error ?? 'Error al crear la reserva.', forzable: result.forzable }
+    return { ok: false, error: result.error ?? 'No se ha podido crear la reserva.', forzable: result.forzable }
   }
 
   revalidatePath('/portal/reservas')
@@ -368,7 +368,7 @@ export async function modificarReserva(
 ): Promise<ResultadoAgenda> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('reservas_citas'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('reservas_citas'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const franja_id      = (formData.get('franja_id')      as string)?.trim()
   const fecha          = (formData.get('fecha')           as string)?.trim()
@@ -378,7 +378,7 @@ export async function modificarReserva(
   const telefono       = (formData.get('telefono')        as string)?.trim() || null
   const notas          = (formData.get('notas')           as string)?.trim() || null
 
-  if (!franja_id)       return { ok: false, error: 'Debes seleccionar un turno.' }
+  if (!franja_id)       return { ok: false, error: 'Falta el turno.' }
   if (!fecha)           return { ok: false, error: 'La fecha es obligatoria.' }
   if (!nombre_cliente)  return { ok: false, error: 'El nombre del cliente es obligatorio.' }
   if (!horaRaw)         return { ok: false, error: 'La hora es obligatoria.' }
@@ -409,7 +409,7 @@ export async function modificarReserva(
   if (error) return { ok: false, error: error.message }
   const result = data as ResultadoAgenda
   if (!result.ok) {
-    return { ok: false, error: result.error ?? 'Error al modificar la reserva.', forzable: result.forzable }
+    return { ok: false, error: result.error ?? 'No se ha podido modificar la reserva.', forzable: result.forzable }
   }
 
   revalidatePath('/portal/reservas')
@@ -424,7 +424,7 @@ export async function cambiarEstadoReserva(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('reservas_citas'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('reservas_citas'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -438,7 +438,7 @@ export async function cambiarEstadoReserva(
   // Transición validada (máquina de estados) + aviso al cliente (canal bot)
   const r = await transicionarEstado(
     db, session.client_id, reserva_id, nuevoEstado,
-    (cli?.nombre_empresa as string) ?? 'Tu reserva',
+    (cli?.nombre_empresa as string) ?? 'La reserva',
     { token: botCfg.token, activo: botCfg.activo, clientId: session.client_id, columna: 'bot_config' },
   )
   if (!r.ok) return r
@@ -465,7 +465,7 @@ export async function cambiarEstadoReservasEnLote(
 ): Promise<ResultadoLote> {
   const session = await getPortalSession()
   if (!session)             return loteVacio('Sesión inválida.')
-  if (!(await puedeEditarModulo('reservas_citas'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  if (!(await puedeEditarModulo('reservas_citas'))) return loteVacio('Sin permiso para editar en este módulo.')
   if (!ids.length) return loteVacio()
 
   const db = createAdminClient()
@@ -494,7 +494,7 @@ export async function guardarFranja(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('reservas_citas'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('reservas_citas'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const franja_id      = (formData.get('franja_id')      as string)?.trim()
   const nombre         = (formData.get('nombre')         as string)?.trim()
@@ -575,7 +575,7 @@ export async function guardarFranja(
 export async function eliminarFranja(franja_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('reservas_citas'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('reservas_citas'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -607,7 +607,7 @@ export async function guardarBotConfig(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('reservas_citas'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('reservas_citas'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const r = await guardarBotConfigCol(createAdminClient(), session.client_id, 'bot_config', {
     token:                  (formData.get('token')  as string)?.trim() || null,
@@ -625,7 +625,7 @@ export async function guardarBotConfig(
 export async function guardarConfirmacionReservas(activa: boolean): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('reservas_citas'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('reservas_citas'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const r = await guardarConfirmacionCol(createAdminClient(), session.client_id, 'bot_config', activa)
   if (!r.ok) return r
@@ -640,7 +640,7 @@ export async function toggleActivoBot(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('reservas_citas'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('reservas_citas'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const r = await toggleActivoBotCol(createAdminClient(), session.client_id, 'bot_config', activo)
   if (!r.ok) return r
@@ -653,7 +653,7 @@ export async function toggleActivoBot(
 export async function toggleIaBotReservas(activa: boolean): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('reservas_citas'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('reservas_citas'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: cli } = await db.from('clients').select('modulos_activos').eq('client_id', session.client_id).single()
@@ -670,7 +670,7 @@ export async function toggleIaBotReservas(activa: boolean): Promise<{ ok: boolea
 export async function eliminarBotConfig(): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('reservas_citas'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('reservas_citas'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const r = await eliminarBotConfigCol(createAdminClient(), session.client_id, 'bot_config')
   if (!r.ok) return r
@@ -691,7 +691,7 @@ export async function crearReservaPublica(
 
   // Rate limit por IP (anti-spam de reservas)
   if (!await rateLimitOk('reserva_crear', 5, 300)) {
-    return { ok: false, error: 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.' }
+    return { ok: false, error: 'Demasiados intentos seguidos. El acceso se reabre en unos minutos.' }
   }
 
   const client_id = (formData.get('client_id')  as string)?.trim()
@@ -718,7 +718,7 @@ export async function crearReservaPublica(
   const personas = isNaN(personasRaw) || personasRaw < 1 ? 1 : personasRaw
   const horaVal  = hora || '12:00:00'
 
-  if (fecha === hoy() && horaVal <= horaAhora()) return { ok: false, error: 'Esa hora ya pasó. Elige una hora futura.' }
+  if (fecha === hoy() && horaVal <= horaAhora()) return { ok: false, error: 'La hora ya pasó.' }
 
   const db = createAdminClient()
 
@@ -754,7 +754,7 @@ export async function crearReservaPublica(
 
   if (error) return { ok: false, error: error.message }
   const result = data as { ok: boolean; error?: string }
-  if (!result.ok) return { ok: false, error: result.error ?? 'Error al crear la reserva.' }
+  if (!result.ok) return { ok: false, error: result.error ?? 'No se ha podido crear la reserva.' }
 
   // Correo del cliente: se guarda tras la inserción atómica (no es columna de la RPC).
   await db.from('reservas').update({ email }).eq('reserva_id', reservaId)
@@ -769,7 +769,7 @@ export async function crearReservaPublica(
       estado: botCfg.confirmacion_automatica ? 'CONFIRMADA' : 'PENDIENTE',
       telegram_chat_id: null,
     },
-    (cliente?.nombre_empresa as string) ?? 'Tu negocio',
+    (cliente?.nombre_empresa as string) ?? 'El negocio',
   )
 
   // Bandeja interna del portal (además del aviso de Telegram, que exige bot).
@@ -1085,9 +1085,9 @@ export async function cancelarReservaPublica(token: string): Promise<{ ok: boole
     const [y, m, d] = (r.fecha as string).split('-')
     const hhmm = r.hora ? (r.hora as string).substring(0, 5) : '—'
     const texto = [
-      `🚫 ${esCita ? 'Cita' : 'Reserva'} cancelada por el cliente — ${(cli?.nombre_empresa as string) ?? ''}`.trim(),
-      `📅 ${d}/${m}/${y}  🕐 ${hhmm}`,
-      `👥 ${Number(r.personas)}  ·  ${r.nombre_cliente as string}`,
+      `${esCita ? 'Cita' : 'Reserva'} cancelada por el cliente — ${(cli?.nombre_empresa as string) ?? ''}`.trim(),
+      `${d}/${m}/${y} · ${hhmm}`,
+      `${Number(r.personas)} personas · ${r.nombre_cliente as string}`,
     ].join('\n')
     await enviarMensaje(botCfg.token, botCfg.notificar_owner_chat_id, texto)
   }

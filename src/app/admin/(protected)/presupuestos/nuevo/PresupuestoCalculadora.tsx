@@ -566,7 +566,7 @@ export default function PresupuestoCalculadora({
           <div className="card">
             <p className="mod-list-label">Datos de volumen</p>
             {!editando && prefill.diagnosticoId && prefill.volumenes && (
-              <p className="input-hint">Del lead viene el mínimo que declaró: ajústalo al número real.</p>
+              <p className="input-hint">Del lead viene el mínimo que declaró: conviene ajustarlo al número real.</p>
             )}
             <div className="grid-cols-2">
               {[...camposFase1, ...lineasFase2].map(l => (
@@ -762,7 +762,7 @@ export default function PresupuestoCalculadora({
                 error={revError}
                 cargandoTexto="Comparando con lo ya cerrado…"
                 vacio="No ve nada que objetar en este presupuesto."
-                descargo="Generado por IA a partir de tus presupuestos cerrados · el precio lo decides tú."
+                descargo="Generado por IA a partir de los presupuestos cerrados · el precio es decisión del vendedor."
                 onReintentar={revReintento ? revisarAntesDeEmitir : undefined}
                 onCerrar={() => { setRevision(null); setRevError(null) }}
               />

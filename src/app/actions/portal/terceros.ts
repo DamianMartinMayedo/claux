@@ -128,13 +128,13 @@ export async function guardarTercero(
 ): Promise<{ ok: boolean; error?: string; tercero_id?: string }> {
   const session = await getPortalSession()
   if (!session)          return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarAlgunModulo(['base', 'inventario', 'servicios']))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarAlgunModulo(['base', 'inventario', 'servicios']))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const nombre = ((formData.get('nombre') as string) ?? '').trim()
   if (!nombre) return { ok: false, error: 'El nombre del tercero es obligatorio.' }
 
   const empresa_id = ((formData.get('empresa_id') as string) ?? '').trim()
-  if (!empresa_id) return { ok: false, error: 'Debes seleccionar una empresa.' }
+  if (!empresa_id) return { ok: false, error: 'Falta la empresa.' }
 
   const empresas  = await obtenerEmpresas()
   const empresaOk = empresas.some(e => e.empresa_id === empresa_id)
@@ -187,7 +187,7 @@ export async function guardarTercero(
       .from('contratos')
       .upload(path, blob, { contentType: contratoFile.type, upsert: true })
 
-    if (upErr) return { ok: false, error: 'Error al subir el contrato.' }
+    if (upErr) return { ok: false, error: 'No se ha podido subir el contrato.' }
 
     const { data: { publicUrl } } = db.storage.from('contratos').getPublicUrl(path)
     contrato_url = publicUrl
@@ -237,7 +237,7 @@ export async function guardarTercero(
     .eq('tercero_id', tercero_id_form)
     .eq('client_id', session.client_id)
 
-  if (error) { console.error('[terceros] update error:', error); return { ok: false, error: 'Error al actualizar el tercero.' } }
+  if (error) { console.error('[terceros] update error:', error); return { ok: false, error: 'No se ha podido actualizar el tercero.' } }
   revalidatePath('/portal/terceros')
   return { ok: true, tercero_id: tercero_id_form }
 }
@@ -259,7 +259,7 @@ export async function copiarTerceroAEmpresa(
 ): Promise<{ ok: boolean; error?: string; tercero_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarAlgunModulo(['base', 'inventario', 'servicios']))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarAlgunModulo(['base', 'inventario', 'servicios']))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const empresas = await obtenerEmpresas()
   if (!empresas.some(e => e.empresa_id === empresa_destino)) {
@@ -321,7 +321,7 @@ export async function archivarTercero(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarAlgunModulo(['base', 'inventario', 'servicios']))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarAlgunModulo(['base', 'inventario', 'servicios']))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db
@@ -330,7 +330,7 @@ export async function archivarTercero(
     .eq('tercero_id', tercero_id)
     .eq('client_id', session.client_id)
 
-  if (error) return { ok: false, error: 'Error al archivar el tercero.' }
+  if (error) return { ok: false, error: 'No se ha podido archivar el tercero.' }
   revalidatePath('/portal/terceros')
   return { ok: true }
 }
@@ -342,7 +342,7 @@ export async function restaurarTercero(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarAlgunModulo(['base', 'inventario', 'servicios']))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarAlgunModulo(['base', 'inventario', 'servicios']))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db
@@ -351,7 +351,7 @@ export async function restaurarTercero(
     .eq('tercero_id', tercero_id)
     .eq('client_id', session.client_id)
 
-  if (error) return { ok: false, error: 'Error al restaurar el tercero.' }
+  if (error) return { ok: false, error: 'No se ha podido restaurar el tercero.' }
   revalidatePath('/portal/terceros')
   return { ok: true }
 }
@@ -369,7 +369,7 @@ export async function archivarTercerosEnLote(
 ): Promise<ResultadoLoteTerceros> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, hechas: 0, error: 'Sesión inválida.' }
-  if (!(await puedeEditarAlgunModulo(['base', 'inventario', 'servicios']))) return { ok: false, hechas: 0, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarAlgunModulo(['base', 'inventario', 'servicios']))) return { ok: false, hechas: 0, error: 'Sin permiso para editar en este módulo.' }
   if (!ids.length) return { ok: true, hechas: 0 }
 
   const db = createAdminClient()
@@ -400,8 +400,8 @@ export async function copiarTercerosAEmpresaEnLote(
 ): Promise<ResultadoLoteCopiaTerceros> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, hechas: 0, omitidas: [], error: 'Sesión inválida.' }
-  if (!(await puedeEditarAlgunModulo(['base', 'inventario', 'servicios']))) return { ok: false, hechas: 0, omitidas: [], error: 'No tienes permiso para editar en este módulo.' }
-  if (!empresa_destino) return { ok: false, hechas: 0, omitidas: [], error: 'Elige una empresa destino.' }
+  if (!(await puedeEditarAlgunModulo(['base', 'inventario', 'servicios']))) return { ok: false, hechas: 0, omitidas: [], error: 'Sin permiso para editar en este módulo.' }
+  if (!empresa_destino) return { ok: false, hechas: 0, omitidas: [], error: 'Falta la empresa destino.' }
   if (!ids.length) return { ok: true, hechas: 0, omitidas: [] }
 
   const db = createAdminClient()

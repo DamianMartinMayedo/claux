@@ -729,11 +729,11 @@ export async function enviarReportesAsesor(
   // ∧ este usuario puede editar `base` (usuario_modulo). Antes solo miraba `solo_lectura`,
   // así que un `usuario` sin permiso del módulo colaba.
   if (!(await puedeEditarModulo('base'))) {
-    return { ok: false, error: 'No tienes permiso para enviar reportes al asesor.' }
+    return { ok: false, error: 'Sin permiso para enviar reportes al asesor.' }
   }
 
   if (!input.incluirPDF && !input.incluirXLSX) {
-    return { ok: false, error: 'Selecciona al menos un archivo (PDF o Excel).' }
+    return { ok: false, error: 'Falta seleccionar al menos un archivo (PDF o Excel).' }
   }
   if (input.incluirPDF && !input.pdfBase64) {
     return { ok: false, error: 'No se pudo adjuntar el PDF. Reintenta.' }
@@ -834,6 +834,6 @@ export async function enviarReportesAsesor(
     },
   })
 
-  if (!res.ok) return { ok: false, error: 'No se pudo enviar el correo. Revisa la conexión e inténtalo de nuevo.' }
+  if (!res.ok) return { ok: false, error: 'No se ha podido enviar el correo.' }
   return { ok: true, email: asesor.email }
 }

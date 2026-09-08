@@ -94,7 +94,7 @@ export async function manejarMensajeCitas(ctx: BotContext, texto: string, chat_i
   const ia = await intentarIaCitas(ctx, chat_id, texto.trim())
   if (ia) return ia
 
-  return { texto: `Hola, soy el bot de ${ctx.nombre_empresa}. ¿Quieres pedir una cita?`, markup: tecladoPrincipal(ctx) }
+  return { texto: `Bot de ${ctx.nombre_empresa}. ¿Desea pedir una cita?`, markup: tecladoPrincipal(ctx) }
 }
 
 // Si el negocio tiene el addon de IA, deja que interprete el lenguaje natural y
@@ -114,7 +114,7 @@ async function intentarIaCitas(ctx: BotContext, chatId: string, texto: string): 
 // ── Bienvenida / teclado ────────────────────────────────────────────────────────
 
 function bienvenida(ctx: BotContext): BotResponse {
-  return { texto: `¡Bienvenido a ${ctx.nombre_empresa}!\n\n¿Qué quieres hacer?`, markup: tecladoPrincipal(ctx) }
+  return { texto: `${ctx.nombre_empresa}\n\n¿Qué desea hacer?`, markup: tecladoPrincipal(ctx) }
 }
 /**
  * TG-24: el bot de Citas solo sabía pedir cita. El de Reservas tenía «Carta» y
@@ -127,12 +127,12 @@ function bienvenida(ctx: BotContext): BotResponse {
  * slug, porque un botón que lleva a una página que no existe es peor que no tenerlo.
  */
 function tecladoPrincipal(ctx: BotContext) {
-  const fila1 = [{ text: '📅 Pedir cita', callback_data: 'pedir_cita' }]
-  if (tieneCatalogo(ctx)) fila1.push({ text: '📋 Servicios', callback_data: 'catalogo' })
+  const fila1 = [{ text: 'Pedir cita', callback_data: 'pedir_cita' }]
+  if (tieneCatalogo(ctx)) fila1.push({ text: 'Servicios', callback_data: 'catalogo' })
   return {
     inline_keyboard: [
       fila1,
-      [{ text: '🗒 Mis citas', callback_data: 'mis_citas' }, { text: '🕐 Horarios', callback_data: 'horarios' }],
+      [{ text: 'Mis citas', callback_data: 'mis_citas' }, { text: 'Horarios', callback_data: 'horarios' }],
     ],
   }
 }
@@ -142,10 +142,10 @@ function tieneCatalogo(ctx: BotContext): boolean {
 }
 
 function mostrarAyuda(ctx: BotContext): BotResponse {
-  const puede = ['• Pedir una cita', '• Ver o cancelar tus citas', '• Consultar horarios']
-  if (tieneCatalogo(ctx)) puede.push('• Ver nuestros servicios')
+  const puede = ['• Pedir una cita', '• Ver o cancelar sus citas', '• Consultar horarios']
+  if (tieneCatalogo(ctx)) puede.push('• Ver los servicios')
   return {
-    texto: `Bot de ${ctx.nombre_empresa}\n\nPuedes:\n${puede.join('\n')}`,
+    texto: `Bot de ${ctx.nombre_empresa}\n\nOpciones disponibles:\n${puede.join('\n')}`,
     markup: tecladoPrincipal(ctx),
   }
 }
@@ -158,7 +158,7 @@ function mostrarCatalogo(ctx: BotContext): BotResponse {
   }
   const base = (process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/\/$/, '')
   const url = base ? `${base}/${ctx.slug}/catalogo` : `/${ctx.slug}/catalogo`
-  return { texto: `📋 Nuestros servicios:\n${url}`, markup: tecladoPrincipal(ctx) }
+  return { texto: `Servicios:\n${url}`, markup: tecladoPrincipal(ctx) }
 }
 
 const DIA_CORTO: Record<number, string> = { 1: 'Lun', 2: 'Mar', 3: 'Mié', 4: 'Jue', 5: 'Vie', 6: 'Sáb', 7: 'Dom' }
@@ -208,7 +208,7 @@ async function mostrarHorariosCitas(ctx: BotContext): Promise<BotResponse> {
   })
 
   return {
-    texto: `🕐 Horarios de ${et.recurso_pl.toLowerCase()}:\n\n${bloques.join('\n\n')}`,
+    texto: `Horarios de ${et.recurso_pl.toLowerCase()}:\n\n${bloques.join('\n\n')}`,
     markup: tecladoPrincipal(ctx),
   }
 }
@@ -229,7 +229,7 @@ async function misCitas(ctx: BotContext, chatId: string): Promise<BotResponse> {
 
   const lista = (data ?? []) as { reserva_id: string; fecha: string; hora: string | null; estado: string; servicio_id: string | null }[]
   if (lista.length === 0) {
-    return { texto: 'No tienes citas próximas por aquí.', markup: tecladoPrincipal(ctx) }
+    return { texto: 'No hay citas próximas asociadas a este chat.', markup: tecladoPrincipal(ctx) }
   }
 
   const ids = lista.map(c => c.servicio_id).filter(Boolean) as string[]
@@ -239,16 +239,16 @@ async function misCitas(ctx: BotContext, chatId: string): Promise<BotResponse> {
   const nombreSrv = new Map(((servicios ?? []) as { servicio_id: string; nombre: string }[]).map(s => [s.servicio_id, s.nombre]))
 
   const texto = lista.map(c =>
-    `📅 ${formatFechaStr(c.fecha)}  🕐 ${formatHora(c.hora ?? '')}` +
+    `${formatFechaStr(c.fecha)}  ·  ${formatHora(c.hora ?? '')}` +
     `${c.servicio_id ? `  ·  ${nombreSrv.get(c.servicio_id) ?? ''}` : ''}` +
     `  ·  ${c.estado === 'CONFIRMADA' ? 'confirmada' : 'pendiente'}`).join('\n')
 
   const filas = lista.map(c => ([{
-    text: `✕ Cancelar ${formatFechaStr(c.fecha)} ${formatHora(c.hora ?? '')}`,
+    text: `Cancelar ${formatFechaStr(c.fecha)} ${formatHora(c.hora ?? '')}`,
     callback_data: `cancelar_cit:${c.reserva_id}`,
   }]))
 
-  return { texto: `Tus próximas citas:\n\n${texto}`, markup: { inline_keyboard: filas } }
+  return { texto: `Próximas citas:\n\n${texto}`, markup: { inline_keyboard: filas } }
 }
 
 async function cancelarCitaDesdeBot(ctx: BotContext, chatId: string, reservaId: string): Promise<BotResponse> {
@@ -263,7 +263,7 @@ async function cancelarCitaDesdeBot(ctx: BotContext, chatId: string, reservaId: 
     .not('recurso_id', 'is', null)
     .maybeSingle()
 
-  if (!cita) return { texto: 'No encuentro esa cita.', markup: tecladoPrincipal(ctx) }
+  if (!cita) return { texto: 'Esa cita no aparece.', markup: tecladoPrincipal(ctx) }
   if (!['PENDIENTE', 'CONFIRMADA'].includes(cita.estado as string)) {
     return { texto: 'Esa cita ya no está activa.', markup: tecladoPrincipal(ctx) }
   }
@@ -271,7 +271,7 @@ async function cancelarCitaDesdeBot(ctx: BotContext, chatId: string, reservaId: 
   const { error } = await db.from('reservas')
     .update({ estado: 'CANCELADA', updated_at: new Date().toISOString() })
     .eq('reserva_id', reservaId).eq('client_id', ctx.client_id)
-  if (error) return { texto: 'No se pudo cancelar. Inténtalo en un momento.', markup: tecladoPrincipal(ctx) }
+  if (error) return { texto: 'No se ha podido cancelar la cita.', markup: tecladoPrincipal(ctx) }
 
   // El hueco que se acaba de liberar es lo que el dueño necesita saber.
   await notificarCancelacionCliente({
@@ -279,7 +279,7 @@ async function cancelarCitaDesdeBot(ctx: BotContext, chatId: string, reservaId: 
     nombreCliente: '', fecha: cita.fecha as string, hora: '',
   }).catch(() => { /* la cancelación ya está hecha; el aviso es secundario */ })
 
-  return { texto: '✅ Cita cancelada. Gracias por avisar.', markup: tecladoPrincipal(ctx) }
+  return { texto: 'Cita cancelada. Gracias por avisar.', markup: tecladoPrincipal(ctx) }
 }
 
 // ── Paso 1: elegir servicio ──────────────────────────────────────────────────────
@@ -294,7 +294,7 @@ async function iniciarCita(ctx: BotContext, chatId: string): Promise<BotResponse
   const lista = (servicios ?? []) as ServicioRow[]
   if (lista.length === 0) {
     await guardarSesion(ctx.client_id, chatId, null, {})
-    return { texto: 'Todavía no hay servicios disponibles. Vuelve pronto.', markup: tecladoPrincipal(ctx) }
+    return { texto: 'No hay servicios disponibles por ahora.', markup: tecladoPrincipal(ctx) }
   }
 
   const botones = lista.slice(0, 30).map(s => [{
@@ -306,7 +306,7 @@ async function iniciarCita(ctx: BotContext, chatId: string): Promise<BotResponse
   botones.push([{ text: 'Cancelar', callback_data: 'cancelar_cita' }])
 
   await guardarSesion(ctx.client_id, chatId, 'servicio', {})
-  return { texto: `Elige un ${et.servicio.toLowerCase()}:`, markup: { inline_keyboard: botones } }
+  return { texto: `Seleccione un ${et.servicio.toLowerCase()}:`, markup: { inline_keyboard: botones } }
 }
 
 // ── Máquina de pasos ─────────────────────────────────────────────────────────────
@@ -319,11 +319,11 @@ async function manejarPasoCita(ctx: BotContext, chatId: string, sesion: SesionCi
 
   // ── SERVICIO ──
   if (paso === 'servicio') {
-    if (!texto.startsWith('csrv:')) return { texto: `Elige un ${et.servicio.toLowerCase()} de los botones.` }
+    if (!texto.startsWith('csrv:')) return { texto: `Seleccione un ${et.servicio.toLowerCase()} en los botones.` }
     const servicioId = texto.slice('csrv:'.length)
     const { data: srv } = await db.from('servicios')
       .select('servicio_id, nombre').eq('servicio_id', servicioId).eq('client_id', ctx.client_id).eq('activo', true).maybeSingle()
-    if (!srv) return { texto: 'Ese servicio ya no está disponible. Empieza de nuevo con «Pedir cita».', markup: tecladoPrincipal(ctx) }
+    if (!srv) return { texto: 'Ese servicio ya no está disponible. Pulse «Pedir cita» para empezar de nuevo.', markup: tecladoPrincipal(ctx) }
     datos.servicio_id = srv.servicio_id
     datos.servicio_nombre = srv.nombre
     return promptRecurso(ctx, chatId, datos, et)
@@ -331,13 +331,13 @@ async function manejarPasoCita(ctx: BotContext, chatId: string, sesion: SesionCi
 
   // ── RECURSO / PROFESIONAL ──
   if (paso === 'recurso') {
-    if (!texto.startsWith('crec:')) return { texto: `Elige ${et.recurso.toLowerCase()} de los botones.` }
+    if (!texto.startsWith('crec:')) return { texto: `Seleccione ${et.recurso.toLowerCase()} en los botones.` }
     const sel = texto.slice('crec:'.length)
     if (sel === 'any') { datos.recurso_id = ''; datos.recurso_nombre = `Cualquier ${et.recurso.toLowerCase()}` }
     else {
       const { data: rec } = await db.from('recursos')
         .select('recurso_id, nombre').eq('recurso_id', sel).eq('client_id', ctx.client_id).eq('activo', true).maybeSingle()
-      if (!rec) return { texto: 'Esa opción ya no está disponible. Empieza de nuevo con «Pedir cita».', markup: tecladoPrincipal(ctx) }
+      if (!rec) return { texto: 'Esa opción ya no está disponible. Pulse «Pedir cita» para empezar de nuevo.', markup: tecladoPrincipal(ctx) }
       datos.recurso_id = rec.recurso_id; datos.recurso_nombre = rec.nombre
     }
     await guardarSesion(ctx.client_id, chatId, 'fecha', datos)
@@ -346,7 +346,7 @@ async function manejarPasoCita(ctx: BotContext, chatId: string, sesion: SesionCi
 
   // ── FECHA ──
   if (paso === 'fecha') {
-    if (texto === 'cfecha:otro') return { texto: 'Escribe la fecha (ej: 25/06 o 2026-06-25):' }
+    if (texto === 'cfecha:otro') return { texto: 'Indique la fecha (ej: 25/06 o 2026-06-25):' }
     let fecha: string | null = null
     if (texto.startsWith('cfecha:')) {
       const tag = texto.slice('cfecha:'.length)
@@ -355,15 +355,15 @@ async function manejarPasoCita(ctx: BotContext, chatId: string, sesion: SesionCi
     } else {
       fecha = parseFecha(texto)
     }
-    if (!fecha) return { texto: 'No entiendo esa fecha. Escribe DD/MM o YYYY-MM-DD.', markup: tecladoFecha() }
-    if (fecha < hoyISO()) return { texto: 'Esa fecha ya pasó. Elige una fecha futura.', markup: tecladoFecha() }
+    if (!fecha) return { texto: 'Fecha no reconocida. El formato es DD/MM o YYYY-MM-DD.', markup: tecladoFecha() }
+    if (fecha < hoyISO()) return { texto: 'Esa fecha ya pasó. Debe ser una fecha futura.', markup: tecladoFecha() }
     datos.fecha = fecha
     return mostrarSlotsCita(ctx, chatId, datos)
   }
 
   // ── HORA ──
   if (paso === 'hora') {
-    if (!texto.startsWith('cslot:')) return { texto: 'Elige una hora de los botones.' }
+    if (!texto.startsWith('cslot:')) return { texto: 'Seleccione una hora en los botones.' }
     // Formato: cslot:<recurso_id>:HH:MM — recurso_id no contiene ':'
     const rest = texto.slice('cslot:'.length)
     const firstColon = rest.indexOf(':')
@@ -380,16 +380,16 @@ async function manejarPasoCita(ctx: BotContext, chatId: string, sesion: SesionCi
     const { data: cli } = await db.from('clients').select('bot_config_citas').eq('client_id', ctx.client_id).single()
     const confirmAuto = parseBotConfig(cli?.bot_config_citas).confirmacion_automatica
     await guardarSesion(ctx.client_id, chatId, 'confirmar', datos)
-    const autoText = confirmAuto ? '\n✅ Tu cita se confirma al instante.' : '\nTe confirmaremos por este mismo chat.'
+    const autoText = confirmAuto ? '\nLa cita queda confirmada al instante.' : '\nLa confirmación llega por este mismo chat.'
     return {
-      texto: `📋 Resumen\n\n💈 ${datos.servicio_nombre}\n👤 ${datos.recurso_nombre}\n📅 ${formatFechaStr(datos.fecha!)}\n🕐 ${formatHora(datos.hora!)}\n✏️ ${datos.nombre}${autoText}\n\n¿Confirmar cita?`,
-      markup: { inline_keyboard: [[{ text: '✅ Confirmar', callback_data: 'confirmar_cita' }], [{ text: '← Cancelar', callback_data: 'cancelar_cita' }]] },
+      texto: `Resumen\n\nServicio: ${datos.servicio_nombre}\nProfesional: ${datos.recurso_nombre}\nFecha: ${formatFechaStr(datos.fecha!)}\nHora: ${formatHora(datos.hora!)}\nA nombre de: ${datos.nombre}${autoText}\n\n¿Confirmar cita?`,
+      markup: { inline_keyboard: [[{ text: 'Confirmar', callback_data: 'confirmar_cita' }], [{ text: '← Cancelar', callback_data: 'cancelar_cita' }]] },
     }
   }
 
   // ── CONFIRMAR ──
   if (paso === 'confirmar') {
-    if (texto !== 'confirmar_cita') return { texto: 'Usa el botón Confirmar o Cancelar.' }
+    if (texto !== 'confirmar_cita') return { texto: 'Utilice el botón Confirmar o Cancelar.' }
 
     const { data: cli } = await db.from('clients').select('bot_config_citas, nombre_empresa').eq('client_id', ctx.client_id).single()
     const bot = parseBotConfig(cli?.bot_config_citas)
@@ -404,9 +404,9 @@ async function manejarPasoCita(ctx: BotContext, chatId: string, sesion: SesionCi
 
     await guardarSesion(ctx.client_id, chatId, null, {})
 
-    if (rpcErr) return { texto: `❌ No se pudo crear la cita.\n\n${rpcErr.message}`, markup: tecladoPrincipal(ctx) }
+    if (rpcErr) return { texto: `No se ha podido crear la cita.\n\n${rpcErr.message}`, markup: tecladoPrincipal(ctx) }
     const result = (rpcData as { ok?: boolean; error?: string }) ?? {}
-    if (!result.ok) return { texto: `❌ ${result.error ?? 'Error al crear la cita.'}`, markup: tecladoPrincipal(ctx) }
+    if (!result.ok) return { texto: `${result.error ?? 'No se ha podido crear la cita.'}`, markup: tecladoPrincipal(ctx) }
 
     // Guardar el chat del cliente para avisarle de cambios de estado
     await db.from('reservas').update({ telegram_chat_id: chatId }).eq('reserva_id', reservaId).eq('client_id', ctx.client_id)
@@ -429,12 +429,12 @@ async function manejarPasoCita(ctx: BotContext, chatId: string, sesion: SesionCi
 
     const estado = bot.confirmacion_automatica ? 'confirmada' : 'pendiente de confirmación'
     return {
-      texto: `✅ ¡Cita ${estado}!\n\n💈 ${datos.servicio_nombre}\n👤 ${datos.recurso_nombre}\n📅 ${formatFechaStr(datos.fecha!)}\n🕐 ${formatHora(datos.hora!)}\n✏️ ${datos.nombre}\n\nTe avisaremos por aquí.`,
+      texto: `Cita ${estado}\n\nServicio: ${datos.servicio_nombre}\nProfesional: ${datos.recurso_nombre}\nFecha: ${formatFechaStr(datos.fecha!)}\nHora: ${formatHora(datos.hora!)}\nA nombre de: ${datos.nombre}\n\nCualquier cambio se avisa por este chat.`,
       markup: tecladoPrincipal(ctx),
     }
   }
 
-  return { texto: 'Algo salió mal. Pulsa «Pedir cita» para empezar.', markup: tecladoPrincipal(ctx) }
+  return { texto: 'La solicitud no se ha podido continuar. Pulse «Pedir cita» para empezar.', markup: tecladoPrincipal(ctx) }
 }
 
 // ── Prompts ──────────────────────────────────────────────────────────────────────
@@ -513,7 +513,7 @@ async function mostrarSlotsCita(ctx: BotContext, chatId: string, datos: DatosCit
   botones.push([{ text: '← Cambiar día', callback_data: 'cfecha:otro' }])
 
   await guardarSesion(ctx.client_id, chatId, 'hora', datos)
-  return { texto: `📅 ${formatFechaStr(datos.fecha!)}\n\nElige una hora:`, markup: { inline_keyboard: botones } }
+  return { texto: `${formatFechaStr(datos.fecha!)}\n\nSeleccione una hora:`, markup: { inline_keyboard: botones } }
 }
 
 function tecladoFecha() {

@@ -197,7 +197,7 @@ export default function PropuestaEditor({
       traer(pares)
       toastSuccess(`${antes} caja(s) redactada(s). Repásalas antes de guardar.`)
     } catch {
-      toastError('No se ha podido redactar. Vuelve a intentarlo.')
+      toastError('No se ha podido redactar.')
     } finally {
       await ld.dismiss()
       setRedactando(false)
@@ -440,7 +440,7 @@ export default function PropuestaEditor({
 
             {!presupuesto && (
               <div className="alert alert-info">
-                Sin presupuesto no se enseñan «Tu propuesta» ni las horas: la presentación
+                Sin presupuesto no se enseñan «La propuesta» ni las horas: la presentación
                 se queda en el relato, el catálogo y el configurador.
               </div>
             )}
@@ -543,7 +543,7 @@ export default function PropuestaEditor({
               </button>
             </div>
             <p className="text-sm-muted">
-              La columna va entera: si escribes una línea, salen solo las que escribas.
+              La columna va entera: al rellenar una línea, solo salen las rellenadas.
             </p>
             <div className="prp-lineas">
               {CAMPOS_HOY.map((clave, i) => (
@@ -561,7 +561,7 @@ export default function PropuestaEditor({
           <div className="card">
             <h2 className="card-title card-title-sm">Por qué le sirve cada módulo</h2>
             <p className="text-sm-muted">
-              En gris, el texto del catálogo. Escribe solo los que quieras contar a su medida.
+              En gris, el texto del catálogo. Solo se rellenan los que vayan a medida.
             </p>
             {modulos.length === 0 ? (
               <p className="text-sm-muted">Marca algún módulo arriba.</p>
@@ -700,7 +700,7 @@ export default function PropuestaEditor({
                 const oculta = ocultas.includes(clave)
                 const muestra = s.muestra.slice(0, 3)
                 const resto = s.muestra.length - muestra.length
-                // «Tu propuesta» no se edita en ningún sitio: sale del presupuesto,
+                // «La propuesta» no se edita en ningún sitio: sale del presupuesto,
                 // así que el enlace es el presupuesto de esta propuesta.
                 const enlace = clave === 'tu_propuesta' && presupuestoId
                   ? { href: `/admin/presupuestos/${presupuestoId}`, texto: `Presupuesto #${presupuestoId}` }
@@ -806,8 +806,8 @@ export default function PropuestaEditor({
             ) : (
               <>
                 <p className="text-sm-muted">
-                  Publicar solo hace falta para mandar el enlace. Para presentarla o mandar
-                  el PDF no se publica nada.
+                  Publicar es necesario solo para enviar el enlace. Presentarla o enviar
+                  el PDF no requiere publicación.
                 </p>
                 <button className="btn btn-primary" disabled={pending} onClick={publicar}>
                   <Share2 size={16} strokeWidth={2} /> Publicar y obtener el enlace
@@ -819,7 +819,7 @@ export default function PropuestaEditor({
           <div className="card">
             <h2 className="card-title card-title-sm">Acuse de lectura</h2>
             {p.aperturas === 0 ? (
-              <p className="text-sm-muted">Todavía no la ha abierto nadie.</p>
+              <p className="text-sm-muted">Sin aperturas registradas.</p>
             ) : (
               <p className="text-sm">
                 Abierta <strong>{p.aperturas}</strong> {p.aperturas === 1 ? 'vez' : 'veces'}

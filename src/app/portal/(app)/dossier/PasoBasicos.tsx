@@ -140,11 +140,11 @@ export default function PasoBasicos({
 
         {sinEmpresa ? (
           <PrerequisitoAviso acciones={[{ label: 'Crear empresa', href: '/portal/empresas' }]}>
-            Para crear tu dossier necesitas <strong>al menos una empresa</strong>: es el negocio cuyos números presentarás al inversor.
+            Para crear un dossier se necesita <strong>al menos una empresa</strong>: es el negocio cuyos números se presentan al inversor.
           </PrerequisitoAviso>
         ) : sinMoneda && (
           <PrerequisitoAviso acciones={[{ label: 'Configurar moneda', href: '/portal/monedas' }]}>
-            Para crear tu dossier necesitas <strong>al menos una moneda</strong>: es la moneda en la que le presentarás los números al inversor.
+            Para crear un dossier se necesita <strong>al menos una moneda</strong>: es la moneda en la que se presentan los números al inversor.
           </PrerequisitoAviso>
         )}
 
@@ -152,7 +152,7 @@ export default function PasoBasicos({
           <div className="dos-campo">
             <label className="dos-label" htmlFor="dos-titulo">¿Cómo llamamos a este dossier?</label>
             <input id="dos-titulo" className="input" value={titulo} onChange={e => setTitulo(e.target.value)} maxLength={120} />
-            <p className="dos-section-hint">Solo lo ves tú; no aparece en la presentación.</p>
+            <p className="dos-section-hint">Uso interno; no aparece en la presentación.</p>
           </div>
 
           <div className="dos-campo">
@@ -162,7 +162,7 @@ export default function PasoBasicos({
               onChange={e => setContactoEmail(e.target.value)} maxLength={160}
               placeholder="hola@tunegocio.com" spellCheck={false} autoComplete="off"
             />
-            <p className="dos-section-hint">Aparece bajo el «Muchas gracias» del enlace. Cámbialo o déjalo vacío.</p>
+            <p className="dos-section-hint">Aparece bajo el «Muchas gracias» del enlace. Admite quedar vacío.</p>
           </div>
 
           {eligeEmpresa && (
@@ -206,7 +206,7 @@ export default function PasoBasicos({
             </div>
             {estrechando && (
               <p className="dos-aviso-recorte" role="status">
-                Estás recortando el período. Al guardar los números, los meses que queden fuera del nuevo rango se descartarán.
+                El período se está recortando. Al guardar los números, los meses que queden fuera del nuevo rango se descartarán.
               </p>
             )}
           </div>

@@ -67,7 +67,7 @@ function ReglaModal({
     startTransition(async () => {
       const res = await guardarReglaDeduccion(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess(regla ? 'Regla actualizada' : 'Regla creada')
       onDone()
     })
@@ -84,8 +84,8 @@ function ReglaModal({
           <div className="info-box">
             <strong className="info-box-title">Se aplica a toda la plantilla</strong>
             <span className="text-xs-muted">
-              Entra sola en cada nómina que generes a partir de ahora. Si alguien tiene otro
-              importe —o no le toca—, se marca como excepción en su ficha.
+              Actúa en cada nómina generada a partir de ahora. Si a alguien le corresponde otro
+              importe —o ninguno—, se marca como excepción en su ficha.
               Las nóminas ya generadas no cambian.
             </span>
           </div>
@@ -182,7 +182,7 @@ function ReglasPanel({ data, editando, setEditando, puedeEditar }: {
     startTransition(async () => {
       const res = await alternarReglaDeduccion(r.regla_id, !r.activa)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       router.refresh()
     })
   }
@@ -193,7 +193,7 @@ function ReglasPanel({ data, editando, setEditando, puedeEditar }: {
     startTransition(async () => {
       const res = await eliminarReglaDeduccion(borrando.regla_id)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setBorrando(null); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); setBorrando(null); return }
       setBorrando(null); router.refresh()
     })
   }
@@ -209,8 +209,8 @@ function ReglasPanel({ data, editando, setEditando, puedeEditar }: {
         {data.reglas.length === 0 ? (
           <div className="mon-empty">
             <Wallet size={40} strokeWidth={1} opacity={0.2} />
-            <p>Sin reglas. Si hay algo que se le aplica a todo el personal —un impuesto, un plus
-              de transporte—, ponlo aquí una sola vez en lugar de repetirlo en cada ficha.</p>
+            <p>Sin reglas. Lo que se aplica a todo el personal —un impuesto, un plus de transporte—
+              se define aquí una sola vez, en lugar de repetirlo en cada ficha.</p>
           </div>
         ) : (
           <div className="table-wrapper">
@@ -278,7 +278,7 @@ function ReglasPanel({ data, editando, setEditando, puedeEditar }: {
         <ConfirmDialog
           danger
           title="Eliminar regla"
-          body={`Se elimina «${borrando.nombre}» y las excepciones que algún trabajador tuviera sobre ella. Las nóminas ya generadas no cambian. Si solo quieres dejar de aplicarla, desactívala.`}
+          body={`Se elimina «${borrando.nombre}» y las excepciones que algún trabajador tuviera sobre ella. Las nóminas ya generadas no cambian. Para dejar de aplicarla sin perderla, desactivarla.`}
           confirmLabel="Eliminar"
           onConfirm={borrar}
           onCancel={() => setBorrando(null)}
@@ -312,7 +312,7 @@ function ConfigNominaPanel({ data, puedeEditar }: { data: NominaPageData; puedeE
     startTransition(async () => {
       const res = await guardarConfigNomina(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess('Configuración guardada')
       setEditando(null); router.refresh()
     })
@@ -328,7 +328,7 @@ function ConfigNominaPanel({ data, puedeEditar }: { data: NominaPageData; puedeE
             <strong>Los tipos de {data.fiscales_provisionales.join(', ')} son provisionales.</strong>{' '}
             Están puestos solo para que el cálculo funcione y no corresponden a la norma
             verificada. Puedes generar borradores y revisarlos, pero <strong>no se pueden
-            confirmar</strong>: registrarían en tu contabilidad una deuda con ONAT por un
+            confirmar</strong>: registrarían en la contabilidad una deuda con ONAT por un
             importe que no es el real. En cuanto se carguen los tipos definitivos, las
             nóminas se confirman sin tener que rehacer nada.
           </span>
@@ -337,8 +337,8 @@ function ConfigNominaPanel({ data, puedeEditar }: { data: NominaPageData; puedeE
 
       <div className="filters-bar">
         <p className="text-sm-muted">
-          Cómo calcula la nómina cada una de tus empresas. Cambiarlo <strong>no altera las
-          nóminas ya hechas</strong>: solo las que generes a partir de ahora.
+          Cómo calcula la nómina cada empresa. Cambiarlo <strong>no altera las nóminas ya
+          hechas</strong>: solo las generadas a partir de ahora.
         </p>
       </div>
 
@@ -441,10 +441,10 @@ function ConfigNominaPanel({ data, puedeEditar }: { data: NominaPageData; puedeE
       <div className="info-box mt-3">
         <strong className="info-box-title">Sobre el modelo MIPYME cubana</strong>
         <span className="text-xs-muted">
-          Añade el cálculo de la ley cubana —impuesto sobre ingresos personales, Contribución
+          Incorpora el cálculo de la ley cubana —impuesto sobre ingresos personales, Contribución
           Especial a la Seguridad Social, Impuesto por la Utilización de la Fuerza de Trabajo y
           la Contribución a la Seguridad Social a cargo de la empresa— y reparte el coste entre
-          sus acreedores en tu contabilidad. <strong>Solo se aplica a las nóminas en CUP</strong>;
+          sus acreedores en la contabilidad. <strong>Solo se aplica a las nóminas en CUP</strong>;
           si esa empresa además paga a alguien en divisa, esa nómina se calcula como General.
           El trabajador marcado como socio no paga la Contribución Especial; todo lo demás se le
           calcula igual.
@@ -489,7 +489,7 @@ function MapeoGastosPanel({ data, puedeEditar }: { data: NominaPageData; puedeEd
     startTransition(async () => {
       const res = await guardarMapeoGastoNomina(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess('Reparto guardado')
       setAbierta(null); router.refresh()
     })
@@ -504,7 +504,7 @@ function MapeoGastosPanel({ data, puedeEditar }: { data: NominaPageData; puedeEd
       </div>
       <div className="filters-bar">
         <p className="text-sm-muted">
-          A qué categoría de gasto va cada concepto cuando confirmas una nómina. En blanco,
+          A qué categoría de gasto va cada concepto al confirmar una nómina. En blanco,
           se usa la categoría que crea CLAUX. <strong>Las retenciones no están aquí</strong>:
           su coste ya va dentro del salario, y contarlas otra vez lo duplicaría — solo
           generan la deuda con su acreedor.
@@ -640,7 +640,7 @@ function NuevaNominaModal({
     startTransition(async () => {
       const res = await crearNomina(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       onSaved()
     })
   }
@@ -737,7 +737,7 @@ function ConfirmEliminarNomina({
             {/* «El gasto de salarios» era de cuando se escribía uno solo. Desde la
                 mig. 166 una nómina confirmada deja hasta ocho apuntes —cada aporte y
                 cada retención con su acreedor— y se revierten TODOS. */}
-            {nomina.estado === 'CONFIRMADA' && ' También se revertirán todos los apuntes que generó en tu contabilidad.'}
+            {nomina.estado === 'CONFIRMADA' && ' También se revertirán todos los apuntes que generó en la contabilidad.'}
           </p>
         </div>
         <div className="modal-footer">
@@ -896,7 +896,7 @@ export default function NominaView({ data, puedeEditar, children }: { data: Nomi
     startTransition(async () => {
       const res = await eliminarNomina(delNomina.nomina_id)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setDelNomina(null); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); setDelNomina(null); return }
       setDelNomina(null); router.refresh()
     })
   }
@@ -907,7 +907,7 @@ export default function NominaView({ data, puedeEditar, children }: { data: Nomi
       <div className="page-header">
         <div>
           <h1 className="page-title">Nómina</h1>
-          <p className="page-subtitle">Paga a tu personal y lleva el control de los salarios.</p>
+          <p className="page-subtitle">Pago del personal y control de los salarios.</p>
         </div>
         <div className="tes-header-actions">
           {/* Solo en «Nóminas»: «Reglas» y «Configuración» no son listados de datos. */}
@@ -954,7 +954,7 @@ export default function NominaView({ data, puedeEditar, children }: { data: Nomi
 
       {data.empresas.length === 0 && (
         <PrerequisitoAviso acciones={[{ label: 'Crear empresa', href: '/portal/empresas' }]}>
-          Para crear una nómina necesitas <strong>una empresa</strong>.
+          Para crear una nómina se necesita <strong>una empresa</strong>.
         </PrerequisitoAviso>
       )}
 
@@ -975,7 +975,7 @@ export default function NominaView({ data, puedeEditar, children }: { data: Nomi
           <div className="mon-empty">
             <Wallet size={40} strokeWidth={1} opacity={0.2} />
             <p>{data.nominas.length === 0
-              ? 'Aún no hay nóminas. Crea la primera para pagar a tu personal.'
+              ? 'Sin nóminas registradas.'
               : 'No hay nóminas para los filtros seleccionados.'}</p>
           </div>
         ) : (
@@ -1099,7 +1099,7 @@ export default function NominaView({ data, puedeEditar, children }: { data: Nomi
       {confirmLoteConf && (
         <ConfirmDialog
           title={`¿Confirmar ${sel.count} nómina${plural(sel.count)}?`}
-          body="Se confirmarán las que estén en borrador y se registrarán sus apuntes en tu contabilidad, cada uno con su acreedor. Las ya confirmadas se omiten."
+          body="Se confirmarán las que estén en borrador y se registrarán sus apuntes en la contabilidad, cada uno con su acreedor. Las ya confirmadas se omiten."
           confirmLabel="Confirmar"
           onCancel={() => setConfirmLoteConf(false)}
           onConfirm={doConfirmarLote}

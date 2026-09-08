@@ -274,7 +274,7 @@ function SuscripcionModal({ sub, plantilla, lote: loteInicial, data, onClose, on
     startTransition(async () => {
       const res = await guardarSuscripcion(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       // Las tarifas van DESPUÉS y aparte: el acuerdo ya está guardado y nada de esto
       // puede tumbarlo. Cada una escribe solo si esa moneda está vacía.
       let tarifas = 0
@@ -384,7 +384,7 @@ function SuscripcionModal({ sub, plantilla, lote: loteInicial, data, onClose, on
                     </>
                   ) : (
                     <select className="input" value={clienteId} onChange={e => setClienteId(e.target.value)} required>
-                      <option value="">— Elige un cliente —</option>
+                      <option value="">— Seleccionar cliente —</option>
                       {clientesDeEmpresa.map(c => <option key={c.tercero_id} value={c.tercero_id}>{c.nombre}</option>)}
                     </select>
                   )}
@@ -411,7 +411,7 @@ function SuscripcionModal({ sub, plantilla, lote: loteInicial, data, onClose, on
                           <label htmlFor={`sus-srv-${i}`}>Servicio <span className="required">*</span></label>
                           <select className="input" id={`sus-srv-${i}`} value={l.producto_id}
                             onChange={e => onServicioChange(i, e.target.value)} required>
-                            <option value="">— Elige un servicio —</option>
+                            <option value="">— Seleccionar servicio —</option>
                             {/* Lo archivado (o desmarcado como suscribible) solo se ofrece en
                                 la línea que YA lo tiene: sin esto el select caía en «Elige un
                                 servicio» sobre una línea que sí lo tenía, y guardar lo
@@ -647,7 +647,7 @@ function SuscripcionModal({ sub, plantilla, lote: loteInicial, data, onClose, on
                       {conBorrador
                         ? lote
                           ? 'Una por cliente: una factura pertenece a un cliente, así que no se pueden juntar.'
-                          : 'Queda en Ventas como borrador; emitirla sigue siendo cosa tuya.'
+                          : 'Queda en Ventas como borrador; la emisión sigue siendo manual.'
                         : 'Sin generarlas ahora. No se pierde nada: la facturación automática las deja hechas en su mes.'}
                     </span>
                   </div>
@@ -695,7 +695,7 @@ function SuscripcionModal({ sub, plantilla, lote: loteInicial, data, onClose, on
           —acuerdos y facturas borrador— antes de escribir nada. */}
       {confirmLote && (
         <ConfirmDialog
-          title="Revisa antes de crear"
+          title="Revisar antes de crear"
           body={
             <>
               <p>
@@ -1128,8 +1128,8 @@ function FacturacionPanel({ data, empresaInicial, puedeEditar }: {
       {!data.tieneBase && (
         <div className="alert alert-warning alert-cta">
           <span className="alert-cta-texto">
-            Esto es una <strong>vista previa</strong>: puedes ver qué se cobraría cada mes. Para
-            <strong> emitir las facturas de verdad</strong> y cobrarlas necesitas el módulo <strong>Contabilidad</strong>.
+            Esto es una <strong>vista previa</strong> de lo que se cobraría cada mes. Para
+            <strong>emitir las facturas y cobrarlas</strong> se necesita el módulo <strong>Contabilidad</strong>.
           </span>
           <Link href="/portal/soporte?asunto=Quiero+activar+Contabilidad" className="btn btn-aviso btn-sm">Contactar para contratarlo</Link>
         </div>
@@ -1412,9 +1412,9 @@ export default function SuscripcionesView({ data, empresaInicial = '', etiqueta 
         <div>
           <div className="page-title-ia">
             <h1 className="page-title">{etiqueta}</h1>
-            <IaTouchpoint tipo="suscripciones" descripcion="un análisis de tus suscripciones" />
+            <IaTouchpoint tipo="suscripciones" descripcion="un análisis de las suscripciones" />
           </div>
-          <p className="page-subtitle">Lo que tus clientes tienen contratado, con su precio y su renovación.</p>
+          <p className="page-subtitle">Lo que cada cliente tiene contratado, con su precio y su renovación.</p>
         </div>
         {vista === 'acuerdos' && (
           <div className="tes-header-actions">
@@ -1503,7 +1503,7 @@ export default function SuscripcionesView({ data, empresaInicial = '', etiqueta 
           <div className="mon-empty">
             <Repeat size={36} strokeWidth={1} opacity={0.25} />
             <p>{data.suscripciones.length === 0
-              ? 'Aún no hay suscripciones. Crea la primera.'
+              ? 'Sin suscripciones.'
               : 'No hay resultados para el filtro seleccionado.'}</p>
           </div>
         ) : (
@@ -1738,7 +1738,7 @@ export default function SuscripcionesView({ data, empresaInicial = '', etiqueta 
           recurrente de muchos clientes a la vez. */}
       {subidaPrev && (
         <ConfirmDialog
-          title="Revisa la subida"
+          title="Revisar la subida"
           body={
             <div className="table-wrapper">
               <table className="table">
@@ -1786,7 +1786,7 @@ export default function SuscripcionesView({ data, empresaInicial = '', etiqueta 
                 <span className="input-hint">
                   {pausarHasta
                     ? `Se reanudará sola el ${fmtDate(pausarHasta)}.`
-                    : 'En blanco, la pausa es indefinida y la reanudas tú cuando quieras.'}
+                    : 'En blanco, la pausa es indefinida y se reanuda manualmente.'}
                 </span>
               </div>
             </>
@@ -1852,7 +1852,7 @@ export default function SuscripcionesView({ data, empresaInicial = '', etiqueta 
                 el día antes de su siguiente cobro. Lo ya facturado se conserva y no se
                 genera ningún cobro más.
               </p>
-              <p className="mt-2">Pasará a «Vencida» ese día. Puedes reactivarla con «Renovar».</p>
+              <p className="mt-2">Pasará a «Vencida» ese día. Se reactiva con «Renovar».</p>
             </>
           }
           confirmLabel="Programar la baja"

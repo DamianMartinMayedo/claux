@@ -227,9 +227,9 @@ export default function ReportesView({ data, anio }: { data: ReportesRrhhData; a
         <div>
           <div className="page-title-ia">
             <h1 className="page-title">Reportes de personal</h1>
-            <IaTouchpoint tipo="rrhh" descripcion="un análisis de tu coste de personal" />
+            <IaTouchpoint tipo="rrhh" descripcion="un análisis del coste de personal" />
           </div>
-          <p className="page-subtitle">Plantilla, altas y bajas, coste de personal y lo que debes por tu nómina.</p>
+          <p className="page-subtitle">Plantilla, altas y bajas, coste de personal y deuda por nómina.</p>
         </div>
         {!sinDatos && (
           <div className="rep-dl">
@@ -280,7 +280,7 @@ export default function ReportesView({ data, anio }: { data: ReportesRrhhData; a
         <div className="card card-table">
           <div className="mon-empty">
             <BarChart3 size={40} strokeWidth={1} opacity={0.2} />
-            <p>Aún no hay datos. Da de alta personal y confirma nóminas para ver aquí la plantilla y el coste de personal.</p>
+            <p>Sin datos. La plantilla y el coste de personal aparecen al dar de alta personal y confirmar nóminas.</p>
           </div>
         </div>
       ) : (

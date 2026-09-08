@@ -151,7 +151,7 @@ export default function OperacionesView({ data, gaveta }: Props & { gaveta: Resu
       <div className="page-header">
         <div>
           <h1 className="page-title">Operaciones</h1>
-          <p className="page-subtitle">Detalle de las ventas sincronizadas desde tus puntos de venta, una a una.</p>
+          <p className="page-subtitle">Detalle de las ventas sincronizadas desde los puntos de venta, una a una.</p>
         </div>
         {/* La descarga sigue a la PESTAÑA y lo dice en el desplegable. Antes bajaba
             siempre los tickets: desde «Movimientos de stock» te llevabas las ventas, con

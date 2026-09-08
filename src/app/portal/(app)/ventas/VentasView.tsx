@@ -221,7 +221,7 @@ export default function VentasView({ data, initialTab, puedeEditar, children }: 
         <div>
           <div className="page-title-ia">
             <h1 className="page-title">Ventas</h1>
-            <IaTouchpoint tipo="ventas" descripcion="un análisis de tus ventas" />
+            <IaTouchpoint tipo="ventas" descripcion="un análisis de las ventas" />
           </div>
           <p className="page-subtitle">
             Gestiona ofertas comerciales y facturas. Las ofertas aprobadas generan factura automáticamente.
@@ -284,7 +284,7 @@ export default function VentasView({ data, initialTab, puedeEditar, children }: 
         </PrerequisitoAviso>
       ) : sinLetra ? (
         <PrerequisitoAviso acciones={[{ label: 'Ir a Empresas', href: '/portal/empresas' }]}>
-          Ninguna de tus empresas tiene <strong>letra de facturación</strong> asignada; configúrala para poder crear ofertas y facturas.
+          Ninguna empresa tiene <strong>letra de facturación</strong> asignada: es necesaria para crear ofertas y facturas.
         </PrerequisitoAviso>
       ) : null}
 
@@ -347,7 +347,7 @@ export default function VentasView({ data, initialTab, puedeEditar, children }: 
             <div className="mon-empty">
               <FileText size={18} strokeWidth={2} />
               <p>{conteoOfertas === 0
-                ? 'Aún no has creado ninguna oferta. Crea la primera para empezar.'
+                ? 'Sin ofertas.'
                 : 'No hay ofertas que coincidan con los filtros.'}</p>
             </div>
           ) : (
@@ -365,7 +365,7 @@ export default function VentasView({ data, initialTab, puedeEditar, children }: 
             <div className="mon-empty">
               <FileText size={18} strokeWidth={2} />
               <p>{conteoFacturas === 0
-                ? 'Aún no has emitido ninguna factura. Crea una directa o aprueba una oferta.'
+                ? 'Sin facturas. Se crean directamente o aprobando una oferta.'
                 : 'No hay facturas que coincidan con los filtros.'}</p>
             </div>
           ) : (
@@ -378,7 +378,7 @@ export default function VentasView({ data, initialTab, puedeEditar, children }: 
               puedeEditar={puedeEditar}
               onEmitir={f => pedirConfirmacion({
                 title: `¿Emitir ${etiquetaNumero(f.numero)}?`,
-                body: 'Recibirá su número fiscal definitivo (el siguiente de la serie) y ya no podrás editarla.',
+                body: 'Recibirá su número fiscal definitivo (el siguiente de la serie) y dejará de ser editable.',
                 confirmLabel: 'Sí, emitir',
                 danger: false,
                 run: () => {
@@ -386,7 +386,7 @@ export default function VentasView({ data, initialTab, puedeEditar, children }: 
                   startTransition(async () => {
                     const r = await cambiarEstadoFactura(f.factura_id, 'EMITIDA')
                     await ld.dismiss()
-                    if (!r.ok) { toastError(r.error ?? 'Error al emitir.'); return }
+                    if (!r.ok) { toastError(r.error ?? 'No se ha podido emitir.'); return }
                     toastSuccess('Factura emitida.')
                     router.refresh()
                   })

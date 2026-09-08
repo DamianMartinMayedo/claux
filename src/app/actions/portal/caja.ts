@@ -249,7 +249,7 @@ export async function crearCaja(
 ): Promise<{ ok: boolean; caja_id?: string; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('caja'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('caja'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
   if (!nombre?.trim())      return { ok: false, error: 'El nombre de la caja es obligatorio.' }
 
   const db       = createAdminClient()
@@ -421,7 +421,7 @@ export async function guardarConfigCaja(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('caja'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('caja'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
   if (!cfg.nombre?.trim())  return { ok: false, error: 'El nombre es obligatorio.' }
 
   const db = createAdminClient()
@@ -536,14 +536,14 @@ export async function guardarCampaniaCaja(
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('caja')))
-    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+    return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const nombre = campania.nombre.trim()
   if (!nombre) return { ok: false, error: 'Ponle un nombre a la campaña.' }
   const pct = Math.round((Number(campania.pct) || 0) * 100) / 100
   if (!(pct > 0 && pct <= 100)) return { ok: false, error: 'El descuento tiene que estar entre 0 y 100 %.' }
   if (campania.ambito === 'PRODUCTO' && !campania.ambito_id)
-    return { ok: false, error: 'Elige a qué producto se le aplica.' }
+    return { ok: false, error: 'Falta el producto al que se aplica.' }
   if (campania.desde && campania.hasta && campania.hasta < campania.desde)
     return { ok: false, error: 'La fecha de fin no puede ser anterior a la de inicio.' }
   const dias = [...new Set(campania.dias_semana)].filter(d => Number.isInteger(d) && d >= 0 && d <= 6).sort()
@@ -596,7 +596,7 @@ export async function archivarCampaniaCaja(
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('caja')))
-    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+    return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const empresa_id = await empresaDeCaja(session.client_id, caja_id)
   if (!empresa_id) return { ok: false, error: 'Caja no encontrada.' }
@@ -659,7 +659,7 @@ export async function guardarOperador(
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('caja')))
-    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+    return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const limpio = nombre.trim()
   if (!limpio) return { ok: false, error: 'El nombre es obligatorio.' }
@@ -706,7 +706,7 @@ export async function archivarOperador(
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('caja')))
-    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+    return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const empresa_id = await empresaDeCaja(session.client_id, caja_id)
   if (!empresa_id) return { ok: false, error: 'Caja no encontrada.' }
@@ -732,7 +732,7 @@ export async function asignarOperadoresCaja(
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('caja')))
-    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+    return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const empresa_id = await empresaDeCaja(session.client_id, caja_id)
   if (!empresa_id) return { ok: false, error: 'Caja no encontrada.' }
@@ -814,7 +814,7 @@ export async function listarPersonalImportable(
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('caja')))
-    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+    return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const empresa_id = await empresaDeCaja(session.client_id, caja_id)
   if (!empresa_id) return { ok: false, error: 'Caja no encontrada.' }
@@ -847,7 +847,7 @@ export async function importarPersonalRRHH(
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('caja')))
-    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+    return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const empresa_id = await empresaDeCaja(session.client_id, caja_id)
   if (!empresa_id) return { ok: false, error: 'Caja no encontrada.' }
@@ -915,7 +915,7 @@ export async function importarPersonalRRHH(
 export async function regenerarToken(caja_id: string): Promise<{ ok: boolean; token?: string; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('caja'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('caja'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const token = generarToken()
   const { error } = await createAdminClient().from('cajas')
@@ -930,7 +930,7 @@ export async function regenerarToken(caja_id: string): Promise<{ ok: boolean; to
 export async function setActivaCaja(caja_id: string, activa: boolean): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('caja'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('caja'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -1167,7 +1167,7 @@ export async function cerrarYContabilizar(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('caja'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('caja'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: caja } = await db.from('cajas')
@@ -1241,7 +1241,7 @@ export async function reintentarContabilizar(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('caja'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('caja'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: ses } = await db.from('caja_sesiones')
@@ -1270,7 +1270,7 @@ export async function ingestarLoteArchivo(
 ): Promise<{ ok: boolean; resultado?: Awaited<ReturnType<typeof ingestarLote>>; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('caja'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('caja'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   // El archivo dice de qué punto de venta salió. Manda ÉL, no lo que haya elegido la
   // vista: ingerir las ventas de un punto en otro las mete en la empresa equivocada,

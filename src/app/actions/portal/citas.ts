@@ -392,7 +392,7 @@ export async function obtenerCitasData(filtro?: FiltroListado): Promise<CitasPag
     citas,
     recursos,
     servicios,
-    negocio:     (cliRes.data?.nombre_empresa as string) ?? 'Tu negocio',
+    negocio:     (cliRes.data?.nombre_empresa as string) ?? 'El negocio',
     slug:        (cliRes.data?.slug as string) ?? null,
     etiquetas:   await etiquetasDeSector(db, (cliRes.data?.sector as string) ?? null, cliRes.data?.etiquetas),
     bot_config:  parseBotConfig(cliRes.data?.bot_config_citas),
@@ -427,7 +427,7 @@ export async function guardarServicio(
 ): Promise<{ ok: boolean; error?: string; aviso?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const servicio_id = (formData.get('servicio_id') as string)?.trim()
   const nombre      = (formData.get('nombre')      as string)?.trim()
@@ -451,7 +451,7 @@ export async function guardarServicio(
   // tiene que ser una del cliente (guardia de servidor, no confianza en el desplegable).
   const moneda = precio == null ? null : monedaRaw
   if (precio != null) {
-    if (!moneda) return { ok: false, error: 'Elige la moneda del precio.' }
+    if (!moneda) return { ok: false, error: 'Falta la moneda del precio.' }
     if (!(await monedaValida(db, session.client_id, moneda))) {
       return { ok: false, error: `La moneda "${moneda}" no está configurada.` }
     }
@@ -557,7 +557,7 @@ export async function guardarServicio(
 export async function eliminarServicio(servicio_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -581,7 +581,7 @@ export async function eliminarServicio(servicio_id: string): Promise<{ ok: boole
 export async function guardarRecurso(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const recurso_id  = (formData.get('recurso_id')  as string)?.trim()
   const nombre      = (formData.get('nombre')      as string)?.trim()
@@ -652,7 +652,7 @@ export async function guardarRecurso(formData: FormData): Promise<{ ok: boolean;
 export async function eliminarRecurso(recurso_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -682,7 +682,7 @@ export async function eliminarRecurso(recurso_id: string): Promise<{ ok: boolean
 export async function guardarAusencia(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const recurso_id = (formData.get('recurso_id')  as string)?.trim()
   const desde      = (formData.get('fecha_desde') as string)?.trim()
@@ -713,7 +713,7 @@ export async function guardarAusencia(formData: FormData): Promise<{ ok: boolean
 export async function eliminarAusencia(ausencia_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db.from('recurso_ausencias').delete()
@@ -729,7 +729,7 @@ export async function eliminarAusencia(ausencia_id: string): Promise<{ ok: boole
 export async function importarPersonalRRHH(): Promise<{ ok: boolean; error?: string; importados?: number }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -784,7 +784,7 @@ export async function importarServiciosCatalogo(
 ): Promise<{ ok: boolean; error?: string; importados?: number }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
   if (!Array.isArray(items) || items.length === 0) return { ok: true, importados: 0 }
 
   const db = createAdminClient()
@@ -792,7 +792,7 @@ export async function importarServiciosCatalogo(
   // Gating: solo si el negocio tiene contratado algún módulo de catálogo.
   const { data: cli } = await db.from('clients').select('modulos_activos').eq('client_id', session.client_id).single()
   if (!tieneAlgunModulo(cli?.modulos_activos, MODULOS_CATALOGO))
-    return { ok: false, error: 'No tienes un catálogo de servicios contratado.' }
+    return { ok: false, error: 'Sin catálogo de servicios contratado.' }
 
   const pedidos = new Map(items.map(i => [i.producto_id, i.duracion_minutos]))
 
@@ -840,7 +840,7 @@ export async function importarServiciosCatalogo(
 export async function crearCitaManual(formData: FormData, forzar = false): Promise<ResultadoAgenda> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const recurso_id     = (formData.get('recurso_id')     as string)?.trim()
   const servicio_id    = (formData.get('servicio_id')    as string)?.trim()
@@ -850,13 +850,13 @@ export async function crearCitaManual(formData: FormData, forzar = false): Promi
   const telefono       = (formData.get('telefono')       as string)?.trim() || null
   const notas          = (formData.get('notas')          as string)?.trim() || null
 
-  if (!recurso_id)     return { ok: false, error: 'Selecciona un recurso o profesional.' }
-  if (!servicio_id)    return { ok: false, error: 'Selecciona un servicio.' }
+  if (!recurso_id)     return { ok: false, error: 'Falta el recurso o profesional.' }
+  if (!servicio_id)    return { ok: false, error: 'Falta el servicio.' }
   if (!fecha)          return { ok: false, error: 'La fecha es obligatoria.' }
   if (!horaRaw)        return { ok: false, error: 'La hora es obligatoria.' }
   if (!nombre_cliente) return { ok: false, error: 'El nombre del cliente es obligatorio.' }
   if (fecha < hoy())   return { ok: false, error: 'No se puede crear una cita en una fecha pasada.' }
-  if (fecha === hoy() && horaRaw <= horaAhora()) return { ok: false, error: 'Esa hora ya pasó. Elige una hora futura.' }
+  if (fecha === hoy() && horaRaw <= horaAhora()) return { ok: false, error: 'La hora ya pasó.' }
 
   const db = createAdminClient()
   const { data: cli } = await db.from('clients').select('bot_config_citas, nombre_empresa').eq('client_id', session.client_id).single()
@@ -872,7 +872,7 @@ export async function crearCitaManual(formData: FormData, forzar = false): Promi
   if (error) return { ok: false, error: error.message }
   const result = data as ResultadoAgenda
   if (!result.ok) {
-    return { ok: false, error: result.error ?? 'Error al crear la cita.', forzable: result.forzable }
+    return { ok: false, error: result.error ?? 'No se ha podido crear la cita.', forzable: result.forzable }
   }
 
   // CIT-6: aquí se llamaba a `notificarReservaNueva`, así que el dueño recibía en su
@@ -896,7 +896,7 @@ export async function modificarCita(
 ): Promise<ResultadoAgenda> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const recurso_id     = (formData.get('recurso_id')     as string)?.trim()
   const servicio_id    = (formData.get('servicio_id')    as string)?.trim()
@@ -906,8 +906,8 @@ export async function modificarCita(
   const telefono       = (formData.get('telefono')       as string)?.trim() || null
   const notas          = (formData.get('notas')          as string)?.trim() || null
 
-  if (!recurso_id)     return { ok: false, error: 'Selecciona un recurso o profesional.' }
-  if (!servicio_id)    return { ok: false, error: 'Selecciona un servicio.' }
+  if (!recurso_id)     return { ok: false, error: 'Falta el recurso o profesional.' }
+  if (!servicio_id)    return { ok: false, error: 'Falta el servicio.' }
   if (!fecha)          return { ok: false, error: 'La fecha es obligatoria.' }
   if (!horaRaw)        return { ok: false, error: 'La hora es obligatoria.' }
   if (!nombre_cliente) return { ok: false, error: 'El nombre del cliente es obligatorio.' }
@@ -924,7 +924,7 @@ export async function modificarCita(
   if (error) return { ok: false, error: error.message }
   const result = data as ResultadoAgenda
   if (!result.ok) {
-    return { ok: false, error: result.error ?? 'Error al modificar la cita.', forzable: result.forzable }
+    return { ok: false, error: result.error ?? 'No se ha podido modificar la cita.', forzable: result.forzable }
   }
 
   // U8: mover una cita no avisaba a nadie. Si el cliente vino por el bot, tiene chat y
@@ -937,9 +937,9 @@ export async function modificarCita(
     const bot = parseBotConfig(cli?.bot_config_citas)
     if (bot.token && bot.activo) {
       await enviarMensaje(bot.token, cita.telegram_chat_id as string, [
-        `🔄 Tu cita ha cambiado — ${(cli?.nombre_empresa as string) ?? 'el negocio'}`,
-        `📅 ${fecha}  🕐 ${horaRaw.substring(0, 5)}`,
-        'Si no te viene bien, respóndenos.',
+        `La cita ha cambiado — ${(cli?.nombre_empresa as string) ?? 'el negocio'}`,
+        `${fecha} · ${horaRaw.substring(0, 5)}`,
+        'Si no le viene bien, puede responder a este mensaje.',
       ].join('\n'))
     }
   }
@@ -953,7 +953,7 @@ export async function modificarCita(
 export async function cambiarEstadoCita(reserva_id: string, nuevoEstado: EstadoReserva): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: cli } = await db.from('clients').select('bot_config_citas, nombre_empresa').eq('client_id', session.client_id).single()
@@ -961,7 +961,7 @@ export async function cambiarEstadoCita(reserva_id: string, nuevoEstado: EstadoR
 
   const r = await transicionarEstado(
     db, session.client_id, reserva_id, nuevoEstado,
-    (cli?.nombre_empresa as string) ?? 'Tu cita',
+    (cli?.nombre_empresa as string) ?? 'La cita',
     { token: bot.token, activo: bot.activo, clientId: session.client_id, columna: 'bot_config_citas' },
   )
   if (!r.ok) return r
@@ -987,7 +987,7 @@ export async function cambiarEstadoCitasEnLote(
 ): Promise<ResultadoLote> {
   const session = await getPortalSession()
   if (!session)             return loteVacio('Sesión inválida.')
-  if (!(await puedeEditarModulo('agenda'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  if (!(await puedeEditarModulo('agenda'))) return loteVacio('Sin permiso para editar en este módulo.')
   if (!ids.length) return loteVacio()
 
   const db = createAdminClient()
@@ -1124,7 +1124,7 @@ export async function crearCitaPublica(formData: FormData): Promise<{ ok: boolea
 
   // Rate limit por IP (anti-spam de citas)
   if (!await rateLimitOk('cita_crear', 5, 300)) {
-    return { ok: false, error: 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.' }
+    return { ok: false, error: 'Demasiados intentos seguidos. El acceso se reabre en unos minutos.' }
   }
 
   const client_id      = (formData.get('client_id')   as string)?.trim()
@@ -1138,8 +1138,8 @@ export async function crearCitaPublica(formData: FormData): Promise<{ ok: boolea
   const notas          = (formData.get('notas')       as string)?.trim() || null
 
   if (!client_id)      return { ok: false, error: 'Negocio no identificado.' }
-  if (!servicio_id)    return { ok: false, error: 'Selecciona un servicio.' }
-  if (!recurso_id)     return { ok: false, error: 'Selecciona un horario.' }
+  if (!servicio_id)    return { ok: false, error: 'Falta el servicio.' }
+  if (!recurso_id)     return { ok: false, error: 'Falta el horario.' }
   if (!fecha)          return { ok: false, error: 'Fecha obligatoria.' }
   if (!hora)           return { ok: false, error: 'Hora obligatoria.' }
   if (!nombre_cliente) return { ok: false, error: 'Nombre obligatorio.' }
@@ -1149,7 +1149,7 @@ export async function crearCitaPublica(formData: FormData): Promise<{ ok: boolea
   if (!telefono)       return { ok: false, error: 'Teléfono obligatorio.' }
   if (email && !emailValido(email)) return { ok: false, error: 'Correo no válido.' }
   if (fecha < hoy())   return { ok: false, error: 'No se puede reservar en una fecha pasada.' }
-  if (fecha === hoy() && hora <= horaAhora()) return { ok: false, error: 'Esa hora ya pasó. Elige otra.' }
+  if (fecha === hoy() && hora <= horaAhora()) return { ok: false, error: 'Esa hora ya ha pasado.' }
 
   const db = createAdminClient()
   const { data: cli } = await db.from('clients').select('bot_config_citas, nombre_empresa, modulos_activos').eq('client_id', client_id).single()
@@ -1166,7 +1166,7 @@ export async function crearCitaPublica(formData: FormData): Promise<{ ok: boolea
   })
   if (error) return { ok: false, error: error.message }
   const result = data as { ok: boolean; error?: string }
-  if (!result.ok) return { ok: false, error: result.error ?? 'Error al reservar la cita.' }
+  if (!result.ok) return { ok: false, error: result.error ?? 'No se ha podido reservar la cita.' }
 
   // Correo del cliente: se guarda tras la inserción atómica (no es columna de la RPC).
   await db.from('reservas').update({ email }).eq('reserva_id', reservaId)
@@ -1176,7 +1176,7 @@ export async function crearCitaPublica(formData: FormData): Promise<{ ok: boolea
       clientId: client_id, columna: 'bot_config_citas' },
     { reserva_id: reservaId, fecha, hora, personas: 1, nombre_cliente, telefono, notas,
       estado: bot.confirmacion_automatica ? 'CONFIRMADA' : 'PENDIENTE', telegram_chat_id: null },
-    (cli?.nombre_empresa as string) ?? 'Tu negocio',
+    (cli?.nombre_empresa as string) ?? 'El negocio',
   )
 
   // Bandeja interna del portal (además del aviso de Telegram, que exige bot).
@@ -1201,7 +1201,7 @@ export async function crearCitaPublica(formData: FormData): Promise<{ ok: boolea
 export async function guardarBotConfigCitas(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const r = await guardarBotConfigCol(createAdminClient(), session.client_id, 'bot_config_citas', {
     token:                  (formData.get('token')  as string)?.trim() || null,
@@ -1217,7 +1217,7 @@ export async function guardarBotConfigCitas(formData: FormData): Promise<{ ok: b
 export async function guardarConfirmacionCitas(activa: boolean): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const r = await guardarConfirmacionCol(createAdminClient(), session.client_id, 'bot_config_citas', activa)
   if (!r.ok) return r
@@ -1228,7 +1228,7 @@ export async function guardarConfirmacionCitas(activa: boolean): Promise<{ ok: b
 export async function toggleActivoBotCitas(activo: boolean): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const r = await toggleActivoBotCol(createAdminClient(), session.client_id, 'bot_config_citas', activo)
   if (!r.ok) return r
@@ -1239,7 +1239,7 @@ export async function toggleActivoBotCitas(activo: boolean): Promise<{ ok: boole
 export async function toggleIaBotCitas(activa: boolean): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: cli } = await db.from('clients').select('modulos_activos').eq('client_id', session.client_id).single()
@@ -1254,7 +1254,7 @@ export async function toggleIaBotCitas(activa: boolean): Promise<{ ok: boolean; 
 export async function eliminarBotConfigCitas(): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('agenda'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const r = await eliminarBotConfigCol(createAdminClient(), session.client_id, 'bot_config_citas')
   if (!r.ok) return r

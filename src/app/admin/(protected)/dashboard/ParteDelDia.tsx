@@ -85,7 +85,7 @@ export default function ParteDelDia() {
 
       {aviso && !abierto && (
         <span className="ia-tp-callout" role="note">
-          <span className="ia-tp-callout-text">Pulsa la estrella para que la IA te cuente qué ha pasado hoy.</span>
+          <span className="ia-tp-callout-text">La estrella genera el resumen del día con IA.</span>
           <button type="button" className="ia-icon-btn" onClick={cerrarAviso} aria-label="Cerrar aviso">
             <X size={15} strokeWidth={2} />
           </button>
@@ -129,7 +129,7 @@ export default function ParteDelDia() {
                   </span>
                 )}
               <span className="ia-tp-disclaimer">
-                Generado por IA con tus avisos y tus cifras · los avisos los detecta el sistema.
+                Generado por IA con los avisos y las cifras del panel · los avisos los detecta el sistema.
               </span>
             </>
           )}

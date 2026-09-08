@@ -212,7 +212,7 @@ export async function guardarSuscripcion(
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('servicios')))
-    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+    return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const g = (k: string) => ((formData.get(k) as string) ?? '').trim()
 
@@ -260,9 +260,9 @@ export async function guardarSuscripcion(
     }
   } catch { /* lineas queda vacío y lo caza la validación */ }
 
-  if (!cliente_id)  return { ok: false, error: 'Elige el cliente.' }
-  if (!lineas.length) return { ok: false, error: 'Añade al menos un servicio.' }
-  if (!empresa_id)  return { ok: false, error: 'Elige la empresa.' }
+  if (!cliente_id)  return { ok: false, error: 'Falta el cliente.' }
+  if (!lineas.length) return { ok: false, error: 'Falta al menos un servicio.' }
+  if (!empresa_id)  return { ok: false, error: 'Falta la empresa.' }
   if (!fecha_inicio) return { ok: false, error: 'La fecha de inicio es obligatoria.' }
   if (!PERIODICIDADES.includes(periodicidad)) return { ok: false, error: 'Periodicidad inválida.' }
   if (lineas.some(l => l.precio_mensual < 0)) return { ok: false, error: 'El precio no puede ser negativo.' }
@@ -275,7 +275,7 @@ export async function guardarSuscripcion(
   // La moneda SIEMPRE de las del cliente (nunca lista fija): una que no tiene no
   // cotiza y descuadraría la facturación.
   if (!(await monedaValida(db, session.client_id, moneda)))
-    return { ok: false, error: 'Elige una moneda activa del negocio.' }
+    return { ok: false, error: 'Falta la moneda activa del negocio.' }
 
   // Todos los servicios deben ser SERVICIOS suscribibles del cliente. Se comprueban
   // los del formulario contra la base de una vez: la lista del navegador no es
@@ -319,7 +319,7 @@ export async function guardarSuscripcion(
       suscripcion_id = await crearAcuerdoSuscripcion(db, session.client_id, campos)
     } catch (e) {
       console.error('[suscripciones] insert:', e)
-      return { ok: false, error: `Error al crear: ${(e as Error).message}` }
+      return { ok: false, error: `No se ha podido crear: ${(e as Error).message}` }
     }
 
     const { error: errLin } = await escribirLineas(suscripcion_id, session.client_id)
@@ -328,7 +328,7 @@ export async function guardarSuscripcion(
       // dejar una fila fantasma en la lista.
       await db.from('suscripciones').delete().eq('suscripcion_id', suscripcion_id).eq('client_id', session.client_id)
       console.error('[suscripciones] insert lineas:', errLin)
-      return { ok: false, error: 'Error al guardar los servicios del acuerdo.' }
+      return { ok: false, error: 'No se ha podido guardar los servicios del acuerdo.' }
     }
 
     // El acuerdo ya existe y está bien: lo que venga de aquí no puede tumbarlo.
@@ -350,10 +350,10 @@ export async function guardarSuscripcion(
     .update(campos)
     .eq('suscripcion_id', suscripcion_id_form)
     .eq('client_id', session.client_id)
-  if (error) { console.error('[suscripciones] update:', error); return { ok: false, error: 'Error al actualizar.' } }
+  if (error) { console.error('[suscripciones] update:', error); return { ok: false, error: 'No se ha podido actualizar.' } }
 
   const { error: errLin } = await escribirLineas(suscripcion_id_form, session.client_id)
-  if (errLin) { console.error('[suscripciones] update lineas:', errLin); return { ok: false, error: 'Error al guardar los servicios del acuerdo.' } }
+  if (errLin) { console.error('[suscripciones] update lineas:', errLin); return { ok: false, error: 'No se ha podido guardar los servicios del acuerdo.' } }
 
   revalidatePath('/portal/suscripciones')
   return { ok: true, suscripcion_id: suscripcion_id_form }
@@ -395,10 +395,10 @@ export async function crearSuscripcionesEnLote(
   const session = await getPortalSession()
   if (!session) return { ok: false, hechas: 0, facturas: 0, omitidas: [], error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('servicios')))
-    return { ok: false, hechas: 0, facturas: 0, omitidas: [], error: 'No tienes permiso para editar en este módulo.' }
+    return { ok: false, hechas: 0, facturas: 0, omitidas: [], error: 'Sin permiso para editar en este módulo.' }
 
   const ids = [...new Set(clienteIds.filter(Boolean))]
-  if (!ids.length) return { ok: false, hechas: 0, facturas: 0, omitidas: [], error: 'Elige al menos un cliente.' }
+  if (!ids.length) return { ok: false, hechas: 0, facturas: 0, omitidas: [], error: 'Falta seleccionar al menos un cliente.' }
 
   const db = createAdminClient()
   const { data: terc } = await db.from('third_parties')
@@ -440,7 +440,7 @@ export async function cambiarEstadoSuscripcion(
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('servicios')))
-    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+    return { ok: false, error: 'Sin permiso para editar en este módulo.' }
   if (!['ACTIVA', 'PAUSADA', 'CANCELADA'].includes(estado))
     return { ok: false, error: 'Estado inválido.' }
 
@@ -502,7 +502,7 @@ export async function cancelarAlFinalDelPeriodo(
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('servicios')))
-    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+    return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: s } = await db.from('suscripciones')
@@ -561,8 +561,8 @@ export async function previsualizarSubidaTarifa(
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
   const ids = [...new Set(suscripcionIds.filter(Boolean))]
-  if (!ids.length) return { ok: false, error: 'Elige al menos un acuerdo.' }
-  if (!Number.isFinite(valor) || valor === 0) return { ok: false, error: 'Escribe cuánto sube.' }
+  if (!ids.length) return { ok: false, error: 'Falta seleccionar al menos un acuerdo.' }
+  if (!Number.isFinite(valor) || valor === 0) return { ok: false, error: 'Falta el importe de la subida.' }
 
   const db = createAdminClient()
   const [{ data: subs }, { data: lins }, { data: terc }] = await Promise.all([
@@ -614,10 +614,10 @@ export async function aplicarSubidaTarifa(
   const session = await getPortalSession()
   if (!session) return { ok: false, hechas: 0, omitidas: [], error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('servicios')))
-    return { ok: false, hechas: 0, omitidas: [], error: 'No tienes permiso para editar en este módulo.' }
+    return { ok: false, hechas: 0, omitidas: [], error: 'Sin permiso para editar en este módulo.' }
   const ids = [...new Set(suscripcionIds.filter(Boolean))]
-  if (!ids.length) return { ok: false, hechas: 0, omitidas: [], error: 'Elige al menos un acuerdo.' }
-  if (!Number.isFinite(valor) || valor === 0) return { ok: false, hechas: 0, omitidas: [], error: 'Escribe cuánto sube.' }
+  if (!ids.length) return { ok: false, hechas: 0, omitidas: [], error: 'Falta seleccionar al menos un acuerdo.' }
+  if (!Number.isFinite(valor) || valor === 0) return { ok: false, hechas: 0, omitidas: [], error: 'Falta el importe de la subida.' }
 
   const db = createAdminClient()
   const { data: lins } = await db.from('suscripcion_lineas')
@@ -647,7 +647,7 @@ export async function renovarSuscripcion(
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('servicios')))
-    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+    return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: s } = await db.from('suscripciones')
@@ -711,7 +711,7 @@ export async function facturarPeriodo(
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('base')))
-    return { ok: false, error: 'Necesitas el módulo Contabilidad para facturar de verdad.' }
+    return { ok: false, error: 'La emisión de facturas requiere el módulo Contabilidad.' }
 
   const db = createAdminClient()
 

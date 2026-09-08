@@ -74,8 +74,8 @@ function ConfirmArchivar({
         </div>
         <div className="modal-body">
           <p className="modal-body-text">
-            ¿Archivar a <strong>{tercero.nombre}</strong>? No aparecerá en listas activas
-            pero podrás restaurarlo cuando lo necesites.
+            ¿Archivar a <strong>{tercero.nombre}</strong>? Dejará de aparecer en las listas
+            activas y se puede restaurar en cualquier momento.
           </p>
         </div>
         <div className="modal-footer">
@@ -195,7 +195,7 @@ export default function TercerosView({ data, puedeEditar }: { data: TercerosPage
     startTransition(async () => {
       const r = await fn()
       await ld.dismiss()
-      if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
+      if (!r.ok) { toastError(r.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess(mensaje(r.hechas))
       sel.clear()
       router.refresh()
@@ -251,7 +251,7 @@ export default function TercerosView({ data, puedeEditar }: { data: TercerosPage
       <div className="page-header">
         <div>
           <h1 className="page-title">Clientes y proveedores</h1>
-          <p className="page-subtitle">Tus clientes, proveedores y contactos comerciales.</p>
+          <p className="page-subtitle">Clientes, proveedores y contactos comerciales.</p>
         </div>
         <div className="tes-header-actions">
           <ExportarMenu
@@ -269,7 +269,7 @@ export default function TercerosView({ data, puedeEditar }: { data: TercerosPage
 
       {empresasLista.length === 0 && (
         <PrerequisitoAviso acciones={[{ label: 'Crear empresa', href: '/portal/empresas' }]}>
-          Para registrar clientes y proveedores necesitas <strong>una empresa</strong>.
+          Para registrar clientes y proveedores se necesita <strong>una empresa</strong>.
         </PrerequisitoAviso>
       )}
 
@@ -298,7 +298,7 @@ export default function TercerosView({ data, puedeEditar }: { data: TercerosPage
             <Users size={36} strokeWidth={1} opacity={0.25} />
             <p>
               {data.terceros.length === 0
-                ? 'Aún no hay clientes ni proveedores. Crea el primero.'
+                ? 'Sin clientes ni proveedores.'
                 : 'No hay resultados para los filtros seleccionados.'}
             </p>
           </div>
@@ -501,7 +501,7 @@ export default function TercerosView({ data, puedeEditar }: { data: TercerosPage
       {confirmLote && (
         <ConfirmDialog
           title={`¿Archivar ${sel.count} registro${plural(sel.count)}?`}
-          body="No aparecerán en las listas activas, pero podrás restaurarlos cuando quieras."
+          body="Dejarán de aparecer en las listas activas y se pueden restaurar en cualquier momento."
           confirmLabel="Archivar" danger
           onCancel={() => setConfirmLote(false)}
           onConfirm={doArchivarLote}

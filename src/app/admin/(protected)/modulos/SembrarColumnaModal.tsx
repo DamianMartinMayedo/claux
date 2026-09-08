@@ -109,8 +109,8 @@ export default function SembrarColumnaModal({ nombresNivel }: { nombresNivel: Re
 
       <div className="modal-body">
         <p className="text-xs-muted">
-          Rellena una casilla entera a partir de otra. Es el punto de partida: después
-          cada precio se ajusta a mano en su módulo.
+          Rellenar una casilla entera a partir de otra. Es el punto de partida: después
+          cada precio se ajusta uno a uno en su módulo.
         </p>
 
         <div className="grid-cols-2">

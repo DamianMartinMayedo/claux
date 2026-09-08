@@ -217,8 +217,8 @@ export function CompraFormModal({
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const validas = lineas.filter(l => l.descripcion.trim() && l.cantidad > 0)
-    if (!almacenId)           { toastError('Selecciona el almacén de entrada.'); return }
-    if (validas.length === 0) { toastError('Añade al menos una línea con cantidad.'); return }
+    if (!almacenId)           { toastError('Falta el almacén de entrada.'); return }
+    if (validas.length === 0) { toastError('Falta al menos una línea con cantidad.'); return }
 
     const fd = new FormData()
     if (compra) fd.set('compra_id', compra.compra_id)
@@ -238,7 +238,7 @@ export function CompraFormModal({
     startTransition(async () => {
       const res = await guardarCompra(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess(isEdit ? 'Compra actualizada' : 'Compra creada en borrador')
       onSaved(res.compra_id!)
     })
@@ -261,7 +261,7 @@ export function CompraFormModal({
                 <div className="input-group ter-col-span-3">
                   <label htmlFor="cmp-alm">Almacén de entrada <span className="required">*</span></label>
                   <select id="cmp-alm" className="input" value={almacenId} onChange={e => onAlmacenChange(e.target.value)} required>
-                    <option value="">Selecciona almacén…</option>
+                    <option value="">— Seleccionar almacén —</option>
                     {form.almacenes.map(a => <option key={a.almacen_id} value={a.almacen_id}>{a.nombre}</option>)}
                   </select>
                 </div>

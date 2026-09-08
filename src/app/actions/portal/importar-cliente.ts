@@ -81,7 +81,7 @@ export async function obtenerCamposEntidad(
   if (!r) return { ok: false, error: 'El importador no está disponible.' }
   const adaptador = ADAPTADORES[entidad]
   if (!adaptador) return { ok: false, error: 'Entidad no soportada.' }
-  if (!(await requireImportarEntidad(r.session, entidad))) return { ok: false, error: 'No puedes importar esto (revisa con tu administrador).' }
+  if (!(await requireImportarEntidad(r.session, entidad))) return { ok: false, error: 'Sin permiso para importar en este módulo.' }
 
   // Sin empresas o sin monedas no hay dónde crear las filas: se dice ahora, no con
   // un desplegable obligatorio vacío a mitad del asistente.
@@ -120,7 +120,7 @@ export async function plantillaImport(
   if (!r) return { ok: false, error: 'El importador no está disponible.' }
   const adaptador = ADAPTADORES[entidad]
   if (!adaptador) return { ok: false, error: 'Entidad no soportada.' }
-  if (!(await requireImportarEntidad(r.session, entidad))) return { ok: false, error: 'No puedes importar esto (revisa con tu administrador).' }
+  if (!(await requireImportarEntidad(r.session, entidad))) return { ok: false, error: 'Sin permiso para importar en este módulo.' }
 
   // Con las columnas extra dependientes del cliente (tasa de consolidación, §7):
   // la plantilla y la hoja de ayuda las llevan solo si el cliente las tiene.
@@ -150,11 +150,11 @@ export async function plantillaImport(
       [texto(adaptador.etiqueta, { color: MARCA.ejemploTx, fontWeight: 'bold' })],
       [texto('')],
       [texto('Cómo rellenarla', sub)],
-      [texto('1. Escribe tus datos en la hoja «Datos», debajo de la fila de cabeceras.', { wrap: true })],
-      [texto('2. No cambies ni borres la primera fila (las cabeceras).', { wrap: true })],
-      [texto('3. Las columnas con * son obligatorias; el resto puedes dejarlas en blanco.', { wrap: true })],
-      [texto('4. La fila de ejemplo (en gris) puedes dejarla o borrarla: no se importa.', { wrap: true })],
-      [texto('5. Guarda y súbelo en CLAUX → Importar datos. También se acepta CSV.', { wrap: true })],
+      [texto('1. Los datos van en la hoja «Datos», debajo de la fila de cabeceras.', { wrap: true })],
+      [texto('2. La primera fila (las cabeceras) no se cambia ni se borra.', { wrap: true })],
+      [texto('3. Las columnas con * son obligatorias; el resto admite quedar en blanco.', { wrap: true })],
+      [texto('4. La fila de ejemplo (en gris) puede quedarse o borrarse: no se importa.', { wrap: true })],
+      [texto('5. Una vez guardado, se sube en CLAUX → Importar datos. También se acepta CSV.', { wrap: true })],
       [texto('')],
       [texto('Qué va en cada columna', sub)],
       ...campos.filter(c => c.ayuda).map(c => [texto(c.etiqueta, clave), texto(c.ayuda ?? '', { wrap: true })]),
@@ -177,7 +177,7 @@ export async function crearLoteImport(
   if (!r) return { ok: false, error: 'El importador no está disponible.' }
   const adaptador = ADAPTADORES[entidad]
   if (!adaptador) return { ok: false, error: 'Entidad no soportada.' }
-  if (!(await requireImportarEntidad(r.session, entidad))) return { ok: false, error: 'No puedes importar esto (revisa con tu administrador).' }
+  if (!(await requireImportarEntidad(r.session, entidad))) return { ok: false, error: 'Sin permiso para importar en este módulo.' }
 
   // Sin empresas o sin monedas no hay dónde crear las filas: se dice ahora, no con
   // un desplegable obligatorio vacío a mitad del asistente.

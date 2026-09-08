@@ -91,7 +91,7 @@ export default function OfertaDetalle({ data, tienePermiso }: Props) {
         const res = await duplicarOferta(oferta.oferta_id)
         await ld.dismiss()
         setDuplicating(false)
-        if (!res.ok) { toastError(res.error ?? 'Error al duplicar.'); return }
+        if (!res.ok) { toastError(res.error ?? 'No se ha podido duplicar.'); return }
         router.push(`/portal/ventas/ofertas/${res.oferta_id}`)
       },
     })
@@ -104,7 +104,7 @@ export default function OfertaDetalle({ data, tienePermiso }: Props) {
     startTransition(async () => {
       const res = await cambiarEstadoOferta(oferta.oferta_id, nuevo)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error al cambiar estado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido cambiar estado.'); return }
       if (res.factura_id) {
         toastSuccess('Oferta aprobada. Factura generada.')
         router.push(`/portal/ventas/facturas/${res.factura_id}`)

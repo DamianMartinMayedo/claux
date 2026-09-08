@@ -10,7 +10,7 @@ export default function AccesosRapidos({ accesos }: { accesos: AccesoRapido[] })
         <h2 className="card-title">Accesos rápidos</h2>
       </div>
       {accesos.length === 0 ? (
-        <p className="dash-muted">Tu cuenta está lista. Empieza por el menú lateral.</p>
+        <p className="dash-muted">Cuenta lista. Los módulos contratados están en el menú lateral.</p>
       ) : (
         <div className="dash-accesos">
           {accesos.map(a => (

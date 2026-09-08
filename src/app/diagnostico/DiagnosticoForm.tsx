@@ -25,7 +25,7 @@ import { CheckIcon, ArrowRightIcon, ArrowLeftIcon, SendIcon } from './icons'
    Datos fijos (no del catálogo): pasos y modo actual
    ════════════════════════════════════════════════ */
 
-const STEPS = ['Tipo de negocio', 'Necesidades', 'Tamaño', 'Situación actual', 'Tus datos', 'Informe']
+const STEPS = ['Tipo de negocio', 'Necesidades', 'Tamaño', 'Situación actual', 'Los datos', 'Informe']
 const TOTAL_STEPS = STEPS.length
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -43,12 +43,12 @@ function adaptarModulo(m: ModuloPublico, et: EtiquetasSector): { nombre: string;
         // «Menú digital» / «Catálogo digital» según el sector, en vez de
         // «Catálogo digital (Menú)», que repetía la palabra dos veces.
         nombre: `${et.catalogo} digital`,
-        desc: `Tu ${et.catalogo.toLowerCase()} con fotos y precios, que tus clientes ven al escanear un QR.`,
+        desc: `El ${et.catalogo.toLowerCase()} con fotos y precios, que los clientes ven al escanear un QR.`,
       }
     case 'reservas_citas':
       return {
         nombre: et.reservas,
-        desc: `${et.reservas} por franja con control de aforo. Tus clientes reservan online o por Telegram.`,
+        desc: `${et.reservas} por franja con control de aforo. Los clientes reservan online o por Telegram.`,
       }
     case 'agenda':
       return {
@@ -58,7 +58,7 @@ function adaptarModulo(m: ModuloPublico, et: EtiquetasSector): { nombre: string;
     case 'servicios':
       return {
         nombre: `${et.servicio}s`,
-        desc: `Tus ${et.servicio.toLowerCase()}s con su precio, listos para ponerlos en una oferta o factura sin reescribirlos cada vez.`,
+        desc: `Cada ${et.servicio.toLowerCase()} con su precio, listo para una oferta o una factura sin reescribirlo cada vez.`,
       }
     default:
       return { nombre: m.nombre, desc: m.descripcion }
@@ -117,17 +117,17 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
   function next() {
     const errs: Record<string, string> = {}
 
-    if (step === 0 && !sector) errs.sector = 'Selecciona el tipo de negocio.'
-    if (step === 1 && necesidades.length === 0) errs.necesidades = 'Selecciona al menos una opción.'
+    if (step === 0 && !sector) errs.sector = 'Falta el tipo de negocio.'
+    if (step === 1 && necesidades.length === 0) errs.necesidades = 'Falta seleccionar al menos una opción.'
     if (step === 2 && preguntasTamano.some((q) => tamano[q.clave] === undefined)) {
-      errs.tamano = 'Responde todas para saber qué nivel te corresponde.'
+      errs.tamano = 'Faltan respuestas: el nivel se calcula con todas.'
     }
-    if (step === 3 && !modoActual) errs.modoActual = 'Selecciona una opción.'
+    if (step === 3 && !modoActual) errs.modoActual = 'Falta la opción.'
     if (step === 4) {
       if (!nombre.trim()) errs.nombre = 'El nombre es obligatorio.'
       if (!telefono.trim()) errs.telefono = 'El teléfono es obligatorio.'
       if (!email.trim()) errs.email = 'El correo es obligatorio.'
-      else if (!EMAIL_RE.test(email.trim())) errs.email = 'Escribe un correo válido.'
+      else if (!EMAIL_RE.test(email.trim())) errs.email = 'Falta el correo válido.'
     }
 
     if (Object.keys(errs).length > 0) {
@@ -165,7 +165,7 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
     setSubmitting(false)
 
     if (!resultado.ok) {
-      setSubmitError(resultado.error ?? 'Error al guardar. Intenta de nuevo.')
+      setSubmitError(resultado.error ?? 'No se ha podido guardar. Intenta de nuevo.')
       return
     }
 
@@ -180,7 +180,7 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
   // aparece si el envío se ha encargado de verdad.
   async function pedirContacto() {
     if (leadId == null) {
-      setContactoError('No pudimos registrar tu solicitud. Escríbenos a contacto@claux.es.')
+      setContactoError('No se ha podido registrar la solicitud. Puede escribir a contacto@claux.es.')
       return
     }
     setContactando(true)
@@ -188,7 +188,7 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
     const r = await solicitarContactoDiagnostico(leadId)
     setContactando(false)
     if (!r.ok) {
-      setContactoError(r.error ?? 'No pudimos registrar tu solicitud. Inténtalo de nuevo.')
+      setContactoError(r.error ?? 'No se ha podido registrar la solicitud.')
       return
     }
     setContactado(true)
@@ -223,9 +223,9 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
       {/* Paso 0: sector */}
       {step === 0 && (
         <div className="dg-step-content">
-          <h2 className="dg-step-title">¿Qué tipo de negocio tienes?</h2>
+          <h2 className="dg-step-title">¿Qué tipo de negocio es?</h2>
           <p className="dg-step-subtitle">
-            Así te recomendamos los módulos que mejor se adaptan a tu sector.
+            Determina qué módulos se recomiendan para el sector.
           </p>
           <fieldset className="dg-fieldset">
             <legend className="dg-sr-only">Tipo de negocio</legend>
@@ -264,9 +264,9 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
       {/* Paso 1: necesidades */}
       {step === 1 && (
         <div className="dg-step-content">
-          <h2 className="dg-step-title">¿Qué necesitas para tu negocio?</h2>
+          <h2 className="dg-step-title">¿Qué necesita el negocio?</h2>
           <p className="dg-step-subtitle">
-            Marca todas las que te interesen. Puedes elegir varias.
+            Se pueden marcar varias.
           </p>
           <fieldset className="dg-fieldset">
             <legend className="dg-sr-only">Necesidades</legend>
@@ -320,9 +320,9 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
           sale vacía y el paso se salta solo enseñando el botón de siguiente. */}
       {step === 2 && (
         <div className="dg-step-content">
-          <h2 className="dg-step-title">¿De qué tamaño es tu negocio?</h2>
+          <h2 className="dg-step-title">¿De qué tamaño es el negocio?</h2>
           <p className="dg-step-subtitle">
-            Una cifra aproximada basta. Con esto sabemos qué nivel te corresponde.
+            Una cifra aproximada basta: de ahí sale el nivel que corresponde.
           </p>
 
           {preguntasTamano.map((q) => (
@@ -368,12 +368,12 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
       {/* Paso 3: modo actual */}
       {step === 3 && (
         <div className="dg-step-content">
-          <h2 className="dg-step-title">¿Cómo gestionas tu negocio hoy?</h2>
+          <h2 className="dg-step-title">¿Cómo se gestiona el negocio hoy?</h2>
           <p className="dg-step-subtitle">
-            No hay respuesta incorrecta. Nos ayuda a entender tu punto de partida.
+            No hay respuesta incorrecta: sirve para situar el punto de partida.
           </p>
           <fieldset className="dg-fieldset">
-            <legend className="dg-sr-only">Cómo gestionas tu negocio hoy</legend>
+            <legend className="dg-sr-only">Cómo se gestiona el negocio hoy</legend>
             <div className="dg-options dg-options-auto">
               {MODOS.map((m) => (
                 <label key={m.id} className="dg-option-radio">
@@ -414,9 +414,9 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
       {/* Paso 4: contacto */}
       {step === 4 && (
         <div className="dg-step-content">
-          <h2 className="dg-step-title">¿Dónde te contactamos?</h2>
+          <h2 className="dg-step-title">¿Dónde le contactamos?</h2>
           <p className="dg-step-subtitle">
-            Déjanos tus datos y te escribimos para preparar la puesta en marcha.
+            Con estos datos preparamos la puesta en marcha.
           </p>
           <div className="dg-form">
             {/* El cepo. `aria-hidden` + `tabIndex={-1}` para que ni el lector de pantalla ni
@@ -435,7 +435,7 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
               <input
                 id="dg-nombre"
                 className="dg-form-input"
-                placeholder="Tu nombre completo"
+                placeholder="Nombre completo"
                 autoComplete="name"
                 value={nombre}
                 onChange={(e) => {
@@ -474,7 +474,7 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
                 type="email"
                 inputMode="email"
                 autoComplete="email"
-                placeholder="tu@correo.com"
+                placeholder="nombre@correo.com"
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value)
@@ -569,13 +569,13 @@ export function DiagnosticoForm({ modulos, sectores, necesidades: necesidadesOpt
                   Gracias, {nombre.split(' ')[0]}.
                 </p>
                 <p className="dg-report-confirm-sub">
-                  Te contactamos lo antes posible para hablar de tu caso.
+                  Le contactamos lo antes posible.
                 </p>
               </div>
             ) : (
               <>
                 <p className="dg-report-cta-text">
-                  Te contactamos para ayudarte a ponerlo en marcha. Sin
+                  Le contactamos para la puesta en marcha. Sin
                   compromiso.
                 </p>
                 {contactoError && <p className="dg-report-cta-error">{contactoError}</p>}

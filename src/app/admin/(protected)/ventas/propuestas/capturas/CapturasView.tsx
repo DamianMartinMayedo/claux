@@ -549,7 +549,7 @@ function ModalCaptura({ modulos, sectores, capturas, onCancel, onSubmit, pending
                   if (e.target.value === '__otra') { setOtra(true); setVista('') } else setVista(e.target.value)
                 }}
               >
-                <option value="">Elige la pantalla</option>
+                <option value="">— Seleccionar pantalla —</option>
                 {vistas.map(v => <option key={v} value={v}>{v}</option>)}
                 <option value="__otra">Otra pantalla…</option>
               </select>

@@ -87,8 +87,8 @@ export async function reabrirFirmas(clientId: string): Promise<{ ok: boolean; er
   await crearNotificacion({
     clientId,
     tipo:   'documentos_firma_pendiente',
-    titulo: 'Debes actualizar y volver a firmar tus documentos',
-    cuerpo: 'Hemos reabierto tus documentos para que actualices tus datos fiscales y los firmes de nuevo.',
+    titulo: 'Los documentos vuelven a estar pendientes de firma',
+    cuerpo: 'Se han reabierto para actualizar los datos fiscales y firmarlos de nuevo.',
     enlace: '/portal/perfil',
   })
 
@@ -122,15 +122,15 @@ export async function enviarRecordatorioDocumentos(clientId: string): Promise<{ 
   const nombre = cliente.nombre_contacto || cliente.nombre_empresa
   const cuerpo =
     `Hola ${nombre},\n\n`
-    + 'Te recordamos que tienes documentos pendientes de firmar en tu cuenta de CLAUX: el acuerdo '
+    + 'Quedan documentos pendientes de firma en su cuenta de CLAUX: el acuerdo '
     + 'de confidencialidad (NDA), el contrato de servicio y el presupuesto.\n\n'
-    + `Puedes revisarlos y firmarlos desde tu perfil: ${PORTAL_URL}\n\n`
-    + 'La firma es electrónica y solo te llevará un momento.'
+    + `Puede revisarlos y firmarlos desde su perfil: ${PORTAL_URL}\n\n`
+    + 'La firma es electrónica y solo lleva un momento.'
 
   const emailRes = await enviarEmail({
     to:       cliente.email_admin,
     from:     'CLAUX <contacto@claux.es>',
-    subject:  'Tienes documentos pendientes de firmar en CLAUX',
+    subject:  'Documentos pendientes de firma en CLAUX',
     html:     envolverEmail(textoAHtml(cuerpo)),
     tipo:     'recordatorio_firma',
     clientId,
@@ -140,8 +140,8 @@ export async function enviarRecordatorioDocumentos(clientId: string): Promise<{ 
   await crearNotificacion({
     clientId,
     tipo:   'documentos_firma_pendiente',
-    titulo: 'Tienes documentos pendientes de firmar',
-    cuerpo: 'Revisa y firma tu NDA, contrato y presupuesto desde tu perfil.',
+    titulo: 'Documentos pendientes de firma',
+    cuerpo: 'El NDA, el contrato y el presupuesto se firman desde el perfil.',
     enlace: '/portal/perfil',
   })
 

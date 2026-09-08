@@ -107,7 +107,7 @@ function MovimientoModal({
     startTransition(async () => {
       const res = await registrarMovimiento(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess('Movimiento registrado')
       onSaved()
     })
@@ -150,13 +150,13 @@ function MovimientoModal({
                   <label htmlFor="mov-prod">Producto <span className="required">*</span></label>
                   <select id="mov-prod" className="input" name="producto_id" required
                     value={productoId} onChange={e => setProductoId(e.target.value)}>
-                    <option value="">Selecciona un producto…</option>
+                    <option value="">— Seleccionar producto —</option>
                     {data.productos.map(p => (
                       <option key={p.producto_id} value={p.producto_id}>{p.nombre} ({p.codigo})</option>
                     ))}
                   </select>
                   {data.productos.length === 0 && (
-                    <span className="text-xs-hint">No hay productos activos. Crea uno en Productos.</span>
+                    <span className="text-xs-hint">Sin productos activos. Se crean en Productos.</span>
                   )}
                 </div>
 
@@ -171,7 +171,7 @@ function MovimientoModal({
                   <label htmlFor="mov-alm">{esTransfer ? 'Almacén origen' : 'Almacén'} <span className="required">*</span></label>
                   <select id="mov-alm" className="input" name="almacen_id" required
                     value={almacenId} onChange={e => setAlmacenId(e.target.value)}>
-                    <option value="">Selecciona un almacén…</option>
+                    <option value="">— Seleccionar almacén —</option>
                     {data.almacenes.map(a => (
                       <option key={a.almacen_id} value={a.almacen_id}>{a.nombre}</option>
                     ))}
@@ -183,7 +183,7 @@ function MovimientoModal({
                     <label htmlFor="mov-dest">Almacén destino <span className="required">*</span></label>
                     <select id="mov-dest" className="input" name="almacen_destino_id" required
                       value={destinoId} onChange={e => setDestinoId(e.target.value)}>
-                      <option value="">Selecciona destino…</option>
+                      <option value="">— Seleccionar destino —</option>
                       {destinos.map(a => (
                         <option key={a.almacen_id} value={a.almacen_id}>
                           {a.nombre}{data.empresa_nombres[a.empresa_id] && Object.keys(data.empresa_nombres).length > 1 ? ` · ${data.empresa_nombres[a.empresa_id]}` : ''}
@@ -196,7 +196,7 @@ function MovimientoModal({
                 {cruzaEmpresa && (
                   <div className="input-group ter-col-full">
                     <div className="alert alert-warning moneda-cambio">
-                      Estás moviendo mercancía de <strong>{data.empresa_nombres[empresaOrigen!] ?? '—'}</strong> a
+                      Mercancía en tránsito de <strong>{data.empresa_nombres[empresaOrigen!] ?? '—'}</strong> a
                       {' '}<strong>{data.empresa_nombres[empresaDestino!] ?? '—'}</strong>. El movimiento se registra
                       en la empresa de origen y no genera ningún apunte contable.
                     </div>
@@ -213,7 +213,7 @@ function MovimientoModal({
                     value={cantidad} onChange={e => setCantidad(e.target.value)}
                     placeholder={tipo === 'AJUSTE' ? 'ej: 10 o −5' : 'ej: 10'} />
                   {tipo === 'AJUSTE' && (
-                    <span className="text-xs-hint">Usa signo: positivo suma, negativo resta.</span>
+                    <span className="text-xs-hint">Con signo: positivo suma, negativo resta.</span>
                   )}
                 </div>
 
@@ -235,7 +235,7 @@ function MovimientoModal({
                   <select id="mov-motivo-tipo" className="input" name="motivo_tipo"
                     required={motivoObligatorio}
                     value={motivoTipo} onChange={e => setMotivoTipo(e.target.value)}>
-                    <option value="">{motivoObligatorio ? 'Elige el motivo…' : 'Sin motivo'}</option>
+                    <option value="">{motivoObligatorio ? 'Falta el motivo…' : 'Sin motivo'}</option>
                     {MOTIVOS_MOVIMIENTO.map(m => <option key={m} value={m}>{MOTIVO_LABEL[m]}</option>)}
                   </select>
                 </div>
@@ -279,7 +279,7 @@ const REVISION_EXPLICA: Record<AvisoRevision['tipo'], string> = {
   stock_negativo:               'Se vendió más de lo que el sistema tenía registrado. No es un error: ajusta cuando cuentes.',
   producto_archivado_con_stock: 'Está archivado pero sus existencias siguen sumando en el total del producto.',
   almacen_archivado_con_stock:  'El almacén está archivado y ya no sale en movimientos ni compras, pero conserva mercancía.',
-  producto_sin_coste:           'Sin coste no se puede calcular el valor de tu inventario: no vale 0, es que no se sabe.',
+  producto_sin_coste:           'Sin coste no se puede calcular el valor de el inventario: no vale 0, es que no se sabe.',
 }
 const REVISION_BADGE: Record<AvisoRevision['tipo'], string> = {
   stock_negativo:               'badge-purple',
@@ -323,7 +323,7 @@ function PanelRevisar({
           <h2 className="mon-section-title">Cosas que mirar</h2>
           {/* El dato lo produce esta pantalla; la IA solo lo cuenta en una frase. */}
           {revision.some(a => a.tipo === 'stock_negativo') && (
-            <IaTouchpoint tipo="revisar" descripcion="una explicación de tus descuadres" />
+            <IaTouchpoint tipo="revisar" descripcion="una explicación de los descuadres" />
           )}
         </div>
         <span className="text-xs-muted">{revision.length}</span>
@@ -526,7 +526,7 @@ export default function MovimientosView({
         <div>
           <div className="page-title-ia">
             <h1 className="page-title">Movimientos</h1>
-            <IaTouchpoint tipo="inventario" descripcion="un análisis de tu inventario" />
+            <IaTouchpoint tipo="inventario" descripcion="un análisis de el inventario" />
           </div>
           <p className="page-subtitle">Entradas, salidas, ajustes y transferencias de stock entre almacenes.</p>
         </div>
@@ -558,7 +558,7 @@ export default function MovimientosView({
           ...(data.productos.length === 0 ? [{ label: 'Crear producto', href: '/portal/productos' }] : []),
           ...(data.almacenes.length === 0 ? [{ label: 'Crear almacén', href: '/portal/almacenes' }] : []),
         ]}>
-          Para registrar movimientos necesitas <strong>al menos un producto activo y un almacén</strong>.
+          Para registrar movimientos se necesita <strong>al menos un producto activo y un almacén</strong>.
         </PrerequisitoAviso>
       )}
 
@@ -626,7 +626,7 @@ export default function MovimientosView({
             <Package size={40} strokeWidth={1} opacity={0.2} />
             <p>
               {data.movimientos.length === 0
-                ? 'Aún no hay movimientos de inventario. Registra el primero o confirma una compra.'
+                ? 'Sin movimientos de inventario. Registra el primero o confirma una compra.'
                 : 'No hay resultados para los filtros seleccionados.'}
             </p>
           </div>
@@ -793,8 +793,8 @@ export default function MovimientosView({
             </div>
             <div className="modal-body">
               <div className="modal-body-text">
-                Vuelve a calcular las existencias de todos los productos sumando su historial de
-                entradas y salidas. Úsalo si crees que alguna cantidad no cuadra.
+                Recalcula las existencias de todos los productos sumando su historial de entradas
+                y salidas. Sirve cuando alguna cantidad no cuadra.
               </div>
             </div>
             <div className="modal-footer">

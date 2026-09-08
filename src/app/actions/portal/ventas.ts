@@ -609,7 +609,7 @@ export async function guardarOferta(
 ): Promise<{ ok: boolean; error?: string; oferta_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const oferta_id_form  = (formData.get('oferta_id')      as string)?.trim() || ''
   const empresa_id      = (formData.get('empresa_id')     as string)?.trim()
@@ -621,14 +621,14 @@ export async function guardarOferta(
   const notas           = (formData.get('notas')          as string)?.trim() || null
   const notas_internas  = (formData.get('notas_internas') as string)?.trim() || null
 
-  if (!empresa_id) return { ok: false, error: 'Selecciona una empresa.' }
-  if (!cliente_id) return { ok: false, error: 'Selecciona un cliente.' }
-  if (!moneda)     return { ok: false, error: 'Selecciona una moneda.' }
+  if (!empresa_id) return { ok: false, error: 'Falta la empresa.' }
+  if (!cliente_id) return { ok: false, error: 'Falta el cliente.' }
+  if (!moneda)     return { ok: false, error: 'Falta la moneda.' }
   if (!fecha_emision) return { ok: false, error: 'La fecha de emisión es obligatoria.' }
 
   const lineas  = parseJSON<LineaInput[]>(formData.get('lineas'),  [])
   const ajustes = parseJSON<AjusteInput[]>(formData.get('ajustes'), [])
-  if (lineas.length === 0) return { ok: false, error: 'Añade al menos una línea.' }
+  if (lineas.length === 0) return { ok: false, error: 'Se requiere al menos una línea.' }
 
   const validacion = await validarEmpresaAccesible(empresa_id)
   if (!validacion.ok) return validacion
@@ -721,7 +721,7 @@ export async function guardarFactura(
 ): Promise<{ ok: boolean; error?: string; factura_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const factura_id_form  = (formData.get('factura_id')        as string)?.trim() || ''
   const empresa_id       = (formData.get('empresa_id')        as string)?.trim()
@@ -733,9 +733,9 @@ export async function guardarFactura(
   const notas            = (formData.get('notas')             as string)?.trim() || null
   const notas_internas   = (formData.get('notas_internas')    as string)?.trim() || null
 
-  if (!empresa_id) return { ok: false, error: 'Selecciona una empresa.' }
-  if (!cliente_id) return { ok: false, error: 'Selecciona un cliente.' }
-  if (!moneda)     return { ok: false, error: 'Selecciona una moneda.' }
+  if (!empresa_id) return { ok: false, error: 'Falta la empresa.' }
+  if (!cliente_id) return { ok: false, error: 'Falta el cliente.' }
+  if (!moneda)     return { ok: false, error: 'Falta la moneda.' }
   if (!fecha_emision) return { ok: false, error: 'La fecha de emisión es obligatoria.' }
   // Un vencimiento anterior a la emisión nace vencido: CxC lo pinta en rojo el mismo día
   // que se crea y el aviso de cobro sale antes de que exista la deuda.
@@ -745,7 +745,7 @@ export async function guardarFactura(
 
   const lineas  = parseJSON<LineaInput[]>(formData.get('lineas'),  [])
   const ajustes = parseJSON<AjusteInput[]>(formData.get('ajustes'), [])
-  if (lineas.length === 0) return { ok: false, error: 'Añade al menos una línea.' }
+  if (lineas.length === 0) return { ok: false, error: 'Se requiere al menos una línea.' }
 
   const validacion = await validarEmpresaAccesible(empresa_id)
   if (!validacion.ok) return validacion
@@ -764,7 +764,7 @@ export async function guardarFactura(
     const { data: cli } = await db.from('clients')
       .select('modulos_activos').eq('client_id', session.client_id).maybeSingle()
     if (tieneModulo(cli?.modulos_activos, 'inventario')) {
-      if (!almacenForm) return { ok: false, error: 'Elige el almacén del que sale la mercancía.' }
+      if (!almacenForm) return { ok: false, error: 'Falta el almacén del que sale la mercancía.' }
       const { data: alm } = await db.from('almacenes')
         .select('almacen_id').eq('client_id', session.client_id)
         .eq('almacen_id', almacenForm).eq('activo', true).maybeSingle()
@@ -858,7 +858,7 @@ export async function cambiarEstadoOferta(
 ): Promise<{ ok: boolean; error?: string; factura_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: oferta } = await db
@@ -985,7 +985,7 @@ export async function cambiarEstadoFactura(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: factura } = await db
@@ -1139,7 +1139,7 @@ export async function convertirOfertaEnFactura(
 ): Promise<{ ok: boolean; error?: string; factura_id?: string }> {
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: oferta } = await db
@@ -1247,7 +1247,7 @@ export async function duplicarOferta(
 ): Promise<{ ok: boolean; error?: string; oferta_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -1342,7 +1342,7 @@ export async function duplicarFactura(
 ): Promise<{ ok: boolean; error?: string; factura_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -1483,7 +1483,7 @@ function loteVacio(error?: string): ResultadoLote {
 async function guardaLote(): Promise<{ session: NonNullable<Awaited<ReturnType<typeof getPortalSession>>> } | { error: string }> {
   const session = await getPortalSession()
   if (!session) return { error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('base'))) return { error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('base'))) return { error: 'Sin permiso para editar en este módulo.' }
   return { session }
 }
 
@@ -1599,7 +1599,7 @@ export async function archivarOfertasEnLote(
 ): Promise<ResultadoLote> {
   const session = await getPortalSession()
   if (!session) return loteVacio('Sesión inválida.')
-  if (!(await puedeEditarModulo('base'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  if (!(await puedeEditarModulo('base'))) return loteVacio('Sin permiso para editar en este módulo.')
 
   const db = createAdminClient()
   const { data, error } = await db.from('ofertas')
@@ -1616,7 +1616,7 @@ export async function archivarFacturasEnLote(
 ): Promise<ResultadoLote> {
   const session = await getPortalSession()
   if (!session) return loteVacio('Sesión inválida.')
-  if (!(await puedeEditarModulo('base'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  if (!(await puedeEditarModulo('base'))) return loteVacio('Sin permiso para editar en este módulo.')
 
   const db = createAdminClient()
   const { data, error } = await db.from('facturas')
@@ -1633,7 +1633,7 @@ export async function archivarFacturasEnLote(
 export async function eliminarOfertasEnLote(ids: string[]): Promise<ResultadoLote> {
   const session = await getPortalSession()
   if (!session) return loteVacio('Sesión inválida.')
-  if (!(await puedeEditarModulo('base'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  if (!(await puedeEditarModulo('base'))) return loteVacio('Sin permiso para editar en este módulo.')
   // Configurador (modo configuración): puede FORZAR el borrado de cualquier oferta,
   // aunque no esté en un estado eliminable o tenga factura asociada. Vía de limpieza
   // de datos de prueba; el usuario normal mantiene las reglas de siempre.
@@ -1668,7 +1668,7 @@ export async function eliminarOfertasEnLote(ids: string[]): Promise<ResultadoLot
 export async function eliminarFacturasEnLote(ids: string[]): Promise<ResultadoLote> {
   const session = await getPortalSession()
   if (!session) return loteVacio('Sesión inválida.')
-  if (!(await puedeEditarModulo('base'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  if (!(await puedeEditarModulo('base'))) return loteVacio('Sin permiso para editar en este módulo.')
   // Configurador (modo configuración, `session.imp`): puede FORZAR el borrado de
   // cualquier factura, no solo BORRADOR. Es la vía para limpiar datos de prueba de
   // un cliente. Un usuario normal sigue con la regla de siempre (solo BORRADOR).

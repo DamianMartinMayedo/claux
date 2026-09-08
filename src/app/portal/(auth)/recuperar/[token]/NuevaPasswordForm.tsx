@@ -39,7 +39,7 @@ export default function NuevaPasswordForm({ token, email, cuentas }: {
           <div className="login-logo-group">
             <img src="/logo_color.svg" alt="CLAUX" height={48} />
           </div>
-          <p className="login-subtitle">Digitaliza tu negocio</p>
+          <p className="login-subtitle">Gestión integral para negocios</p>
         </div>
 
         <div className="card card-lg">
@@ -47,7 +47,7 @@ export default function NuevaPasswordForm({ token, email, cuentas }: {
             <>
               <h1 className="login-card-title">Contraseña guardada</h1>
               <div className="alert alert-success">
-                Ya puedes entrar con tu contraseña nueva.
+                La contraseña nueva ya está activa.
               </div>
               <Link href="/portal/login" className="btn btn-primary btn-full btn-lg">
                 Iniciar sesión
@@ -74,7 +74,7 @@ export default function NuevaPasswordForm({ token, email, cuentas }: {
                       Negocio <span className="required">*</span>
                     </label>
                     <select className="input" id="user_id" name="user_id" required defaultValue="">
-                      <option value="" disabled>Elige el negocio</option>
+                      <option value="" disabled>— Seleccionar negocio —</option>
                       {cuentas.map(c => (
                         <option key={c.user_id} value={c.user_id}>{c.empresa}</option>
                       ))}

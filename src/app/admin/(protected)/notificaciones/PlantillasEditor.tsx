@@ -57,7 +57,7 @@ export default function PlantillasEditor({ plantillasIniciales }: { plantillasIn
     fd.set('activo', activo ? 'true' : 'false')
     const res = await guardarPlantilla(fd)
     setSaving(false)
-    if (!res.ok) { setMsg({ ok: false, text: res.error ?? 'Error al guardar.' }); return }
+    if (!res.ok) { setMsg({ ok: false, text: res.error ?? 'No se ha podido guardar.' }); return }
     setMsg({ ok: true, text: 'Plantilla guardada.' })
     setPlantillas(prev => prev.map(p => p.tipo === tipoActivo ? { ...p, asunto, cuerpo, activo } : p))
   }
@@ -67,7 +67,7 @@ export default function PlantillasEditor({ plantillasIniciales }: { plantillasIn
     const res = await enviarPruebaPlantilla(tipoActivo)
     setEnviandoPrueba(false)
     setMsg(res.ok
-      ? { ok: true, text: 'Prueba enviada a tu correo.' }
+      ? { ok: true, text: 'Prueba enviada a el correo.' }
       : { ok: false, text: res.error ?? 'No se pudo enviar la prueba.' })
   }
 

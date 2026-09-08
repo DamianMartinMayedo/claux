@@ -162,7 +162,7 @@ export async function manejarMensaje(
     const datosPrev = sesion.paso === 'ia' ? sesion.datos : {}
     const conv = await manejarConversacionReserva(ctx, chat_id, datosPrev, texto.trim())
     if (conv) return conv
-    return { texto: 'Perdona, ahora mismo no puedo responder. Prueba de nuevo en un momento.' }
+    return { texto: 'El asistente no está disponible en este momento.' }
   }
 
   // ══ MODO BOTONES (sin addon de IA) ══
@@ -191,16 +191,16 @@ export async function manejarMensaje(
   if (t === 'ayuda'   || t === 'help') return mostrarAyuda(ctx)
 
   return {
-    texto: `Hola, soy el bot de ${ctx.nombre_empresa}. ¿En qué puedo ayudarte?`,
+    texto: `Bot de ${ctx.nombre_empresa}. ¿En qué puedo ayudarle?`,
     markup: tecladoPrincipal(ctx),
   }
 }
 
 // Saludo conversacional del modo IA (sin botones, instantáneo, sin coste de IA).
 function saludoIa(ctx: BotContext): BotResponse {
-  const carta = tieneCarta(ctx) && ctx.slug ? ' Si quieres, también te paso la carta.' : ''
+  const carta = tieneCarta(ctx) && ctx.slug ? ' También puedo enviarle la carta.' : ''
   return {
-    texto: `¡Hola! Soy el asistente de ${ctx.nombre_empresa}. ¿Te ayudo con una reserva? Dime el día, la hora y para cuántas personas y te lo preparo.${carta}`,
+    texto: `Asistente de ${ctx.nombre_empresa}. Para preparar una reserva, indíqueme el día, la hora y el número de personas.${carta}`,
   }
 }
 
@@ -208,7 +208,7 @@ function saludoIa(ctx: BotContext): BotResponse {
 
 function bienvenida(ctx: BotContext): BotResponse {
   return {
-    texto: `¡Bienvenido a ${ctx.nombre_empresa}!\n\n¿Qué quieres hacer?`,
+    texto: `${ctx.nombre_empresa}\n\n¿Qué desea hacer?`,
     markup: tecladoPrincipal(ctx),
   }
 }
@@ -258,7 +258,7 @@ async function promptDias(ctx: BotContext, chatId: string, datos: DatosReserva):
   await guardarSesion(ctx.client_id, chatId, 'inicio', datos)
 
   const cabecera = dias.length === 0
-    ? `No veo huecos para ${datos.personas} en los próximos días. Puedes probar otra fecha o escribirnos.`
+    ? `No hay huecos para ${datos.personas} en los próximos días. Puede probar otra fecha o escribir al negocio.`
     : `Para ${datos.personas} persona${datos.personas === 1 ? '' : 's'}. ¿Qué día?`
   return { texto: `${cabecera}${SALIDA}`, markup: { inline_keyboard: filas } }
 }
@@ -360,14 +360,14 @@ async function mostrarSlots(ctx: BotContext, chatId: string, datos: DatosReserva
 
   await guardarSesion(ctx.client_id, chatId, 'hora', datos)
   return {
-    texto: `📅 ${formatFechaStr(fecha)} · ${datos.personas} persona${datos.personas === 1 ? '' : 's'}\n\nElige una hora:${SALIDA}`,
+    texto: `${formatFechaStr(fecha)} · ${datos.personas} persona${datos.personas === 1 ? '' : 's'}\n\nSeleccione una hora:${SALIDA}`,
     markup: { inline_keyboard: botones },
   }
 }
 
 // ── Resumen + botón de confirmación (compartido por botones e IA) ──────────────
 // Guarda la sesión en 'confirmar' (descartando el historial de IA) y devuelve el
-// resumen con los botones ✅ Confirmar / ← Cancelar. La reserva NO se crea aquí:
+// resumen con los botones Confirmar / Cancelar. La reserva NO se crea aquí:
 // se crea en el paso 'confirmar' al pulsar el botón (misma ruta RPC de siempre).
 async function resumenConfirmacion(ctx: BotContext, chatId: string, datos: DatosReserva): Promise<BotResponse> {
   const db = createAdminClient()
@@ -380,15 +380,15 @@ async function resumenConfirmacion(ctx: BotContext, chatId: string, datos: Datos
   }
   await guardarSesion(ctx.client_id, chatId, 'confirmar', limpio)
 
-  const autoText = confirmAuto ? '\n✅ Confirmación automática: tu reserva se confirma al instante.' : '\nTe confirmaremos por este mismo chat.'
+  const autoText = confirmAuto ? '\nLa reserva queda confirmada al instante.' : '\nLa confirmación llega por este mismo chat.'
   return {
     // TG-10: iba `*Resumen*` y `enviarMensaje` nunca manda `parse_mode`, así que el
     // cliente leía literalmente los asteriscos. Se quitan (más simple que meter
     // Markdown y tener que escapar el texto libre que escribe el cliente).
-    texto: `📋 Resumen\n\n📅 ${formatFechaStr(datos.fecha!)}\n🕐 ${formatHora(datos.hora!)}\n👥 ${datos.personas} persona${datos.personas !== 1 ? 's' : ''}\n✏️ ${datos.nombre}${datos.telefono ? `\n📞 ${datos.telefono}` : ''}${autoText}\n\n¿Confirmar reserva?`,
+    texto: `Resumen\n\nFecha: ${formatFechaStr(datos.fecha!)}\nHora: ${formatHora(datos.hora!)}\nPersonas: ${datos.personas}\nA nombre de: ${datos.nombre}${datos.telefono ? `\nTeléfono: ${datos.telefono}` : ''}${autoText}\n\n¿Confirmar reserva?`,
     markup: {
       inline_keyboard: [
-        [{ text: '✅ Confirmar', callback_data: 'confirmar_reserva' }],
+        [{ text: 'Confirmar', callback_data: 'confirmar_reserva' }],
         [{ text: '← Cancelar', callback_data: 'cancelar_flujo' }],
       ],
     },
@@ -502,9 +502,9 @@ export async function manejarPasoReserva(
   if (paso === 'personas_texto') {
     const n = parseInt(texto.replace(/\D/g, ''), 10)
     const tope = await topePersonas(ctx.client_id)
-    if (isNaN(n) || n < 1) return { texto: `Dime un número, por favor.${SALIDA}` }
+    if (isNaN(n) || n < 1) return { texto: `Indique un número.${SALIDA}` }
     if (tope > 0 && n > tope) {
-      return { texto: `Para grupos de más de ${tope} personas, escríbenos y lo organizamos.${SALIDA}` }
+      return { texto: `Los grupos de más de ${tope} personas se organizan escribiendo al negocio.${SALIDA}` }
     }
     datos.personas = n
     return promptDias(ctx, chatId, datos)
@@ -514,7 +514,7 @@ export async function manejarPasoReserva(
   if (paso === 'inicio') {
     if (texto === 'fecha:otro') {
       await guardarSesion(ctx.client_id, chatId, 'fecha', datos)
-      return { texto: `Escribe la fecha (ej: 25/06 o 2026-06-25):${SALIDA}` }
+      return { texto: `Indique la fecha (ej: 25/06 o 2026-06-25):${SALIDA}` }
     }
     if (texto.startsWith('fecha:')) {
       const tag = texto.replace('fecha:', '')
@@ -526,8 +526,8 @@ export async function manejarPasoReserva(
       else if (/^\d{4}-\d{2}-\d{2}$/.test(tag)) datos.fecha = tag
     } else {
       const pf = parseFecha(texto)
-      if (!pf) return { texto: `No entiendo esa fecha. Escribe DD/MM o YYYY-MM-DD.${SALIDA}`, markup: tecladoFecha() }
-      if (pf < hoyISO()) return { texto: `Esa fecha ya pasó. Elige una fecha futura.${SALIDA}`, markup: tecladoFecha() }
+      if (!pf) return { texto: `Fecha no reconocida. El formato es DD/MM o YYYY-MM-DD.${SALIDA}`, markup: tecladoFecha() }
+      if (pf < hoyISO()) return { texto: `Esa fecha ya pasó. Debe ser una fecha futura.${SALIDA}`, markup: tecladoFecha() }
       datos.fecha = pf
     }
     if (!datos.fecha) return promptDias(ctx, chatId, datos)
@@ -538,8 +538,8 @@ export async function manejarPasoReserva(
   // ── FECHA (texto libre) ─────────────────────────────────────────────────────
   if (paso === 'fecha') {
     const pf = parseFecha(texto)
-    if (!pf) return { texto: `No entiendo esa fecha. Escribe DD/MM o YYYY-MM-DD.${SALIDA}`, markup: tecladoFecha() }
-    if (pf < hoyISO()) return { texto: `Esa fecha ya pasó. Elige una fecha futura.${SALIDA}`, markup: tecladoFecha() }
+    if (!pf) return { texto: `Fecha no reconocida. El formato es DD/MM o YYYY-MM-DD.${SALIDA}`, markup: tecladoFecha() }
+    if (pf < hoyISO()) return { texto: `Esa fecha ya pasó. Debe ser una fecha futura.${SALIDA}`, markup: tecladoFecha() }
     datos.fecha = pf
     return mostrarSlots(ctx, chatId, datos)
   }
@@ -548,7 +548,7 @@ export async function manejarPasoReserva(
   if (paso === 'hora') {
     if (texto === 'reservar_dia') return promptDias(ctx, chatId, datos)
     if (!texto.startsWith('slot:')) {
-      return { texto: `Elige una hora de los botones.${SALIDA}` }
+      return { texto: `Seleccione una hora en los botones.${SALIDA}` }
     }
     const parts = texto.replace('slot:', '').split(':')
     // Formato: FRANJA_ID:HH:MM (la FRANJA_ID no contiene ':')
@@ -591,7 +591,7 @@ export async function manejarPasoReserva(
   // ── CONFIRMAR ───────────────────────────────────────────────────────────────
   if (paso === 'confirmar') {
     if (texto !== 'confirmar_reserva') {
-      return { texto: 'Usa el botón Confirmar o Cancelar.' }
+      return { texto: 'Utilice el botón Confirmar o Cancelar.' }
     }
 
     const { data: cliente } = await db.from('clients')
@@ -675,15 +675,15 @@ export async function manejarPasoReserva(
     // permite al cliente cancelar solo — o sea, la mitad del anti-no-show.
     const base = (process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/\/$/, '')
     const enlace = guardada?.token && ctx.slug && base
-      ? `\n\nPara verla o cancelarla:\n${base}/${ctx.slug}/r/${guardada.token}`
+      ? `\n\nPara consultarla o cancelarla:\n${base}/${ctx.slug}/r/${guardada.token}`
       : ''
     return {
-      texto: `✅ ¡Reserva ${estado}!\n\n📅 ${formatFechaStr(datos.fecha!)}\n🕐 ${formatHora(datos.hora!)}\n👥 ${datos.personas} persona${datos.personas !== 1 ? 's' : ''}\n✏️ ${datos.nombre}\n\nTe avisaremos por aquí.${enlace}`,
+      texto: `Reserva ${estado}\n\nFecha: ${formatFechaStr(datos.fecha!)}\nHora: ${formatHora(datos.hora!)}\nPersonas: ${datos.personas}\nA nombre de: ${datos.nombre}\n\nCualquier cambio se avisa por este chat.${enlace}`,
       markup: tecladoPrincipal(ctx),
     }
   }
 
-  return { texto: 'Algo salió mal. Usa /start para volver.', markup: tecladoPrincipal(ctx) }
+  return { texto: 'La solicitud no se ha podido continuar. Use /start para volver.', markup: tecladoPrincipal(ctx) }
 }
 
 // ── Mis reservas (TG-23) ──────────────────────────────────────────────────────
@@ -706,19 +706,19 @@ async function misReservas(ctx: BotContext, chatId: string): Promise<BotResponse
 
   const lista = (data ?? []) as { reserva_id: string; fecha: string; hora: string | null; personas: number; estado: string }[]
   if (lista.length === 0) {
-    return { texto: 'No tienes reservas próximas por aquí.', markup: tecladoPrincipal(ctx) }
+    return { texto: 'No hay reservas próximas asociadas a este chat.', markup: tecladoPrincipal(ctx) }
   }
 
   const filas = lista.map(r => ([{
-    text: `✕ Cancelar ${formatFechaStr(r.fecha)} ${formatHora(r.hora ?? '')}`,
+    text: `Cancelar ${formatFechaStr(r.fecha)} ${formatHora(r.hora ?? '')}`,
     callback_data: `cancelar_res:${r.reserva_id}`,
   }]))
 
   const texto = lista.map(r =>
-    `📅 ${formatFechaStr(r.fecha)}  🕐 ${formatHora(r.hora ?? '')}  👥 ${r.personas}` +
+    `${formatFechaStr(r.fecha)}  ·  ${formatHora(r.hora ?? '')}  ·  ${r.personas} p.` +
     `  ·  ${r.estado === 'CONFIRMADA' ? 'confirmada' : 'pendiente'}`).join('\n')
 
-  return { texto: `Tus próximas reservas:\n\n${texto}`, markup: { inline_keyboard: filas } }
+  return { texto: `Próximas reservas:\n\n${texto}`, markup: { inline_keyboard: filas } }
 }
 
 async function cancelarDesdeBot(ctx: BotContext, chatId: string, reservaId: string): Promise<BotResponse> {
@@ -732,7 +732,7 @@ async function cancelarDesdeBot(ctx: BotContext, chatId: string, reservaId: stri
     .eq('telegram_chat_id', chatId)
     .maybeSingle()
 
-  if (!reserva) return { texto: 'No encuentro esa reserva.', markup: tecladoPrincipal(ctx) }
+  if (!reserva) return { texto: 'Esa reserva no aparece.', markup: tecladoPrincipal(ctx) }
   if (!['PENDIENTE', 'CONFIRMADA'].includes(reserva.estado as string)) {
     return { texto: 'Esa reserva ya no está activa.', markup: tecladoPrincipal(ctx) }
   }
@@ -740,7 +740,7 @@ async function cancelarDesdeBot(ctx: BotContext, chatId: string, reservaId: stri
   const { error } = await db.from('reservas')
     .update({ estado: 'CANCELADA', updated_at: new Date().toISOString() })
     .eq('reserva_id', reservaId).eq('client_id', ctx.client_id)
-  if (error) return { texto: 'No se pudo cancelar. Inténtalo en un momento.', markup: tecladoPrincipal(ctx) }
+  if (error) return { texto: 'No se ha podido cancelar la reserva.', markup: tecladoPrincipal(ctx) }
 
   // Que el dueño se entere: es el hueco que acaba de liberarse.
   await notificarCancelacionCliente({
@@ -748,7 +748,7 @@ async function cancelarDesdeBot(ctx: BotContext, chatId: string, reservaId: stri
     nombreCliente: '', fecha: reserva.fecha as string, hora: '',
   }).catch(() => { /* la cancelación ya está hecha; el aviso es secundario */ })
 
-  return { texto: '✅ Reserva cancelada. Gracias por avisar.', markup: tecladoPrincipal(ctx) }
+  return { texto: 'Reserva cancelada. Gracias por avisar.', markup: tecladoPrincipal(ctx) }
 }
 
 // ── Mostrar carta (solo si el negocio tiene el módulo de menú digital) ─────────
@@ -763,7 +763,7 @@ function mostrarCarta(ctx: BotContext): BotResponse {
   }
   const base = (process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/\/$/, '')
   const url = base ? `${base}/${ctx.slug}/catalogo` : `/${ctx.slug}/catalogo`
-  return { texto: `📋 Nuestra carta:\n${url}`, markup: tecladoPrincipal(ctx) }
+  return { texto: `Carta:\n${url}`, markup: tecladoPrincipal(ctx) }
 }
 
 // ── Mostrar horarios ──────────────────────────────────────────────────────────
@@ -784,17 +784,17 @@ async function mostrarHorarios(ctx: BotContext): Promise<BotResponse> {
     .map(f => `• ${f.nombre}: ${f.hora_inicio?.substring(0, 5) ?? '—'} – ${f.hora_fin?.substring(0, 5) ?? '—'}`)
     .join('\n')
 
-  return { texto: `🕐 Horarios de ${ctx.nombre_empresa}\n\n${lista}`, markup: tecladoPrincipal(ctx) }
+  return { texto: `Horarios de ${ctx.nombre_empresa}\n\n${lista}`, markup: tecladoPrincipal(ctx) }
 }
 
 // ── Ayuda ─────────────────────────────────────────────────────────────────────
 
 function mostrarAyuda(ctx: BotContext): BotResponse {
-  const puede = ['• Hacer una reserva', '• Ver o cancelar tus reservas']
+  const puede = ['• Hacer una reserva', '• Ver o cancelar sus reservas']
   if (tieneCarta(ctx)) puede.push('• Ver la carta')
   puede.push('• Consultar horarios')
   return {
-    texto: `Bot de ${ctx.nombre_empresa}\n\nPuedes:\n${puede.join('\n')}`,
+    texto: `Bot de ${ctx.nombre_empresa}\n\nOpciones disponibles:\n${puede.join('\n')}`,
     markup: tecladoPrincipal(ctx),
   }
 }
@@ -807,14 +807,14 @@ function mostrarAyuda(ctx: BotContext): BotResponse {
 // se retira hasta que exista dónde configurarla.
 function tecladoPrincipal(ctx: BotContext): ReplyMarkup | undefined {
   if (ctx.iaActiva) return undefined
-  const fila1 = [{ text: '📅 Reservar', callback_data: 'reservar' }]
-  if (tieneCarta(ctx)) fila1.push({ text: '📋 Carta', callback_data: 'carta' })
+  const fila1 = [{ text: 'Reservar', callback_data: 'reservar' }]
+  if (tieneCarta(ctx)) fila1.push({ text: 'Carta', callback_data: 'carta' })
   return {
     inline_keyboard: [
       fila1,
       // TG-23: el bot es el ÚNICO canal donde el cliente está identificado, y hasta
       // ahora no podía ver ni cancelar lo suyo desde aquí.
-      [{ text: '🗒 Mis reservas', callback_data: 'mis_reservas' }, { text: '🕐 Horarios', callback_data: 'horarios' }],
+      [{ text: 'Mis reservas', callback_data: 'mis_reservas' }, { text: 'Horarios', callback_data: 'horarios' }],
     ],
   }
 }

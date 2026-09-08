@@ -63,7 +63,7 @@ const CAMPOS_COMUNES: CampoDef[] = [
   { campo: 'monto',       etiqueta: 'Importe',     obligatorio: true,  alias: ['monto', 'importe', 'total', 'valor', 'cantidad'], ejemplo: '12500' },
   { campo: 'moneda',      etiqueta: 'Moneda',      obligatorio: false, alias: ['moneda', 'divisa'], ejemplo: 'CUP' },
   { campo: 'vencimiento', etiqueta: 'Vencimiento', obligatorio: false, alias: ['vencimiento', 'vence', 'fecha vencimiento'], ayuda: 'Solo para lo pendiente. Si falta, se usa la fecha del registro.', ejemplo: '30/04/2026' },
-  { campo: 'notas',       etiqueta: 'Notas',       obligatorio: false, alias: ['notas', 'observaciones', 'detalle', 'comentarios'], ejemplo: 'Fila de ejemplo: puedes dejarla, no se importa' },
+  { campo: 'notas',       etiqueta: 'Notas',       obligatorio: false, alias: ['notas', 'observaciones', 'detalle', 'comentarios'], ejemplo: 'Fila de ejemplo: no se importa' },
 ]
 
 function crearAdaptadorGastoCobro(tipo: TipoRegistro): Adaptador {
@@ -119,7 +119,7 @@ function crearAdaptadorGastoCobro(tipo: TipoRegistro): Adaptador {
         {
           campo: 'importe_consolidado', etiqueta: `Importe en ${cons}`, obligatorio: false,
           alias: [`importe en ${cons.toLowerCase()}`, `total en ${cons.toLowerCase()}`, 'importe consolidado', 'monto consolidado'],
-          ayuda: `Opcional, en vez de la tasa: el mismo importe ya pasado a ${cons} a la fecha de la fila. De ahí se calcula la tasa. Si pones los dos, manda «Tasa a ${cons}».`,
+          ayuda: `Opcional, en vez de la tasa: el mismo importe ya pasado a ${cons} a la fecha de la fila. De ahí se calcula la tasa. Si vienen los dos, manda «Tasa a ${cons}».`,
         },
       ]
     },

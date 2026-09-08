@@ -23,7 +23,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!data.negocio) return {}
   return {
     title:       `Reservar — ${data.negocio.nombre}`,
-    description: `Reserva tu mesa en ${data.negocio.nombre}.`,
+    description: `Reserve su mesa en ${data.negocio.nombre}.`,
   }
 }
 

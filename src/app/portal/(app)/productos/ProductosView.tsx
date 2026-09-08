@@ -63,7 +63,7 @@ function CategoriaModal({ categoria, modo, onClose, onSaved }: {
     startTransition(async () => {
       const res = await guardarCategoria(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       onSaved()
     })
   }
@@ -135,8 +135,8 @@ function ConfirmArchivar({ nombre, existencias, unidad, onConfirm, onClose, isPe
         </div>
         <div className="modal-body">
           <p className="modal-body-text">
-            ¿Archivar <strong>{nombre}</strong>? No aparecerá en listas activas,
-            pero podrás restaurarlo cuando lo necesites.
+            ¿Archivar <strong>{nombre}</strong>? Dejará de aparecer en las listas activas
+            y se puede restaurar en cualquier momento.
           </p>
           {/* No se prohíbe archivar con existencias, pero se dice: hoy se hace a
               ciegas y la mercancía se queda ahí sin que nadie vuelva a mirarla. */}
@@ -175,7 +175,7 @@ function ConfirmEliminar({ nombre, onConfirm, onClose, isPending }: {
         <div className="modal-body">
           <p className="modal-body-text">
             ¿Eliminar <strong>{nombre}</strong> para siempre? Esta acción no se puede deshacer.
-            Solo es posible si no tiene ventas, compras, movimientos ni está en tu catálogo.
+            Solo es posible si no tiene ventas, compras ni movimientos, y no está en el catálogo.
           </p>
         </div>
         <div className="modal-footer">
@@ -558,14 +558,14 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
             // Servicios era la única pantalla gemela sin él.
             <div className="page-title-ia">
               <h1 className="page-title">{tituloPagina}</h1>
-              <IaTouchpoint tipo="servicios" descripcion="un análisis de tu catálogo de servicios" />
+              <IaTouchpoint tipo="servicios" descripcion="un análisis de el catálogo de servicios" />
             </div>
           )}
           <p className="page-subtitle">
-            {esMixto         ? 'Todo lo que vendes —lo que se toca y lo que se hace— con su precio. Se carga solo en la rejilla del punto de venta.'
-             : !esProducto    ? 'Tus servicios y su precio. Se cargan solos en ofertas y facturas.'
-             : conExistencias ? 'Tus productos físicos, con su precio y existencias.'
-             : 'Tus artículos y su precio. Se cargan solos en la rejilla del punto de venta.'}
+            {esMixto         ? 'Todo lo que se vende —productos y servicios— con su precio. Se carga solo en la rejilla del punto de venta.'
+             : !esProducto    ? 'Los servicios y su precio. Se cargan solos en ofertas y facturas.'
+             : conExistencias ? 'Los productos físicos, con su precio y existencias.'
+             : 'Los artículos y su precio. Se cargan solos en la rejilla del punto de venta.'}
           </p>
         </div>
         <div className="tes-header-actions">
@@ -628,8 +628,8 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
             <div className="alert alert-warning alert-cta">
               <span className="alert-cta-texto">
                 {sinCategoriaCount === 1
-                  ? '1 producto sin categoría no se agrupa en tu informe de ingresos'
-                  : `${sinCategoriaCount} productos sin categoría no se agrupan en tu informe de ingresos`}
+                  ? '1 producto sin categoría no se agrupa en el informe de ingresos'
+                  : `${sinCategoriaCount} productos sin categoría no se agrupan en el informe de ingresos`}
                 <span className="alert-cta-nota">Se venden y se cobran igual; lo único que falta es saber en qué línea suman.</span>
               </span>
               <Link href={`?cat=${SIN_CATEGORIA}`} className="btn btn-aviso btn-sm">Ver cuáles son</Link>
@@ -650,7 +650,7 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
               <div className="mon-empty">
                 <Package size={36} strokeWidth={1} opacity={0.25} />
                 <p>{data.productos.length === 0
-                  ? `Aún no hay ${tituloPagina.toLowerCase()} en el catálogo. Crea el primero.`
+                  ? `Sin ${tituloPagina.toLowerCase()} en el catálogo.`
                   : 'No hay resultados para los filtros seleccionados.'}</p>
               </div>
             ) : (
@@ -858,7 +858,7 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
           {data.categorias.length === 0 ? (
             <div className="mon-empty">
               <Tag size={36} strokeWidth={1} opacity={0.25} />
-              <p>Aún no hay categorías. Crea la primera para organizar tu catálogo.</p>
+              <p>Sin categorías.</p>
             </div>
           ) : (
             <div className="table-wrapper">
@@ -992,7 +992,7 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
       {confirmLote === 'archivar' && (
         <ConfirmDialog
           title={`¿Archivar ${sel.count} ${sustantivo}${plural(sel.count)}?`}
-          body="No aparecerán en el catálogo activo, pero podrás restaurarlos cuando quieras."
+          body="Dejarán de aparecer en el catálogo activo y se pueden restaurar en cualquier momento."
           confirmLabel="Archivar" danger
           onCancel={() => setConfirmLote(null)}
           onConfirm={doArchivarLote}

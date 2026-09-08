@@ -18,7 +18,7 @@ export default async function RrhhPage() {
         <CupoNivel dim="trabajadores" />
         {!puedeEditar && <SolicitarAcceso modulo="rrhh" />}
       </PersonalView>
-      <ContabilidadHint genera="tus nóminas" />
+      <ContabilidadHint genera="las nóminas" />
     </>
   )
 }

@@ -13,7 +13,7 @@ import { PROMPTS_INSIGHT_DEFAULT, claveSeccion, type TipoInsight } from './docum
 
 export type { TipoInsight }
 
-const FALLBACK_VACIO = 'No pude generar el análisis ahora mismo. Vuelve a intentarlo en un momento.'
+const FALLBACK_VACIO = 'El servicio de IA no responde en este momento.'
 
 // El system prompt es el documento de personalidad editable desde el admin
 // (ctx.instrucciones), con los placeholders rellenados. Ver INSTRUCCIONES_DEFAULT.

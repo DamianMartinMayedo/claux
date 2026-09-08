@@ -158,7 +158,7 @@ export function EmpleadoModal({
     startTransition(async () => {
       const res = await guardarEmpleado(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       onSaved()
     })
   }
@@ -192,7 +192,7 @@ export function EmpleadoModal({
               <div className="input-group ter-col-span-2">
                 <div className="form-label-with-help">
                   <label>Caduca el</label>
-                  <FormHelp text="Te avisamos antes de que venza." label="Qué pasa con la caducidad" />
+                  <FormHelp text="Genera un aviso antes del vencimiento." label="Qué pasa con la caducidad" />
                 </div>
                 <input className="input" name="documento_vencimiento" type="date"
                   defaultValue={empleado?.documento_vencimiento?.split('T')[0] ?? ''} />
@@ -282,7 +282,7 @@ export function EmpleadoModal({
                 {opcionesMoneda.length === 0 ? (
                   <>
                     <input className="input input-static" readOnly value="Sin monedas activas" />
-                    <span className="input-hint">Crea una moneda en Monedas y Tasas primero.</span>
+                    <span className="input-hint">Se requiere una moneda activa en Monedas y tasas.</span>
                   </>
                 ) : (
                   <>
@@ -403,7 +403,7 @@ export function BajaModal({
     startTransition(async () => {
       const res = await darBajaEmpleado(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       onSaved()
     })
   }
@@ -599,7 +599,7 @@ export default function PersonalView({ data, puedeEditar, children }: { data: Pe
     startTransition(async () => {
       const res = await reactivarEmpleado(empleado_id)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       router.refresh()
     })
   }
@@ -610,7 +610,7 @@ export default function PersonalView({ data, puedeEditar, children }: { data: Pe
     startTransition(async () => {
       const res = await eliminarEmpleado(confirmDel.empleado_id)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setConfirmDel(null); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); setConfirmDel(null); return }
       setConfirmDel(null); router.refresh()
     })
   }
@@ -622,7 +622,7 @@ export default function PersonalView({ data, puedeEditar, children }: { data: Pe
         <div>
           <div className="page-title-ia">
             <h1 className="page-title">Personal</h1>
-            <IaTouchpoint tipo="rrhh" descripcion="un análisis de tu personal" />
+            <IaTouchpoint tipo="rrhh" descripcion="un análisis de el personal" />
           </div>
           <p className="page-subtitle">Empleados, contratos y bajas. {activos} {activos === 1 ? 'persona activa' : 'personas activas'}.</p>
         </div>
@@ -663,7 +663,7 @@ export default function PersonalView({ data, puedeEditar, children }: { data: Pe
           <div className="mon-empty">
             <Users size={40} strokeWidth={1} opacity={0.2} />
             <p>{data.empleados.length === 0
-              ? 'Aún no hay empleados. Da de alta al primero para gestionar tu personal y su nómina.'
+              ? 'Sin empleados. Da de alta al primero para gestionar el personal y su nómina.'
               : 'No hay empleados para los filtros seleccionados.'}</p>
           </div>
         ) : (

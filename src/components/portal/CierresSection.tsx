@@ -42,7 +42,7 @@ export default function CierresSection({ cierres, iaActiva, compartidas }: {
     startTransition(async () => {
       const res = await guardarCierre(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess('Cierre guardado.'); setMostrarForm(false); router.refresh()
     })
   }
@@ -54,7 +54,7 @@ export default function CierresSection({ cierres, iaActiva, compartidas }: {
     startTransition(async () => {
       const res = await eliminarCierre(c.cierre_id)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess('Cierre eliminado.'); router.refresh()
     })
   }
@@ -89,7 +89,7 @@ export default function CierresSection({ cierres, iaActiva, compartidas }: {
             <div className="input-group ter-col-span-2">
               <div className="form-label-with-help">
                 <label>Hasta</label>
-                <FormHelp text="Déjalo vacío si es un solo día." label="Cómo indicar un solo día" />
+                <FormHelp text="En blanco, si es un solo día." label="Cómo indicar un solo día" />
               </div>
               <input className="input" name="fecha_hasta" type="date" min={hoyISO()} />
             </div>
@@ -111,7 +111,7 @@ export default function CierresSection({ cierres, iaActiva, compartidas }: {
         <div className="res-conf-pad-top">
           {/* Un párrafo NO va dentro de `ter-form-grid`: es una rejilla de 6 columnas
               y el texto caía en una sola, en una tira estrecha. */}
-          <span className="input-hint">No hay días de cierre. Añade festivos, vacaciones o cierres puntuales para bloquear reservas y citas esos días.</span>
+          <span className="input-hint">Sin días de cierre. Festivos, vacaciones y cierres puntuales bloquean las reservas y citas de esos días.</span>
         </div>
       ) : (
         <div className="table-wrapper">

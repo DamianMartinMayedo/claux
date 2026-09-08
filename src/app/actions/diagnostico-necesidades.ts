@@ -37,7 +37,7 @@ export async function crearNecesidad(formData: FormData) {
 
   if (!clave || !etiqueta) return { ok: false, error: 'Clave y etiqueta son obligatorias.' }
   if (!CLAVE_RE.test(clave)) return { ok: false, error: 'Clave inválida: minúsculas, números y _.' }
-  if (modulos.length === 0) return { ok: false, error: 'Selecciona al menos un módulo a recomendar.' }
+  if (modulos.length === 0) return { ok: false, error: 'Falta seleccionar al menos un módulo a recomendar.' }
 
   const { data: existente } = await supabase
     .from('diagnostico_necesidades')
@@ -80,7 +80,7 @@ export async function editarNecesidad(formData: FormData) {
   const activa = formData.get('activa') === 'true'
 
   if (!clave || !etiqueta) return { ok: false, error: 'Clave y etiqueta son obligatorias.' }
-  if (modulos.length === 0) return { ok: false, error: 'Selecciona al menos un módulo a recomendar.' }
+  if (modulos.length === 0) return { ok: false, error: 'Falta seleccionar al menos un módulo a recomendar.' }
 
   const { error } = await supabase
     .from('diagnostico_necesidades')

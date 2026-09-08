@@ -90,7 +90,7 @@ export async function enviarEmail(input: EnviarEmailInput): Promise<{ ok: boolea
         destinatario,
         tipo:         input.tipo,
         estado:       'fallido',
-        error:        err instanceof Error ? err.message : 'Error desconocido',
+        error:        err instanceof Error ? err.message : 'No se ha podido completar la operación',
       })
     } catch {
       // Ni el log debe romper el flujo principal.

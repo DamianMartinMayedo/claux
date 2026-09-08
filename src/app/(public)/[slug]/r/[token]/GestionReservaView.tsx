@@ -35,7 +35,7 @@ export default function GestionReservaView({ data }: { data: ReservaPublicaToken
   const [error, setError] = useState('')
   const [cancelada, setCancelada] = useState(false)
 
-  const titulo  = data.tipo === 'cita' ? 'Tu cita' : 'Tu reserva'
+  const titulo  = data.tipo === 'cita' ? 'Su cita' : 'Su reserva'
   // CIT-10: los mensajes del estado no cancelable decían «reserva» aunque fuera una
   // cita, y el tipo ya viajaba en `data.tipo`.
   const palabra = data.tipo === 'cita' ? 'cita' : 'reserva'
@@ -68,7 +68,7 @@ export default function GestionReservaView({ data }: { data: ReservaPublicaToken
         {cancelada ? (
           <div className="rp-success">
             <Check size={36} strokeWidth={2} className="rp-success-icon" />
-            <p className="rp-hint">Hemos cancelado tu {data.tipo === 'cita' ? 'cita' : 'reserva'}. Gracias por avisar.</p>
+            <p className="rp-hint">La {data.tipo === 'cita' ? 'cita' : 'reserva'} queda cancelada. Gracias por avisar.</p>
           </div>
         ) : cancelable ? (
           <>
@@ -78,7 +78,7 @@ export default function GestionReservaView({ data }: { data: ReservaPublicaToken
               </button>
             ) : (
               <>
-                <p className="rp-hint">¿Seguro que quieres cancelar? No se puede deshacer.</p>
+                <p className="rp-hint">La cancelación no se puede deshacer. ¿Confirmar?</p>
                 <div className="rp-confirm-row">
                   <button type="button" className="rp-btn-secondary" onClick={() => setConfirmando(false)} disabled={isPending}>
                     No, mantener
@@ -97,7 +97,7 @@ export default function GestionReservaView({ data }: { data: ReservaPublicaToken
               : estado === 'RECHAZADA' ? `Esta ${palabra} no fue aceptada.`
               : estado === 'CADUCADA' ? `Esta ${palabra} caducó sin confirmarse.`
               : data.fecha < hoyEnTz() ? `Esta ${palabra} ya pasó.`
-              : `Esta ${palabra} ya no se puede cancelar en línea. Contacta con el negocio.`}
+              : `Esta ${palabra} ya no se puede cancelar en línea. Contacte con el negocio.`}
           </p>
         )}
       </div>

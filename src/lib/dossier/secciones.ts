@@ -29,33 +29,33 @@ export interface EspecSeccion {
 export const SECCIONES_RELATO: EspecSeccion[] = [
   {
     clave: 'problema', etiqueta: 'El problema', orden: 10,
-    pregunta: '¿Qué problema le resuelves a tus clientes?',
-    ayuda: 'Lo que le pasaba al cliente antes de existir tú. Concreto, no grandilocuente.',
+    pregunta: '¿Qué problema resuelve para sus clientes?',
+    ayuda: 'Lo que le pasaba al cliente antes de que existiera el negocio. Concreto, no grandilocuente.',
   },
   {
     clave: 'solucion', etiqueta: 'La solución', orden: 20,
-    pregunta: '¿Cómo lo resuelves?',
-    ayuda: 'Qué haces exactamente y por qué funciona.',
+    pregunta: '¿Cómo lo resuelve?',
+    ayuda: 'Qué hace exactamente el negocio y por qué funciona.',
   },
   {
     clave: 'mercado', etiqueta: 'El mercado', orden: 30,
-    pregunta: '¿Quiénes son tus clientes y cuántos hay?',
-    ayuda: 'A quién le vendes y cuánta gente así hay cerca de ti.',
+    pregunta: '¿Quiénes son sus clientes y cuántos hay?',
+    ayuda: 'A quién le vende y cuánta gente así hay cerca.',
   },
   {
     clave: 'modelo', etiqueta: 'El modelo de negocio', orden: 50,
-    pregunta: '¿Cómo ganas dinero?',
-    ayuda: 'De dónde sale cada peso: qué vendes, a qué precio, cada cuánto.',
+    pregunta: '¿Cómo gana dinero?',
+    ayuda: 'De dónde sale cada peso: qué se vende, a qué precio, cada cuánto.',
   },
   {
     clave: 'equipo', etiqueta: 'El equipo', orden: 70,
     pregunta: '¿Quién está detrás?',
-    ayuda: 'Quiénes sois y por qué vosotros podéis sacar esto adelante.',
+    ayuda: 'Quién forma el equipo y por qué puede sacar esto adelante.',
   },
   {
     clave: 'cierre', etiqueta: 'Qué busco', orden: 80,
-    pregunta: '¿Cuánto necesitas y para qué?',
-    ayuda: 'La cifra y en qué la vas a gastar. Un inversor lee esto primero.',
+    pregunta: '¿Cuánto necesita y para qué?',
+    ayuda: 'La cifra y en qué se va a gastar. Un inversor lee esto primero.',
   },
 ]
 

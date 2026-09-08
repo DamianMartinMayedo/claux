@@ -220,7 +220,7 @@ export function construirFilasPL(r: ResultadoPL, ant: ResultadoPL | null): FilaP
   // invertir menos, y teñirlo de rojo sería opinar sobre una decisión del dueño.
   if (r.fuera.length > 0) {
     filas.push(fila(
-      'fuera', 'aparte', 'No afecta a tu resultado', r.total_fuera, ing,
+      'fuera', 'aparte', 'No afecta al resultado', r.total_fuera, ing,
       anteriorDe(ant?.total_fuera), 'neutro', false,
     ))
     const fueraAnt = (rol: RolPL) => ant?.fuera.find(b => b.rol === rol)

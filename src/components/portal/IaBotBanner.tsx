@@ -21,8 +21,8 @@ export default function IaBotBanner({
         <span className="ia-banner-title">Asistente IA{activa ? ' · activo' : ''}</span>
         <span className="ia-banner-desc">
           {activa
-            ? `Gestiona ${nombre} por Telegram en lenguaje natural, dentro de tus reglas y cierres.`
-            : `Deja que la IA gestione ${nombre} por Telegram en lenguaje natural.`}
+            ? `Gestión de ${nombre} por Telegram en lenguaje natural, dentro de las reglas y cierres definidos.`
+            : `La IA puede gestionar ${nombre} por Telegram en lenguaje natural.`}
         </span>
       </div>
       <label className="switch ia-banner-switch">

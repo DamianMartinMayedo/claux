@@ -1103,8 +1103,8 @@ export async function resumirClienteIa(clientId: string): Promise<
   const alta = String(cli.created_at ?? '').slice(0, 10)
   const dias = alta ? Math.round((Date.parse(`${hoy}T00:00:00Z`) - Date.parse(`${alta}T00:00:00Z`)) / 86_400_000) : null
   const antiguedad = dias == null ? 'no consta cuándo se dio de alta'
-    : dias < 60 ? `con nosotros desde hace ${dias} días`
-    : `con nosotros desde hace ${Math.round(dias / 30)} meses`
+    : dias < 60 ? `cliente desde hace ${dias} días`
+    : `cliente desde hace ${Math.round(dias / 30)} meses`
 
   const ultimoDia = ((uso ?? []) as { dia: string }[])[0]?.dia ?? null
   const actividad = !ultimoDia

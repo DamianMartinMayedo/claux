@@ -296,7 +296,7 @@ export async function registrarPagoDoc(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -310,7 +310,7 @@ export async function registrarPagoDoc(
 
   if (doc_tipo !== 'FACTURA' && doc_tipo !== 'REGISTRO') return { ok: false, error: 'Documento no válido.' }
   if (!doc_id)                          return { ok: false, error: 'Documento no válido.' }
-  if (!cuenta_id)                       return { ok: false, error: 'Debes seleccionar una cuenta.' }
+  if (!cuenta_id)                       return { ok: false, error: 'Falta la cuenta.' }
   if (isNaN(montoRaw) || montoRaw <= 0) return { ok: false, error: 'El monto debe ser un número positivo.' }
 
   // Datos del documento (monto, moneda, sentido, concepto)
@@ -400,7 +400,7 @@ export async function registrarPagoDoc(
 export async function anularPagoDoc(movimiento_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 

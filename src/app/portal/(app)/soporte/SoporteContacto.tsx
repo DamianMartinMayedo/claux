@@ -71,7 +71,7 @@ export default function SoporteContacto({
           <form onSubmit={handleSubmit} noValidate>
             <div className="modal-body modal-body-form">
               <p className="text-sm-muted">
-                Cuéntanos en qué te ayudamos y te respondemos al correo de tu cuenta.
+                El equipo de soporte responde al correo de la cuenta.
               </p>
 
               <div className="input-group">
@@ -93,7 +93,7 @@ export default function SoporteContacto({
                   name="mensaje"
                   rows={6}
                   maxLength={4000}
-                  placeholder="Cuéntanos con detalle en qué te ayudamos…"
+                  placeholder="Descripción detallada de la consulta…"
                   required
                 />
               </div>

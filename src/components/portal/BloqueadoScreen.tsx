@@ -17,15 +17,15 @@ import type { MotivoBloqueo } from '@/lib/clientes/ciclo-vida'
 const MENSAJES: Record<MotivoBloqueo, { titulo: string; texto: string }> = {
   DESACTIVADO: {
     titulo: 'Cuenta suspendida',
-    texto:  'Tu suscripción está suspendida. Pide la renovación y te contactamos para reactivarla; tus datos siguen aquí.',
+    texto:  'La suscripción está suspendida. Al solicitar la renovación, el equipo de CLAUX contacta para reactivarla; los datos siguen intactos.',
   },
   VENCIDO: {
     titulo: 'Suscripción vencida',
-    texto:  'Tu período de suscripción ha expirado. Pide la renovación y sigues donde lo dejaste; tus datos siguen aquí.',
+    texto:  'El período de suscripción ha expirado. Al renovar, todo continúa donde estaba; los datos siguen intactos.',
   },
   EXPIRADO: {
     titulo: 'Suscripción vencida',
-    texto:  'Tu período de suscripción ha expirado. Pide la renovación y sigues donde lo dejaste; tus datos siguen aquí.',
+    texto:  'El período de suscripción ha expirado. Al renovar, todo continúa donde estaba; los datos siguen intactos.',
   },
 }
 
@@ -56,11 +56,11 @@ export default function BloqueadoScreen({ motivo, correo }: { motivo: MotivoBloq
     startTransition(async () => {
       const r = await pedirReactivacion()
       await ld.dismiss()
-      if (!r.ok) { toastError(r.error ?? 'No se pudo enviar. Escríbenos a ' + correo); return }
+      if (!r.ok) { toastError(r.error ?? 'No se ha podido enviar. Correo de contacto: ' + correo); return }
       setPedido(true)
       toastSuccess(r.yaPedido
-        ? 'Ya teníamos tu petición de renovación. Te contactamos.'
-        : 'Renovación pedida. Te contactamos por correo.')
+        ? 'La petición de renovación ya estaba registrada.'
+        : 'Renovación solicitada. El equipo de CLAUX contactará por correo.')
     })
   }
 
@@ -75,7 +75,7 @@ export default function BloqueadoScreen({ motivo, correo }: { motivo: MotivoBloq
       {pedido ? (
         <p className="bloqueado-hecho">
           <CheckCircle2 size={16} strokeWidth={2} />
-          Recibimos tu petición de renovación. Te contactamos por correo lo antes posible.
+          Petición de renovación recibida. El equipo de CLAUX contactará por correo lo antes posible.
         </p>
       ) : (
         <button type="button" className="btn btn-primary" onClick={contactar} disabled={enviando}>
@@ -90,7 +90,7 @@ export default function BloqueadoScreen({ motivo, correo }: { motivo: MotivoBloq
           otra cosa. Con «Contactar con CLAUX» arriba y «o escríbenos» debajo parecían la
           misma cosa dos veces, y el dueño se paraba a elegir entre dos caminos iguales. */}
       <p className="bloqueado-texto">
-        ¿Otra cosa? Escríbenos a <a href={`mailto:${correo}`} className="link-primary">{correo}</a>.
+        Para cualquier otra consulta: <a href={`mailto:${correo}`} className="link-primary">{correo}</a>.
       </p>
     </div>
   )

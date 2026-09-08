@@ -91,7 +91,7 @@ function PagoModal({
     startTransition(async () => {
       const res = await registrarPagoDoc(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       onChanged()
     })
   }
@@ -101,7 +101,7 @@ function PagoModal({
     startTransition(async () => {
       const res = await anularPagoDoc(movimiento_id)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       onChanged()
     })
   }
@@ -336,7 +336,7 @@ export default function CuentasView({ data, puedeEditar }: { data: CuentasPageDa
         <div>
           <div className="page-title-ia">
             <h1 className="page-title">{titulo}</h1>
-            <IaTouchpoint tipo="deudas" descripcion={esCobro ? 'un análisis de lo que te deben' : 'un análisis de lo que debes'} />
+            <IaTouchpoint tipo="deudas" descripcion={esCobro ? 'un análisis de los cobros pendientes' : 'un análisis de las deudas'} />
           </div>
           <p className="page-subtitle">{subtitulo}</p>
         </div>

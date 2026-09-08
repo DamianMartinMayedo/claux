@@ -156,7 +156,7 @@ export async function crearFacturaBorrador(
 ): Promise<{ ok: true; factura_id: string; numero: string } | { ok: false; error: string }> {
   const lineas  = input.lineas
   const ajustes = input.ajustes ?? []
-  if (lineas.length === 0) return { ok: false, error: 'Añade al menos una línea.' }
+  if (lineas.length === 0) return { ok: false, error: 'Se requiere al menos una línea.' }
 
   const totales    = calcularTotales(lineas, ajustes)
   const factura_id = generarIdDocumento('FAC')

@@ -62,7 +62,7 @@ export default async function SoportePage({
         <div>
           <h1 className="page-title">Ayuda y soporte</h1>
           <p className="page-subtitle">
-            Resuelve tu duda con las preguntas frecuentes y las guías, o escríbenos y te ayudamos.
+            Preguntas frecuentes, guías y contacto directo con el equipo de soporte.
           </p>
         </div>
         <div className="btn-group-wrap">
@@ -75,7 +75,7 @@ export default async function SoportePage({
         <div className="card">
           <h2 className="detail-section-title">Preguntas frecuentes</h2>
           {sinFaq ? (
-            <p className="text-sm-muted">Aún no hay preguntas frecuentes disponibles.</p>
+            <p className="text-sm-muted">Sin preguntas frecuentes disponibles.</p>
           ) : (
             <>
               {generales.length > 0 && (

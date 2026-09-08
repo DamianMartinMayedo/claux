@@ -71,7 +71,7 @@ export function SelectorProductoCompra({
           {filtrados.length === 0 ? (
             <div className="ven-empty-mini mt-3">
               {productos.length === 0
-                ? 'Tu catálogo está vacío. Escribe las líneas a mano.'
+                ? 'El catálogo está vacío: las líneas se escriben manualmente.'
                 : 'Ningún producto coincide.'}
             </div>
           ) : (

@@ -16,7 +16,7 @@ export default function CamposTarifa({ precioIn, precioOut }: { precioIn?: numbe
       <div className="input-group">
         <div className="form-label-with-help">
           <label htmlFor="mod-precio-in">Precio entrada (USD / millón)</label>
-          <FormHelp text="Lo que cobra el proveedor por millón de tokens enviados. Déjalo vacío si no lo sabes: sin tarifa no se estima el coste." label="Qué es el precio de entrada" />
+          <FormHelp text="Lo que cobra el proveedor por millón de tokens enviados. Puede quedar en blanco: sin tarifa no se estima el coste." label="Qué es el precio de entrada" />
         </div>
         <input id="mod-precio-in" name="precio_in" type="number" min="0" step="0.0001"
                className="input" defaultValue={precioIn ?? ''} placeholder="p. ej. 0,30" />

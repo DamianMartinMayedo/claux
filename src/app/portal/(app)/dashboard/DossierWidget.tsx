@@ -41,8 +41,8 @@ export default function DossierWidget({ data }: { data: DossierResumen }) {
 
       {data.vacio ? (
         <p className="dash-muted">
-          Convierte tus números en una presentación y un estado de resultados para enseñar
-          a un inversor o un socio.
+          Convierte los números del negocio en una presentación y un estado de resultados
+          para un inversor o un socio.
         </p>
       ) : (
         <>
@@ -70,7 +70,7 @@ export default function DossierWidget({ data }: { data: DossierResumen }) {
             <p className="dash-alerta">
               <AlertTriangle size={14} strokeWidth={2} aria-hidden="true" />
               {data.desfasados === 1
-                ? 'Tu enlace publicado muestra números viejos.'
+                ? 'El enlace publicado muestra números viejos.'
                 : `${data.desfasados} enlaces publicados muestran números viejos.`}
               {' '}Actualízalos antes de volver a compartirlos.
             </p>

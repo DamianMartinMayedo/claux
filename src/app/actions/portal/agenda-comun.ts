@@ -13,7 +13,7 @@
 //
 // Vivían en `reservas.ts` bajo `puedeEditarModulo('reservas_citas')`, así que un
 // cliente con SOLO `agenda` —la peluquería, o sea el caso canónico de Citas— recibía
-// «No tienes permiso para editar en este módulo» al guardar su enlace público. Sin
+// «Sin permiso para editar en este módulo» al guardar su enlace público. Sin
 // slug no existe `/[slug]/citas`: la mitad pública de lo que pagó no arrancaba.
 // El candado correcto es «alguna de las dos», el mismo patrón que ya usan los
 // terceros compartidos entre módulos.
@@ -29,7 +29,7 @@ import { enviarMensaje } from '@/lib/telegram/enviar'
 const MODULOS_AGENDA = ['reservas_citas', 'agenda']
 const MODULOS_SLUG   = ['reservas_citas', 'agenda', 'catalogo_qr']
 
-const SIN_PERMISO = 'No tienes permiso para editar en este módulo.'
+const SIN_PERMISO = 'Sin permiso para editar en este módulo.'
 
 // Cada bot es de SU funcionalidad, y su candado también.
 const MODULO_DE_COLUMNA: Record<BotColumna, string> = {
@@ -327,14 +327,14 @@ export async function enviarPruebaBot(columna: BotColumna): Promise<{ ok: boolea
   if (!cfg.token)  return { ok: false, error: 'No hay un bot configurado.' }
   if (!cfg.activo) return { ok: false, error: 'El bot está desactivado.' }
   if (!cfg.notificar_owner_chat_id) {
-    return { ok: false, error: `Tu chat no está vinculado. Abre el bot en Telegram y escribe: /start ${cfg.codigo_vinculo ?? ''}` }
+    return { ok: false, error: `El chat no está vinculado. En el bot de Telegram: /start ${cfg.codigo_vinculo ?? ''}` }
   }
 
   const qué = columna === 'bot_config' ? 'reservas' : 'citas'
   const enviado = await enviarMensaje(
     cfg.token,
     cfg.notificar_owner_chat_id,
-    `🔔 Prueba de CLAUX\nSi lees esto, los avisos de ${qué} te llegan bien por aquí.`,
+    `Prueba de CLAUX\nEste chat recibe los avisos de ${qué}.`,
     undefined,
     { clientId: session.client_id, columna, tipo: 'prueba' },
   )

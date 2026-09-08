@@ -134,7 +134,7 @@ export default function PasoDesglose({
       const res = await guardarDesglose(fd)
       await ld.dismiss()
       if (res.ok) {
-        if (descuadra) toastWarning('Guardado. Ojo: algún grupo no cuadra con tus totales; en el documento saldrían conceptos que no suman.')
+        if (descuadra) toastWarning('Guardado, pero algún grupo no cuadra con los totales: en el documento saldrían conceptos que no suman.')
         else toastSuccess('Desglose guardado')
         onGuardado?.()
       }
@@ -149,19 +149,19 @@ export default function PasoDesglose({
       <div className="dos-body">
         <h2 className="dos-section-title">El desglose</h2>
         <p className="dos-section-hint">
-          Tus totales ya están; esto dice <strong>en qué</strong> se va el dinero, que es lo primero
-          que pregunta quien lee tu dossier. Es del <strong>período entero</strong>, no de cada mes:
-          unas pocas líneas y listo.
+          Con los totales puestos, esto dice <strong>en qué</strong> se va el dinero, que es lo primero
+          que pregunta quien lee el dossier. Es del <strong>período entero</strong>, no de cada mes:
+          bastan unas pocas líneas.
         </p>
 
         {!tieneBase && (
           <AvisoContabilidad
-            texto="Con Contabilidad, CLAUX saca este desglose de tus gastos reales y rellena estas líneas solo — y lo que ya escribiste se conserva."
+            texto="Con Contabilidad, CLAUX saca este desglose de los gastos reales y rellena estas líneas solo — y lo que ya escribiste se conserva."
           />
         )}
 
         {sinNumeros ? (
-          <p className="dos-vacio">Primero escribe tus números en el paso anterior: el desglose se cuadra contra ellos.</p>
+          <p className="dos-vacio">Faltan los números del paso anterior: el desglose se cuadra contra ellos.</p>
         ) : (
           <>
             {GRUPOS_PL.map(g => {
@@ -209,7 +209,7 @@ export default function PasoDesglose({
                     {/* Conciliación en vivo: sin esto, un desglose tecleado podría
                         contradecir los totales del propio documento. */}
                     {cuadrado ? (
-                      <span className="dos-desg-ok">Cuadra con tus números</span>
+                      <span className="dos-desg-ok">Cuadra con los números</span>
                     ) : (
                       <span className="dos-desg-resto">
                         Has desglosado {fmt(suma)} de {fmt(total)} ·

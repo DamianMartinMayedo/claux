@@ -141,7 +141,7 @@ function CuentaModal({
     startTransition(async () => {
       const res = await guardarCuenta(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       onSaved()
     })
   }
@@ -191,7 +191,7 @@ function CuentaModal({
                   ) : (
                     <select className="input" name="empresa_id"
                       defaultValue={cuenta?.empresa_id ?? ''} required>
-                      <option value="">Selecciona una empresa…</option>
+                      <option value="">— Seleccionar empresa —</option>
                       {empresas.map(e => (
                         <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>
                       ))}
@@ -208,7 +208,7 @@ function CuentaModal({
                   ) : monedas.length === 0 ? (
                     <>
                       <input className="input input-static" readOnly value="Sin monedas activas" />
-                      <span className="input-hint">Crea una moneda en Monedas y Tasas primero.</span>
+                      <span className="input-hint">Se requiere una moneda activa en Monedas y tasas.</span>
                     </>
                   ) : (
                     <select className="input" name="moneda" defaultValue="" required>
@@ -397,7 +397,7 @@ function MovimientoModal({
         fd.set('tasa_cambio', String(cambiaMoneda ? tasaCompleta : 1))
         const res = await registrarPagoDoc(fd)
         await ld.dismiss()
-        if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+        if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
         onSaved()
         return
       }
@@ -408,7 +408,7 @@ function MovimientoModal({
       fd.set('categoria_id', categoriaId)
       const res = await registrarMovimiento(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       onSaved()
     })
   }
@@ -452,7 +452,7 @@ function MovimientoModal({
                 <div className="input-group ter-col-full">
                   <div className="form-label-with-help">
                     <label>{esEgreso ? 'Pagar un pendiente' : 'Cobrar un pendiente'}</label>
-                    <FormHelp text="Los de la misma moneda aparecen primero. Elige uno para evitar duplicados." label="Cómo elegir el pendiente" />
+                    <FormHelp text="Los de la misma moneda aparecen primero. Seleccionar uno evita duplicados." label="Cómo elegir el pendiente" />
                   </div>
                   <select className="input" value={pendienteEfectivo} onChange={e => elegirPendiente(e.target.value)}>
                     <option value="">— Ninguno (registrar {labelRegistro} nuevo) —</option>
@@ -568,8 +568,8 @@ function MovimientoModal({
                       {rolElegido
                         ? ROL_PL_EFECTO[rolElegido]
                         : soloMueve
-                          ? `No cuenta en tu informe: solo cambia el saldo de la caja. Úsalo para corregir un conteo, no para un ${labelRegistro}.`
-                          : `Se registra como ${labelRegistro} sin categoría. Podrás clasificarlo después desde ${esEgreso ? 'Gastos' : 'Cobros'}.`}
+                          ? `No cuenta en el informe: solo cambia el saldo de la caja. Sirve para corregir un conteo, no para un ${labelRegistro}.`
+                          : `Se registra como ${labelRegistro} sin categoría. Se clasifica después desde ${esEgreso ? 'Gastos' : 'Cobros'}.`}
                     </span>
                   </div>
                 </>
@@ -619,7 +619,7 @@ function EditarMovimientoModal({
     startTransition(async () => {
       const res = await editarMovimiento(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess('Movimiento actualizado.')
       onSaved()
     })
@@ -668,8 +668,8 @@ function EditarMovimientoModal({
                     clasificaba nada —el informe se construye sobre los gastos y cobros—,
                     y decía lo contrario. El camino real se explica, no se esconde. */}
                 <span className="input-hint">
-                  Este movimiento solo mueve dinero. Si fue un gasto o un cobro, bórralo y
-                  vuelve a registrarlo eligiendo qué fue: así sí entra en tu informe.
+                  Este movimiento solo mueve dinero. Si fue un gasto o un cobro, hay que borrarlo
+                  y registrarlo de nuevo indicando qué fue: solo así entra en el informe.
                 </span>
               </div>
             </div>
@@ -816,7 +816,7 @@ function TransferenciaModal({
     startTransition(async () => {
       const res = await registrarTransferencia(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       onSaved()
     })
   }
@@ -877,7 +877,7 @@ function TransferenciaModal({
                           ? (tasaEsInversa
                               ? `Tasa inversa: ${tasaDisplay}`
                               : `Tasa vigente: ${tasaDisplay}`)
-                          : 'Sin tasa registrada. Introduce manualmente.'}
+                          : 'Sin tasa registrada. Se introduce manualmente.'}
                     </span>
                   </div>
                   <div className="input-group ter-col-span-3">
@@ -1059,7 +1059,7 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
     startTransition(async () => {
       const r = await fn()
       await ld.dismiss()
-      if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
+      if (!r.ok) { toastError(r.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess(mensaje(r.hechas))
       selCuentas.clear()
       router.refresh()
@@ -1214,7 +1214,7 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
         ? await anularPagoDoc(m.movimiento_id)
         : await eliminarMovimiento(m.movimiento_id)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess(esLiquidacion ? 'Liquidación anulada · cuenta reabierta' : 'Movimiento eliminado')
       setConfirmMov(null); router.refresh()
     })
@@ -1230,7 +1230,7 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
         <div>
           <div className="page-title-ia">
             <h1 className="page-title">Tesorería</h1>
-            <IaTouchpoint tipo="tesoreria" descripcion="un análisis de tu liquidez" />
+            <IaTouchpoint tipo="tesoreria" descripcion="un análisis de la liquidez" />
           </div>
           <p className="page-subtitle">Cajas, cuentas de banco y movimientos. Saldos en tiempo real por moneda.</p>
         </div>
@@ -1328,7 +1328,7 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
           <Wallet size={40} strokeWidth={1} opacity={0.2} />
           <p>
             {data.cuentas.length === 0
-              ? 'Aún no hay cuentas. Crea tu primera caja o cuenta de banco para empezar a registrar movimientos.'
+              ? 'Sin cuentas registradas.'
               : verArchivadas ? 'No hay cuentas archivadas.' : 'No hay cuentas activas.'}
           </p>
         </div>
@@ -1561,7 +1561,7 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
       {confirmLote && (
         <ConfirmDialog
           title={`¿Archivar ${selCuentas.count} cuenta${plural(selCuentas.count)}?`}
-          body="Sus saldos dejarán de contar en los totales. Los movimientos se conservan y podrás restaurarlas."
+          body="Sus saldos dejarán de contar en los totales. Los movimientos se conservan y se pueden restaurar."
           confirmLabel="Archivar" danger
           onCancel={() => setConfirmLote(false)}
           onConfirm={doArchivarLoteCuentas}

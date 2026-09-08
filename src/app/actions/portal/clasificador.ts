@@ -82,13 +82,13 @@ async function contextoDelPack(client_id: string) {
 async function correrSemilla(ensayo: boolean): Promise<ResumenSemilla> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (session.solo_lectura) return { ok: false, error: 'Cuenta de solo lectura.' }
   // Las categorías de gasto son del módulo `base`, igual que su alta manual
   // (`guardarCategoriaGasto`). Gatear la semilla más arriba dejaría al cliente
   // pudiendo crearlas a mano pero no de golpe, que es al revés de lo que hace
   // falta.
   if (!(await puedeEditarModulo('base'))) {
-    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+    return { ok: false, error: 'Sin permiso para editar en este módulo.' }
   }
 
   const { sector, respuestaServicios, llevaContador } = await contextoDelPack(session.client_id)
@@ -198,9 +198,9 @@ export async function preguntasDeSemilla(): Promise<{
 export async function guardarRespuestaServicios(valor: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (session.solo_lectura) return { ok: false, error: 'Cuenta de solo lectura.' }
   if (!(await puedeEditarModulo('base'))) {
-    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+    return { ok: false, error: 'Sin permiso para editar en este módulo.' }
   }
 
   const valido = PREGUNTA_SERVICIOS.opciones.some(o => o.valor === valor)
@@ -226,9 +226,9 @@ export async function guardarRespuestaServicios(valor: string): Promise<{ ok: bo
 export async function guardarLlevaContador(valor: boolean): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (session.solo_lectura) return { ok: false, error: 'Cuenta de solo lectura.' }
   if (!(await puedeEditarModulo('base'))) {
-    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+    return { ok: false, error: 'Sin permiso para editar en este módulo.' }
   }
 
   const db = createAdminClient()
@@ -697,9 +697,9 @@ export async function aplicarAdopcion(
 ): Promise<ResultadoAdopcion> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (session.solo_lectura) return { ok: false, error: 'Cuenta de solo lectura.' }
   if (!(await puedeEditarModulo('base'))) {
-    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+    return { ok: false, error: 'Sin permiso para editar en este módulo.' }
   }
   if (!ops.length) return { ok: false, error: 'No has marcado ningún cambio.' }
 
@@ -739,9 +739,9 @@ export async function marcarDepreciacionComoCoste(
 ): Promise<{ ok: boolean; error?: string; hechos?: number; omitidos?: number }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (session.solo_lectura) return { ok: false, error: 'Cuenta de solo lectura.' }
   if (!(await puedeEditarModulo('base'))) {
-    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+    return { ok: false, error: 'Sin permiso para editar en este módulo.' }
   }
   const pedidos = [...new Set(ids.filter(Boolean))]
   if (!pedidos.length) return { ok: false, error: 'No has marcado ningún apunte.' }
@@ -756,7 +756,7 @@ export async function marcarDepreciacionComoCoste(
   const ofrecibles = new Set(apuntes.map(a => a.registro_id))
   const aplicables = pedidos.filter(id => ofrecibles.has(id))
   if (!aplicables.length) {
-    return { ok: false, error: 'Ninguno de esos apuntes se puede reclasificar ya. Vuelve a abrir el asistente.' }
+    return { ok: false, error: 'Ninguno de esos apuntes se puede reclasificar ya: el asistente muestra los vigentes al abrirlo de nuevo.' }
   }
 
   const { error } = await db.from('gastos_cobros')
@@ -792,7 +792,7 @@ export async function proponerRolesIa(): Promise<
   if (!session)     return { ok: false, error: 'Sesión inválida.' }
   if (!session.imp) return { ok: false, error: 'Esta herramienta es del equipo de CLAUX.' }
   if (!(await puedeEditarModulo('base'))) {
-    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+    return { ok: false, error: 'Sin permiso para editar en este módulo.' }
   }
 
   const db = createAdminClient()
@@ -861,10 +861,10 @@ export async function aplicarRolesIa(args: { entradas: RolPropuesto[]; propuesta
 > {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (session.solo_lectura) return { ok: false, error: 'Cuenta de solo lectura.' }
   if (!session.imp)         return { ok: false, error: 'Esta herramienta es del equipo de CLAUX.' }
   if (!(await puedeEditarModulo('base'))) {
-    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+    return { ok: false, error: 'Sin permiso para editar en este módulo.' }
   }
   if (!args.entradas.length) return { ok: false, error: 'No has marcado ninguna categoría.' }
 
@@ -891,7 +891,7 @@ export async function aplicarRolesIa(args: { entradas: RolPropuesto[]; propuesta
     porRol.set(e.rol, g)
   }
   if (!porRol.size) {
-    return { ok: false, error: 'Ninguna de esas categorías se puede cambiar ya. Vuelve a pedir la propuesta.' }
+    return { ok: false, error: 'Ninguna de esas categorías se puede cambiar ya: la propuesta debe generarse de nuevo.' }
   }
 
   const cambios: string[] = []

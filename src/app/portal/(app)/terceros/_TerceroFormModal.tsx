@@ -239,7 +239,7 @@ export function TerceroFormModal({ tercero, empresas, monedas, defaultTipo, onCl
     startTransition(async () => {
       const res = await guardarTercero(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       onSaved(res.tercero_id)
     })
   }
@@ -286,7 +286,7 @@ export function TerceroFormModal({ tercero, empresas, monedas, defaultTipo, onCl
                   ) : (
                     <select className="input" name="empresa_id"
                       defaultValue={tercero?.empresa_id ?? ''} required>
-                      <option value="">Selecciona una empresa…</option>
+                      <option value="">— Seleccionar empresa —</option>
                       {empresas.map(e => (
                         <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>
                       ))}
@@ -350,8 +350,8 @@ export function TerceroFormModal({ tercero, empresas, monedas, defaultTipo, onCl
                     <label htmlFor="ter-moneda">Moneda predeterminada</label>
                     <FormHelp
                       text={monedas.length === 0
-                        ? 'Aún no tienes monedas: créalas en Monedas y Tasas.'
-                        : 'Tus monedas configuradas en Monedas y Tasas.'}
+                        ? 'Sin monedas: créalas en Monedas y Tasas.'
+                        : 'Las monedas configuradas en Monedas y Tasas.'}
                       label="Información sobre la moneda predeterminada" />
                   </div>
                   <MonedaSelect id="ter-moneda" name="moneda_defecto"

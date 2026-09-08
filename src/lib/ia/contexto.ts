@@ -40,7 +40,7 @@ export interface ContextoNegocio {
 }
 
 export const NOMBRE_AGENTE_DEFAULT = 'Claux'
-const TONO_DEFAULT = 'cercano y directo, como un asesor de confianza'
+const TONO_DEFAULT = 'profesional y directo, como un analista que conoce el negocio'
 
 // Nombre, tono e instrucciones del agente son GLOBALES (los fija el equipo CLAUX
 // en el admin), no por cliente. Se leen de settings.

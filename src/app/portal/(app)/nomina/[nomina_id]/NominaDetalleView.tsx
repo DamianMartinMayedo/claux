@@ -431,10 +431,10 @@ export default function NominaDetalleView({ detalle, tienePermiso }: { detalle: 
       const res = await guardarIncidenciaDeLinea(fd)
       await ld.dismiss()
       setGuardando(null)
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess('Guardado · línea recalculada')
       if (res.aviso) toastWarning(res.aviso)
-      if (res.reabierta) toastWarning('Se reabrió la nómina para aplicar tu corrección: revísala y vuelve a confirmarla.')
+      if (res.reabierta) toastWarning('La nómina se ha reabierto para aplicar la corrección: falta revisarla y confirmarla de nuevo.')
       setModalAgregar(false)
       router.refresh()
     })
@@ -450,9 +450,9 @@ export default function NominaDetalleView({ detalle, tienePermiso }: { detalle: 
       const res = await guardarDevengadoDeLinea(fd)
       await ld.dismiss()
       setGuardando(null)
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess('Guardado · línea recalculada')
-      if (res.reabierta) toastWarning('Se reabrió la nómina para aplicar tu corrección: revísala y vuelve a confirmarla.')
+      if (res.reabierta) toastWarning('La nómina se ha reabierto para aplicar la corrección: falta revisarla y confirmarla de nuevo.')
       router.refresh()
     })
   }
@@ -462,7 +462,7 @@ export default function NominaDetalleView({ detalle, tienePermiso }: { detalle: 
     startTransition(async () => {
       const res = await confirmarNomina(nomina.nomina_id)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       setConfirmarNom(false); router.refresh()
     })
   }
@@ -472,7 +472,7 @@ export default function NominaDetalleView({ detalle, tienePermiso }: { detalle: 
     startTransition(async () => {
       const res = await eliminarNomina(nomina.nomina_id)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setConfirmarEliminar(false); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); setConfirmarEliminar(false); return }
       router.push('/portal/nomina')
     })
   }
@@ -784,7 +784,7 @@ export default function NominaDetalleView({ detalle, tienePermiso }: { detalle: 
                                 const t = e.currentTarget.value.trim()
                                 guardarCampo(l.empleado_id, 'vacaciones_importe_manual', t === '' ? null : (parseFloat(t) || 0))
                               }}
-                              title="Vacío = automático (promedio del saldo). Escribe un importe para fijarlo a mano."
+                              title="Vacío = automático (promedio del saldo). Con un importe escrito, queda fijado."
                               aria-label={`Importe de vacaciones de ${l.empleado_nombre}`} />
                           ) : inc.vacaciones_importe_manual != null
                               ? formatMonto(inc.vacaciones_importe_manual)
@@ -843,7 +843,7 @@ export default function NominaDetalleView({ detalle, tienePermiso }: { detalle: 
       {confirmarEliminar && (
         <ConfirmDialog
           title="Eliminar nómina"
-          body={`¿Eliminar la nómina de ${formatPeriodo(nomina.periodo)} (${formatMonto(nomina.total)} ${nomina.moneda})? ${nomina.estado === 'CONFIRMADA' ? 'También se revertirán todos los apuntes que generó en tu contabilidad.' : ''}`}
+          body={`¿Eliminar la nómina de ${formatPeriodo(nomina.periodo)} (${formatMonto(nomina.total)} ${nomina.moneda})? ${nomina.estado === 'CONFIRMADA' ? 'También se revertirán todos los apuntes que generó en la contabilidad.' : ''}`}
           confirmLabel="Eliminar" danger
           onConfirm={doEliminar}
           onCancel={() => setConfirmarEliminar(false)}

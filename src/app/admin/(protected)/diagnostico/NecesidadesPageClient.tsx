@@ -64,7 +64,7 @@ export default function NecesidadesPageClient({
   async function doEliminar(n: Necesidad) {
     setConfirmarBorrado(null)
     const res = await eliminarNecesidad(n.clave)
-    if (!res.ok) { toastError(res.error ?? 'Error al eliminar'); return }
+    if (!res.ok) { toastError(res.error ?? 'No se ha podido eliminar'); return }
     setNecesidades((prev) => prev.filter((x) => x.clave !== n.clave))
     toastSuccess('Necesidad eliminada')
     router.refresh()
@@ -96,7 +96,7 @@ export default function NecesidadesPageClient({
         <div className="table-empty">
           <ClipboardList size={40} strokeWidth={1.5} />
           <h3 className="table-empty-title">Sin necesidades</h3>
-          <p>Crea la primera para que aparezca en el diagnóstico.</p>
+          <p>Las necesidades registradas aparecen en el diagnóstico.</p>
         </div>
       ) : (
         <div className="table-wrapper">

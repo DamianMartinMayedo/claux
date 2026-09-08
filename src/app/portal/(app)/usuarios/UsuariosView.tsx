@@ -119,7 +119,7 @@ function UsuarioModal({
     startTransition(async () => {
       const result = esEdicion ? await editarUsuario(fd) : await crearUsuario(fd)
       await ld.dismiss()
-      if (!result.ok) { toastError(result.error ?? 'Error inesperado.'); return }
+      if (!result.ok) { toastError(result.error ?? 'No se ha podido completar la operación.'); return }
       onSaved(
         'passwordTemporal' in result ? (result.passwordTemporal as string | undefined) : undefined,
         'emailEnviado' in result ? (result.emailEnviado as boolean | undefined) : undefined,
@@ -183,7 +183,7 @@ function UsuarioModal({
                   <FormHelp
                     text={rol === 'admin_empresa'
                       ? 'Se aplica a todos los módulos contratados. «Lectura» convierte al administrador en uno de solo lectura.'
-                      : 'Se aplica a todos los módulos contratados, incluidos los que contrates en el futuro. Abajo puedes hacer excepciones módulo a módulo.'}
+                      : 'Se aplica a todos los módulos contratados, incluidos los que se contraten en el futuro. Debajo se definen las excepciones módulo a módulo.'}
                     label="Qué es el permiso por defecto"
                   />
                 </div>
@@ -300,7 +300,7 @@ function UsuarioModal({
               <div className="form-label-with-help">
                 <label className="form-label">Importar datos</label>
                 <FormHelp
-                  text="La herramienta de importación se abre con todos los módulos que el negocio tiene contratados: quien la use podrá cargar datos en cualquiera de ellos desde una hoja de cálculo. Dásela solo a quien haga la carga inicial."
+                  text="La herramienta de importación se abre con todos los módulos que el negocio tiene contratados: quien la use podrá cargar datos en cualquiera de ellos desde una hoja de cálculo. Conviene reservarla a quien haga la carga inicial."
                   label="Qué permite importar datos"
                 />
               </div>
@@ -329,7 +329,7 @@ function UsuarioModal({
             {!esEdicion && (
               <div className="usr-pwd-info">
                 <Info size={16} strokeWidth={2} />
-                 <span>Se generará una contraseña temporal y se enviará junto con el enlace de acceso. También podrás copiarla al crear el usuario.</span>
+                 <span>Se generará una contraseña temporal y se enviará junto con el enlace de acceso. También se puede copiar al crear el usuario.</span>
               </div>
             )}
 
@@ -364,12 +364,12 @@ function PasswordModal({ password, emailEnviado, onClose }: { password: string; 
     <ModalShell title="Contraseña temporal" onClose={onClose} size="modal-sm">
         <div className="modal-body modal-body-form">
           <p className="text-sm-muted">
-            Comparte esta contraseña con el usuario de forma segura. No se mostrará de nuevo.
+            Esta contraseña se entrega al usuario por un medio seguro. No se mostrará de nuevo.
           </p>
           <p className={`alert ${emailEnviado ? 'alert-success' : 'alert-warning'}`} role="alert">
             {emailEnviado
-              ? 'También enviamos sus datos de acceso por correo.'
-              : 'No pudimos enviar el correo. Comparte la contraseña de forma segura.'}
+              ? 'Sus datos de acceso también se han enviado por correo.'
+              : 'No se ha podido enviar el correo: la contraseña debe entregarse por un medio seguro.'}
           </p>
           <div className="usr-pwd-box">
             <code className="usr-pwd-code">{password}</code>
@@ -582,8 +582,8 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
             <p className="body-text">
               A cada usuario se le fija un permiso por defecto —<strong>Sin acceso</strong>,{' '}
               <strong>Ver</strong> o <strong>Ver y editar</strong>— que se aplica a todos los módulos
-              contratados, incluidos los que se contraten en el futuro. Es lo único que hace falta
-              para el caso normal: un operador que lo ve y edita todo, o uno de solo lectura.
+              contratados, incluidos los que se contraten en el futuro. Con eso basta en el caso
+              normal: un operador que lo ve y edita todo, o uno de solo lectura.
             </p>
           </div>
 
@@ -628,7 +628,7 @@ export default function UsuariosView({ usuarios, empresas, sessionUserId, soloLe
       {confirmReset && (
         <ConfirmDialog
           title="Resetear contraseña"
-          body={<>Se generará una contraseña temporal nueva para <strong>{confirmReset.nombre || confirmReset.email}</strong> y la actual dejará de funcionar. Tendrás que hacérsela llegar tú.</>}
+          body={<>Se generará una contraseña temporal nueva para <strong>{confirmReset.nombre || confirmReset.email}</strong> y la actual dejará de funcionar. La entrega al usuario es manual.</>}
           confirmLabel="Resetear contraseña"
           danger
           onConfirm={() => { const u = confirmReset; setConfirmReset(null); handleReset(u.user_id) }}

@@ -208,8 +208,8 @@ async function escanearSuscripciones(
       const ok = await crearNotificacion({
         clientId:    t.client_id,
         tipo:        'suscripcion_vencida',
-        titulo:      'Tu suscripción ha vencido',
-        cuerpo:      `Venció el ${fmtFechaEs(t.fecha_expiracion)}. Ponte al día para seguir usando CLAUX sin interrupciones.`,
+        titulo:      'Suscripción vencida',
+        cuerpo:      `Venció el ${fmtFechaEs(t.fecha_expiracion)}.`,
         enlace:      '/portal/facturacion',
         entidadTipo: 'suscripcion',
         entidadId:   t.fecha_expiracion,
@@ -227,8 +227,8 @@ async function escanearSuscripciones(
     const ok = await crearNotificacion({
       clientId:    t.client_id,
       tipo:        'suscripcion_por_vencer',
-      titulo:      dias === 0 ? 'Tu suscripción vence hoy' : `Tu suscripción vence en ${dias} día${dias === 1 ? '' : 's'}`,
-      cuerpo:      `Tu suscripción a CLAUX vence el ${fmtFechaEs(t.fecha_expiracion)}.`,
+      titulo:      dias === 0 ? 'La suscripción vence hoy' : `La suscripción vence en ${dias} día${dias === 1 ? '' : 's'}`,
+      cuerpo:      `La suscripción a CLAUX vence el ${fmtFechaEs(t.fecha_expiracion)}.`,
       enlace:      '/portal/facturacion',
       entidadTipo: 'suscripcion',
       entidadId:   t.fecha_expiracion,

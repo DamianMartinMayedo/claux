@@ -16,7 +16,7 @@ export default function ImpersonacionBanner({ adminEmail }: { adminEmail: string
     <div className="imp-banner" role="status">
       <ShieldAlert className="imp-banner-icon" size={18} />
       <p className="imp-banner-text">
-        Estás dentro como <strong>configuración de CLAUX</strong>
+        Sesión iniciada como <strong>configuración de CLAUX</strong>
         <span className="imp-banner-email"> · {adminEmail}</span>
       </p>
       <Link href="/portal/importar" className="btn btn-aviso btn-sm imp-banner-btn">

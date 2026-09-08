@@ -168,7 +168,7 @@ export function calcularInstalacion(
       if (fase === 2 && v > 0 && input.formato === 'papel') {
         revisiones.push({
           linea: l.etiqueta,
-          motivo: 'Los datos vienen en papel o dispersos: las horas estimadas pueden quedarse cortas. Confírmalo antes de cerrar.',
+          motivo: 'Los datos vienen en papel o dispersos: las horas estimadas pueden quedarse cortas. Conviene confirmarlas antes de cerrar.',
         })
       }
     }

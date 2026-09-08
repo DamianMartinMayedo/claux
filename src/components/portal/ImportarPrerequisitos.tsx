@@ -14,7 +14,7 @@ export default function ImportarPrerequisitos({
       <div className="page-header">
         <div>
           <h1 className="page-title">Importar datos</h1>
-          <p className="page-subtitle">Carga masiva de tus datos desde un archivo CSV o Excel.</p>
+          <p className="page-subtitle">Carga masiva de datos desde un archivo CSV o Excel.</p>
         </div>
       </div>
       <div className="card">

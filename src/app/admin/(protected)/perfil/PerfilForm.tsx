@@ -28,7 +28,7 @@ export default function PerfilForm({
     })
     setSaving(false)
     if (err) { toastError(err.message); return }
-    toastSuccess('Nombre actualizado correctamente.')
+    toastSuccess('Nombre actualizado.')
   }
 
   async function handleSendReset() {
@@ -54,7 +54,7 @@ export default function PerfilForm({
             <div>
               <p className="reset-sent-title">Enlace enviado</p>
               <p className="reset-sent-email">{email}</p>
-              <p className="reset-sent-hint">Revisa tu bandeja de entrada y sigue el enlace para establecer tu nueva contraseña.</p>
+              <p className="reset-sent-hint">El enlace para establecer la contraseña nueva está en la bandeja de entrada.</p>
             </div>
           </div>
         ) : (
@@ -79,7 +79,7 @@ export default function PerfilForm({
           className="form-input"
           value={name}
           onChange={e => setName(e.target.value)}
-          placeholder="Tu nombre completo"
+          placeholder="Nombre completo"
           required
         />
       </div>

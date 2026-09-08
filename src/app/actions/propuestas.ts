@@ -549,7 +549,7 @@ export async function redactarPropuestaIa(
         beneficio: (m.beneficio as string | null) ?? (m.descripcion as string | null),
       })),
     })
-    if (!borrador) return { ok: false, error: 'La IA no pudo redactar el borrador. Vuelve a intentarlo.' }
+    if (!borrador) return { ok: false, error: 'La IA no pudo redactar el borrador.' }
     return { ok: true, borrador }
   } catch (e) {
     // Bolsa agotada e interruptor apagado se dicen tal cual: no son averías y el

@@ -119,7 +119,7 @@ export default function ModulosPageClient(
 
   async function handleArchivar(m: Modulo, archivar: boolean) {
     const res = await archivarModulo(m.clave, archivar)
-    if (!res.ok) { toastError(res.error ?? 'Error al archivar'); return }
+    if (!res.ok) { toastError(res.error ?? 'No se ha podido archivar'); return }
     toastSuccess(archivar ? 'Módulo archivado' : 'Módulo reactivado')
     router.refresh()
   }
@@ -129,7 +129,7 @@ export default function ModulosPageClient(
   async function doEliminar(m: Modulo) {
     setConfirmarBorrado(null)
     const res = await eliminarModulo(m.clave)
-    if (!res.ok) { toastError(res.error ?? 'Error al eliminar'); return }
+    if (!res.ok) { toastError(res.error ?? 'No se ha podido eliminar'); return }
     toastSuccess(`${TIPO_LABEL[m.tipo] ?? 'Módulo'} eliminado`)
     router.refresh()
   }
@@ -140,7 +140,7 @@ export default function ModulosPageClient(
         <div>
           <h1 className="page-title">Catálogo de módulos</h1>
           <p className="page-subtitle">
-            Qué se vende y a qué precio en cada nivel. Arrastra para reordenar (se guarda solo).
+            Qué se vende y a qué precio en cada nivel. El orden se cambia arrastrando (se guarda solo).
             Cambiar un precio recalcula la cuota de quien tenga el módulo: antes de guardar se dice a quién.
           </p>
         </div>
@@ -246,7 +246,7 @@ export default function ModulosPageClient(
       {confirmarBorrado && (
         <ConfirmDialog
           title={`¿Eliminar "${confirmarBorrado.nombre}"?`}
-          body="Esta acción no se puede deshacer. Si solo quieres dejar de ofrecerlo, archívalo en su lugar."
+          body="Esta acción no se puede deshacer. Para dejar de ofrecerlo sin perderlo, archivarlo."
           confirmLabel="Eliminar" danger
           onCancel={() => setConfirmarBorrado(null)}
           onConfirm={() => doEliminar(confirmarBorrado)}

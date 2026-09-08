@@ -208,10 +208,10 @@ export const PACK_POR_SECTOR: Record<string, string> = {
  * el dueño puede equivocarse, y la diferencia entre los dos packs es real.
  */
 export const PREGUNTA_SERVICIOS = {
-  texto: '¿Trabajas con piezas y materiales, o solo con tu tiempo y conocimiento?',
+  texto: '¿El servicio lleva piezas y materiales, o solo tiempo y conocimiento?',
   opciones: [
     { valor: 'materiales', etiqueta: 'Con piezas y materiales', pack: 'S4' },
-    { valor: 'conocimiento', etiqueta: 'Solo mi tiempo y conocimiento', pack: 'S11' },
+    { valor: 'conocimiento', etiqueta: 'Solo tiempo y conocimiento', pack: 'S11' },
   ],
 } as const
 

@@ -5,10 +5,10 @@
 // catálogo comercial, no cambia de precio ni se activa por cliente.
 
 export const MODOS = [
-  { id: 'papel', label: 'Papel / libreta',        desc: 'Apuntas todo a mano' },
-  { id: 'excel', label: 'Excel / Hojas de cálculo', desc: 'Las cuentas en archivos que actualizas a mano' },
-  { id: 'nada',  label: 'Empiezo desde cero',     desc: 'Todavía no tienes nada digitalizado' },
-  { id: 'otra',  label: 'Otra herramienta',       desc: 'Usas otro sistema pero quieres cambiar' },
+  { id: 'papel', label: 'Papel / libreta',        desc: 'Todo anotado en papel' },
+  { id: 'excel', label: 'Excel / Hojas de cálculo', desc: 'Las cuentas en archivos actualizados manualmente' },
+  { id: 'nada',  label: 'Empiezo desde cero',     desc: 'Nada digitalizado todavía' },
+  { id: 'otra',  label: 'Otra herramienta',       desc: 'Otro sistema en uso, con intención de cambiar' },
 ] as const
 
 /** El rótulo del modo, o el propio id si algún lead antiguo trae otro valor. */

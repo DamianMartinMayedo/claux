@@ -193,7 +193,7 @@ export default function PagosClienteTabla({
             Marca como cobrado <strong>{pendiente.pago.pago_id}</strong> de {clienteNombre}
             {' '}({pendiente.pago.concepto === 'configuracion' ? 'configuración' : 'suscripción'})
             {' '}por <strong>{imp(pendiente.pago.monto, monedaDe(pendiente.pago))}</strong>. A partir de aquí cuenta
-            como ingreso y deja de ajustarse solo. Hazlo cuando hayas verificado el dinero.
+            como ingreso y deja de ajustarse solo. Se confirma una vez verificado el dinero.
           </>}
           confirmLabel="Confirmar cobro"
           pending={enCurso}

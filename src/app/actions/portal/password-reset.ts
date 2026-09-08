@@ -26,7 +26,7 @@ export async function solicitarResetPortal(
   formData: FormData,
 ): Promise<{ ok: boolean; error?: string }> {
   const email = ((formData.get('email') as string) ?? '').trim().toLowerCase()
-  if (!email || !email.includes('@')) return { ok: false, error: 'Escribe un email válido.' }
+  if (!email || !email.includes('@')) return { ok: false, error: 'Falta el email válido.' }
 
   const db  = createAdminClient()
   const now = Date.now()
@@ -69,7 +69,7 @@ export async function solicitarResetPortal(
     token_hash: await hashTokenReset(token),
     expira_at:  new Date(now + MINUTOS_VALIDEZ * 60 * 1000).toISOString(),
   })
-  if (error) return { ok: false, error: 'No se pudo generar el enlace. Inténtalo de nuevo.' }
+  if (error) return { ok: false, error: 'No se ha podido generar el enlace.' }
 
   if (await tipoEmailActivo('password_reset_link')) {
     const base = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://claux.es').replace(/\/$/, '')
@@ -107,7 +107,7 @@ export async function restablecerPasswordPortal(
   if (!valido) return { ok: false, error: 'El enlace ya no es válido. Pide uno nuevo desde el inicio de sesión.' }
 
   const cuenta = valido.cuentas.find(c => c.user_id === userId) ?? (valido.cuentas.length === 1 ? valido.cuentas[0] : null)
-  if (!cuenta) return { ok: false, error: 'Elige la cuenta a la que le pones la contraseña nueva.' }
+  if (!cuenta) return { ok: false, error: 'Falta la cuenta que recibe la contraseña nueva.' }
 
   const db   = createAdminClient()
   const salt = Array.from(crypto.getRandomValues(new Uint8Array(16)))
@@ -122,7 +122,7 @@ export async function restablecerPasswordPortal(
     .eq('user_id', cuenta.user_id)
     .eq('client_id', cuenta.client_id)
 
-  if (error) return { ok: false, error: 'No se pudo guardar la contraseña. Inténtalo de nuevo.' }
+  if (error) return { ok: false, error: 'No se ha podido guardar la contraseña.' }
 
   // El enlace se quema DESPUÉS de guardar: si el update fallara, el usuario
   // todavía puede reintentar con el mismo correo en la mano.

@@ -15,7 +15,7 @@ export type MigracionEstado =
 
 // Etiqueta humana para el operador. Vale igual en el alta y en la ficha.
 export const MIGRACION_ESTADO_LABEL: Record<MigracionEstado, string> = {
-  sin_datos_previos: 'Empieza de cero (sin datos anteriores)',
+  sin_datos_previos: 'Empezar de cero (sin datos anteriores)',
   pendiente:         'Traerá sus datos él mismo',
   a_cargo_equipo:    'Migración a cargo del equipo',
   completada:        'Migración completada',

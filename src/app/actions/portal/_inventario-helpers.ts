@@ -31,7 +31,7 @@ export const MOTIVO_LABEL: Record<MotivoTipo, string> = {
   // no la causa. Como causa esto significa una sola cosa —el papel y el sistema no
   // coinciden por un apunte mal hecho, no por mercancía perdida— y confundir las dos
   // deja la merma sin poder sumarse, que es para lo que existe este vocabulario.
-  CONTEO:                'Error de registro',
+  CONTEO:                'No se ha podido registrar',
   MERMA:                 'Merma',
   ROTURA:                'Rotura',
   CADUCADO:              'Caducado',

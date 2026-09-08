@@ -161,7 +161,7 @@ export default function CopiarAEmpresaModal({
                   ? `Moneda de ${empresa?.nombre}.`
                   : funcional
                     ? `${empresa?.nombre} opera en ${funcional}.`
-                    : `${empresa?.nombre} no tiene moneda definida. Puedes elegirla aquí.`}
+                    : `${empresa?.nombre} no tiene moneda definida. Se puede elegir aquí.`}
               </span>
             </div>
 
@@ -177,8 +177,8 @@ export default function CopiarAEmpresaModal({
                     `En ${moneda || 'la moneda de la ficha'}.`
                   ) : importe.seConvierte ? (
                     factor
-                      ? `Convertido de ${fmt(valorIni)} ${monedaOrigen} con la tasa vigente (${textoTasa(monedaOrigen!, moneda, factor)}). Corrígelo si no coincide.`
-                      : `No hay tasa ${monedaOrigen} → ${moneda}: este importe sigue en ${monedaOrigen}. Escríbelo en ${moneda}.`
+                      ? `Convertido de ${fmt(valorIni)} ${monedaOrigen} con la tasa vigente (${textoTasa(monedaOrigen!, moneda, factor)}). Admite corrección si no coincide.`
+                      : `Sin tasa ${monedaOrigen} → ${moneda}: este importe sigue en ${monedaOrigen} y hay que escribirlo en ${moneda}.`
                   ) : (
                     <>
                       En {empresaOrigen} es {fmt(valorIni)} {monedaOrigen}. Escribe el de esta empresa

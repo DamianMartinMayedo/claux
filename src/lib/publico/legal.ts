@@ -34,12 +34,12 @@ export const PAGINAS_LEGALES: Record<string, PaginaLegal> = {
   privacidad: {
     titulo: 'Política de privacidad',
     clave: 'legal_privacidad',
-    descripcion: 'Cómo trata CLAUX tus datos personales: qué recogemos, para qué y qué derechos tienes.',
+    descripcion: 'Cómo trata CLAUX los datos personales: qué se recoge, para qué y qué derechos asisten al titular.',
   },
   cookies: {
     titulo: 'Política de cookies',
     clave: 'legal_cookies',
-    descripcion: 'Qué cookies utiliza CLAUX, para qué sirven y cómo puedes gestionarlas.',
+    descripcion: 'Qué cookies utiliza CLAUX, para qué sirven y cómo se gestionan.',
   },
 }
 

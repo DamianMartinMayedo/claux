@@ -127,7 +127,7 @@ export default function Configurador({
             </div>
           )}
           <div className="pp-resumen-bloque">
-            <span className="pp-resumen-label">{difiere ? 'Con tu selección' : 'Cuota mensual'}</span>
+            <span className="pp-resumen-label">{difiere ? 'Con su selección' : 'Cuota mensual'}</span>
             <span className="pp-resumen-cifra">{importeClaux(cuota, moneda)}<small>/mes</small></span>
           </div>
         </div>

@@ -155,8 +155,8 @@ export default function DossierEditor({ data, volver, puedeEditar = true }: {
 
       {tabPend && (
         <ConfirmDialog
-          title="Tienes cambios sin guardar"
-          body="Si cambias de pestaña ahora, se perderá lo que escribiste en «Mi dossier» y no has guardado."
+          title="Hay cambios sin guardar"
+          body="Al cambiar de pestaña se perderá lo escrito en «Mi dossier» y no guardado."
           confirmLabel="Descartar y salir"
           cancelLabel="Seguir aquí"
           danger

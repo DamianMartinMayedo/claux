@@ -138,7 +138,7 @@ export const adaptadorTerceros: Adaptador = {
     { campo: 'limite_credito', etiqueta: 'Límite de crédito', obligatorio: false, alias: ['limite', 'límite', 'limite credito', 'credito', 'crédito'], ejemplo: '5000' },
     { campo: 'moneda_defecto', etiqueta: 'Moneda',            obligatorio: false, alias: ['moneda', 'divisa'], ejemplo: 'CUP' },
     { campo: 'num_contrato',   etiqueta: 'Nº de contrato',    obligatorio: false, alias: ['contrato', 'num contrato', 'nº contrato'], ejemplo: 'C-2026-001' },
-    { campo: 'notas',          etiqueta: 'Notas',             obligatorio: false, alias: ['notas', 'observaciones', 'comentarios'], ejemplo: 'Fila de ejemplo: puedes dejarla, no se importa' },
+    { campo: 'notas',          etiqueta: 'Notas',             obligatorio: false, alias: ['notas', 'observaciones', 'comentarios'], ejemplo: 'Fila de ejemplo: no se importa' },
   ],
 
   async preparar(valores, ctx, deColumna): Promise<Preparado> {

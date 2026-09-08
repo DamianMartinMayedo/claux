@@ -193,7 +193,7 @@ export async function leerMigracion(archivos: ArchivoLiangApp[]): Promise<Migrac
       ficha.avisos = leido.avisos
       // Es la única validación externa que tenemos (plan, D2): dos estados en la
       // misma migración serían dos cierres distintos y no sabríamos cuál manda.
-      if (estado) errores.push('Has subido dos estados de rendimiento. Sube solo el del período que estás migrando.')
+      if (estado) errores.push('Hay dos estados de rendimiento. Solo cabe uno: el del período que se migra.')
       estado = leido
       continue
     }
@@ -270,7 +270,7 @@ export async function leerMigracion(archivos: ArchivoLiangApp[]): Promise<Migrac
   const vistas = new Map<number, string>()
   for (const { archivo, mayor } of mayores) {
     const antes = vistas.get(mayor.cuenta)
-    if (antes) errores.push(`La cuenta ${mayor.cuenta} viene en dos archivos («${antes}» y «${archivo}»). Sube uno solo por cuenta.`)
+    if (antes) errores.push(`La cuenta ${mayor.cuenta} viene en dos archivos («${antes}» y «${archivo}»). Solo se admite un archivo por cuenta.`)
     else vistas.set(mayor.cuenta, archivo)
   }
 
@@ -280,7 +280,7 @@ export async function leerMigracion(archivos: ArchivoLiangApp[]): Promise<Migrac
   const periodos = [...new Set(
     [...mayores.map(m => m.mayor.periodo), ...(estado ? [estado.periodo] : [])].filter(Boolean).map(rangoPeriodo),
   )]
-  if (empresas.length > 1) errores.push(`Los archivos son de empresas distintas (${empresas.join(', ')}). Haz una migración por empresa.`)
+  if (empresas.length > 1) errores.push(`Los archivos son de empresas distintas (${empresas.join(', ')}). Cada empresa necesita su propia migración.`)
   if (periodos.length > 1) avisos.push(`Los archivos no cubren el mismo período (${periodos.join(' · ')}). Compruébalo antes de aplicar.`)
 
   // Cada lote pasa por el motor entero, que trabaja por tandas con un tope de
@@ -329,9 +329,9 @@ export async function leerMigracion(archivos: ArchivoLiangApp[]): Promise<Migrac
   const completa = !!estado && !sinArchivo.length
 
   if (!estado) {
-    avisos.push('Falta el Estado de rendimiento financiero: añádelo a los archivos, o la migración no se podrá aplicar.')
+    avisos.push('Falta el Estado de rendimiento financiero. Sin él, la migración no se puede aplicar.')
   }
-  if (!mayores.length) errores.push('Entre los archivos no hay ningún libro mayor de LiangApp. Añade los del período.')
+  if (!mayores.length) errores.push('Entre los archivos no hay ningún libro mayor de LiangApp. Faltan los del período.')
 
   // Decir CUÁLES: con diez archivos, «uno no es de LiangApp» no dice cuál quitar.
   const noReconocidos = fichas.filter(f => f.tipo === 'no-reconocido')

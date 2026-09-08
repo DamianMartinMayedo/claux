@@ -30,7 +30,7 @@ export default function ReglasReservaSection({
     startTransition(async () => {
       const res = await guardarReglas(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       // El aviso también EN EL MOMENTO DE GUARDAR: una línea bajo el título la lee
       // quien mira el título, y quien edita la antelación está mirando el campo.
       toastSuccess(compartidas ? 'Reglas guardadas · valen para Reservas y Citas' : 'Reglas guardadas.')

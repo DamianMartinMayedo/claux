@@ -70,7 +70,7 @@ export default function NotificacionesCampana() {
 
           <div className="ntf-panel-lista">
             {recientes.length === 0 ? (
-              <p className="ntf-vacio">No tienes notificaciones.</p>
+              <p className="ntf-vacio">Sin notificaciones.</p>
             ) : (
               recientes.map(n => (
                 <button

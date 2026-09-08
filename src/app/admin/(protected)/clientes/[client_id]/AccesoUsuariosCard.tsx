@@ -113,9 +113,9 @@ export default function AccesoUsuariosCard({ clientId, usuarios }: Props) {
     <ModalShell title="Entrar al portal del cliente" size="modal-420" onClose={cerrarEntrar}>
       <div className="modal-body">
         <p className="text-sm-muted">
-          Vas a entrar al portal de este negocio como <strong>sesión de configuración</strong>,
-          sin necesidad de su contraseña. Verás un aviso mientras estés dentro y podrás salir
-          cuando quieras. El acceso queda registrado en Actividad y no cuenta como uso del cliente.
+          El acceso al portal de este negocio se abre como <strong>sesión de configuración</strong>,
+          sin necesidad de su contraseña. Durante la sesión se muestra un aviso permanente, con salida
+          en cualquier momento. El acceso queda registrado en Actividad y no cuenta como uso del cliente.
         </p>
       </div>
       <div className="modal-footer">

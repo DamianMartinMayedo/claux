@@ -70,7 +70,7 @@ export default function Onboarding({ data }: { data: OnboardingData | null }) {
     startTransition(async () => {
       const r = await fn()
       await ld.dismiss()
-      if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
+      if (!r.ok) { toastError(r.error ?? 'No se ha podido completar la operación.'); return }
       router.refresh()
     })
   }
@@ -95,9 +95,9 @@ export default function Onboarding({ data }: { data: OnboardingData | null }) {
         <header className="onb-cabecera">
           <OnboardingAnillo hechos={hechos} total={total} compacto={!arranque} />
           <div className="onb-cabecera-txt">
-            <h2 className="onb-titulo">{arranque ? 'Pon en marcha tu negocio' : 'Casi listo'}</h2>
+            <h2 className="onb-titulo">{arranque ? 'Puesta en marcha' : 'Últimos pasos'}</h2>
             <p className="onb-sub">
-              {pendientes.length === 1 ? 'Te queda un paso.' : `Te quedan ${pendientes.length} pasos.`}
+              {pendientes.length === 1 ? 'Queda un paso.' : `Quedan ${pendientes.length} pasos.`}
             </p>
           </div>
           {puedeOcultar && (
@@ -230,7 +230,7 @@ function Despedida({ onFin }: { onFin: () => void }) {
     <section className={`onb-fin${saliendo ? ' is-saliendo' : ''}`} role="status">
       <div className="onb-fin-cuerpo">
         <span className="onb-fin-icono" aria-hidden><Check size={26} strokeWidth={3} /></span>
-        <h2 className="onb-fin-titulo">Listo, ya puedes comenzar</h2>
+        <h2 className="onb-fin-titulo">Configuración completada</h2>
       </div>
     </section>
   )

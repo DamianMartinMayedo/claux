@@ -243,7 +243,7 @@ export async function guardarCuenta(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -257,10 +257,10 @@ export async function guardarCuenta(
   const notas         = (formData.get('notas')      as string)?.trim() || null
 
   if (!nombre)                          return { ok: false, error: 'El nombre de la cuenta es obligatorio.' }
-  if (!empresa_id)                      return { ok: false, error: 'Debes seleccionar una empresa.' }
+  if (!empresa_id)                      return { ok: false, error: 'Falta la empresa.' }
   // La moneda solo se fija al crear; al editar no se cambia (los movimientos
   // quedarían inconsistentes) y el campo va deshabilitado, así que no se exige.
-  if (!cuenta_id && !moneda)            return { ok: false, error: 'Debes seleccionar una moneda.' }
+  if (!cuenta_id && !moneda)            return { ok: false, error: 'Falta la moneda.' }
   if (!TIPOS_CUENTA.includes(tipo))     return { ok: false, error: 'Tipo de cuenta no válido.' }
 
   const empresas = await obtenerEmpresas()
@@ -307,7 +307,7 @@ export async function guardarCuenta(
 export async function archivarCuenta(cuenta_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const { error } = await createAdminClient()
     .from('cuentas')
@@ -323,7 +323,7 @@ export async function archivarCuenta(cuenta_id: string): Promise<{ ok: boolean; 
 export async function restaurarCuenta(cuenta_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -353,7 +353,7 @@ export async function archivarCuentasEnLote(
 ): Promise<ResultadoLoteCuentas> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, hechas: 0, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, hechas: 0, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, hechas: 0, error: 'Sin permiso para editar en este módulo.' }
   if (!ids.length) return { ok: true, hechas: 0 }
 
   const db = createAdminClient()
@@ -397,7 +397,7 @@ export async function registrarMovimiento(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -411,7 +411,7 @@ export async function registrarMovimiento(
   const registrarGasto = formData.get('registrar_gasto') === 'true' || !!categoria_id
   const tercero_id     = (formData.get('tercero_id') as string)?.trim() || null
 
-  if (!cuenta_id)                          return { ok: false, error: 'Debes seleccionar una cuenta.' }
+  if (!cuenta_id)                          return { ok: false, error: 'Falta la cuenta.' }
   if (!TIPOS_MOVIMIENTO.includes(tipo))    return { ok: false, error: 'Tipo de movimiento no válido.' }
   if (isNaN(montoRaw) || montoRaw <= 0)    return { ok: false, error: 'El monto debe ser un número positivo.' }
   if (!concepto)                           return { ok: false, error: 'El concepto es obligatorio.' }
@@ -460,7 +460,7 @@ export async function registrarMovimiento(
       notas,
       updated_at:   new Date().toISOString(),
     })
-    if (gcErr) return { ok: false, error: `Error al crear el registro: ${gcErr.message}` }
+    if (gcErr) return { ok: false, error: `No se ha podido crear el registro: ${gcErr.message}` }
   }
 
   const { error } = await db.from('movimientos_tesoreria').insert({
@@ -559,7 +559,7 @@ export async function registrarTransferencia(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -573,7 +573,7 @@ export async function registrarTransferencia(
   const feeEnvioRaw    = parseFloat(formData.get('fee_envio') as string)
   const feeReciboRaw   = parseFloat(formData.get('fee_recibo') as string)
 
-  if (!cuenta_origen || !cuenta_destino) return { ok: false, error: 'Debes seleccionar cuenta origen y destino.' }
+  if (!cuenta_origen || !cuenta_destino) return { ok: false, error: 'Faltan la cuenta de origen y la de destino.' }
   if (cuenta_origen === cuenta_destino)  return { ok: false, error: 'El origen y el destino deben ser distintos.' }
   if (isNaN(montoRaw) || montoRaw <= 0)  return { ok: false, error: 'El monto debe ser un número positivo.' }
 
@@ -599,7 +599,7 @@ export async function registrarTransferencia(
 
   if (monedasDiferentes) {
     if (isNaN(tasaRaw) || tasaRaw <= 0) {
-      return { ok: false, error: 'Debes indicar la tasa de cambio para transferencias entre monedas.' }
+      return { ok: false, error: 'Falta la tasa de cambio para transferencias entre monedas.' }
     }
     tasa = tasaRaw
     montoDestino = montoRaw * tasa
@@ -667,7 +667,7 @@ export async function registrarTransferencia(
       monto:        feeEnvio,
       updated_at:   new Date().toISOString(),
     })
-    if (error) return { ok: false, error: `Error al crear gasto de fee envío: ${error.message}` }
+    if (error) return { ok: false, error: `No se ha podido crear gasto de fee envío: ${error.message}` }
 
     movimientos.push({
       movimiento_id: generarMovimientoId(),
@@ -705,7 +705,7 @@ export async function registrarTransferencia(
       monto:        feeRecibo,
       updated_at:   new Date().toISOString(),
     })
-    if (error) return { ok: false, error: `Error al crear gasto de fee recepción: ${error.message}` }
+    if (error) return { ok: false, error: `No se ha podido crear gasto de fee recepción: ${error.message}` }
 
     movimientos.push({
       movimiento_id: generarMovimientoId(),
@@ -760,7 +760,7 @@ export async function editarMovimiento(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -784,7 +784,7 @@ export async function editarMovimiento(
     return { ok: false, error: 'Es una transferencia: bórrala y vuelve a registrarla para que las dos patas cuadren.' }
   }
   if (mov.origen !== 'MANUAL') {
-    return { ok: false, error: 'Este movimiento proviene de un cobro o pago. Corrígelo desde su documento.' }
+    return { ok: false, error: 'Este movimiento proviene de un cobro o pago: la corrección se hace desde su documento.' }
   }
 
   // 🔴 La CATEGORÍA no se edita aquí, y desde la fase 5 tampoco se pide en pantalla.
@@ -818,7 +818,7 @@ export async function editarMovimiento(
 export async function eliminarMovimiento(movimiento_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -888,7 +888,7 @@ export interface ResultadoLoteMovimientos {
 export async function eliminarMovimientosEnLote(ids: string[]): Promise<ResultadoLoteMovimientos> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, hechas: 0, omitidas: [], error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, hechas: 0, omitidas: [], error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, hechas: 0, omitidas: [], error: 'Sin permiso para editar en este módulo.' }
   if (!ids.length) return { ok: true, hechas: 0, omitidas: [] }
 
   const db = createAdminClient()

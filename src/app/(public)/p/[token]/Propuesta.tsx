@@ -61,7 +61,7 @@ function Cuerpo({ s, doc }: { s: Slide; doc: PropuestaResuelta }) {
     case 'lista':
       return (
         <>
-          <p className="pp-kicker">Tu negocio</p>
+          <p className="pp-kicker">Su negocio</p>
           <h2 className="pp-titulo">{s.titulo}</h2>
           <ol className="pp-lista">
             {s.puntos.map((p, i) => <li key={i}>{p}</li>)}
@@ -179,7 +179,7 @@ function Cuerpo({ s, doc }: { s: Slide; doc: PropuestaResuelta }) {
             </div>
 
             <div className="pp-bloque">
-              <h3>Tu suscripción</h3>
+              <h3>Su suscripción</h3>
               <table className="pp-tabla">
                 <tbody>
                   {s.modulos.map(m => (
@@ -267,7 +267,7 @@ export default function Propuesta({ p, borrador = false }: { p: PropuestaResuelt
       {/* `data-largo` marca «esta puede no caber en una página». En pantalla no
           cambia nada; en papel es lo único que la deja PARTIR en dos en vez de
           recortarse, que es lo que le pasó al PDF de Elina: Precios con once
-          módulos y Tu propuesta con el bloque anual salieron cortados por abajo. */}
+          módulos y La propuesta con el bloque anual salieron cortados por abajo. */}
       {p.slides.map((s, i) => (
         <section
           key={s.clave} id={`pp-${i}`}

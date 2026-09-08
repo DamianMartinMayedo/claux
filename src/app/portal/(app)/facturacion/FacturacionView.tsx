@@ -85,7 +85,7 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
       setEnviando(false)
       if (!r.ok) { toastError(r.error ?? 'No se pudo enviar.'); return }
       setPedido('ahora')
-      toastSuccess('Recibido. Te contactamos enseguida.')
+      toastSuccess('Solicitud recibida.')
       void notificaciones?.refrescar()
     })
   }
@@ -149,7 +149,7 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
       <div className="page-header">
         <div>
           <h1 className="page-title">Suscripción</h1>
-          <p className="page-subtitle">Estado de tu suscripción e historial de pagos.</p>
+          <p className="page-subtitle">Estado de la suscripción e historial de pagos.</p>
         </div>
       </div>
 
@@ -158,8 +158,8 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
           («venció, ponte al día») diría justo lo contrario de lo pactado. */}
       {data.es_socio ? (
         <div className="alert alert-success">
-          <strong className="alert-titulo">Eres Socio CLAUX</strong>
-          Tienes el portal completo y no se te genera ningún cobro
+          <strong className="alert-titulo">Socio CLAUX</strong>
+          El portal está completo y no se genera ningún cobro
           {data.socio_hasta ? ` hasta el ${fmt(data.socio_hasta)}` : ''}.
         </div>
       ) : enGracia ? (
@@ -177,8 +177,8 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
       ) : dias !== null && dias <= 7 && (
         <div className={`alert mb-5 ${dias <= 0 ? 'alert-error' : 'alert-warning'}`}>
           {dias <= 0
-            ? 'Tu suscripción ha expirado. Contacta a soporte para renovarla.'
-            : `Tu suscripción vence en ${dias} día${dias === 1 ? '' : 's'}. Contacta a soporte para renovarla.`}
+            ? 'La suscripción ha expirado. La renovación se gestiona con soporte.'
+            : `La suscripción vence en ${dias} día${dias === 1 ? '' : 's'}. La renovación se gestiona con soporte.`}
         </div>
       )}
 
@@ -222,7 +222,7 @@ export default function FacturacionView({ data }: { data: FacturacionData }) {
       {capacidad && capacidad.length > 0 && (
         <div className="card mb-5">
           <div className="card-header">
-            <h2 className="card-title card-title-sm">Lo que cabe en tu nivel</h2>
+            <h2 className="card-title card-title-sm">Límites del nivel</h2>
             <span className={`badge ${excedidas.length ? 'badge-error' : cercanas.length ? 'badge-warning' : 'badge-neutral'}`}>
               {excedidas.length
                 ? `${excedidas.length} por encima`

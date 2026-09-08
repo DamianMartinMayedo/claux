@@ -248,7 +248,7 @@ export async function crearUsuario(formData: FormData): Promise<{
     must_change_password: true,  // definirá su propia contraseña en el primer acceso
   })
 
-  if (error) return { ok: false, error: 'Error al crear el usuario.' }
+  if (error) return { ok: false, error: 'No se ha podido crear el usuario.' }
 
   // Asignar empresas si es rol usuario
   if (rol === 'usuario') {
@@ -279,7 +279,7 @@ export async function crearUsuario(formData: FormData): Promise<{
     .eq('client_id', session.client_id).maybeSingle()
   const emailEnviado = await enviarCredencialesPortal({
     tipo: 'bienvenida', email, nombre, password, clientId: session.client_id,
-    empresa: (cliente?.nombre_empresa as string) || 'tu negocio',
+    empresa: (cliente?.nombre_empresa as string) || 'el negocio',
   })
 
   revalidatePath('/portal/usuarios')
@@ -308,7 +308,7 @@ export async function editarUsuario(formData: FormData): Promise<{
   if (!user_id) return { ok: false, error: 'usuario_id requerido.' }
 
   // No puede editar su propio usuario
-  if (user_id === session.user_id) return { ok: false, error: 'No puedes editarte a ti mismo.' }
+  if (user_id === session.user_id) return { ok: false, error: 'La propia cuenta no se edita desde aquí.' }
 
   const db = createAdminClient()
 
@@ -364,7 +364,7 @@ export async function editarUsuario(formData: FormData): Promise<{
     .eq('user_id', user_id)
     .eq('client_id', session.client_id)
 
-  if (error) return { ok: false, error: 'Error al actualizar el usuario.' }
+  if (error) return { ok: false, error: 'No se ha podido actualizar el usuario.' }
 
   // Sincronizar empresas asignadas (borrar todas y re-insertar)
   await db.from('empresa_usuario').delete().eq('user_id', user_id)
@@ -395,7 +395,7 @@ export async function resetearPassword(user_id: string): Promise<{
   if (!session || session.rol !== 'admin_empresa' || session.solo_lectura) {
     return { ok: false, error: 'Sin permisos.' }
   }
-  if (user_id === session.user_id) return { ok: false, error: 'No puedes resetearte a ti mismo.' }
+  if (user_id === session.user_id) return { ok: false, error: 'La contraseña propia no se restablece desde aquí.' }
 
   const db       = createAdminClient()
   const password = generarPasswordTemporal()
@@ -408,7 +408,7 @@ export async function resetearPassword(user_id: string): Promise<{
     .eq('user_id', user_id)
     .eq('client_id', session.client_id)
 
-  if (error) return { ok: false, error: 'Error al resetear la contraseña.' }
+  if (error) return { ok: false, error: 'No se ha podido resetear la contraseña.' }
   const { data: usr } = await db.from('client_users').select('email, nombre')
     .eq('user_id', user_id).eq('client_id', session.client_id).maybeSingle()
   const { data: cliente } = await db.from('clients').select('nombre_empresa')
@@ -417,7 +417,7 @@ export async function resetearPassword(user_id: string): Promise<{
     ? await enviarCredencialesPortal({
         tipo: 'password_reset', email: usr.email, nombre: usr.nombre,
         password, clientId: session.client_id,
-        empresa: (cliente?.nombre_empresa as string) || 'tu negocio',
+        empresa: (cliente?.nombre_empresa as string) || 'el negocio',
       })
     : false
   return { ok: true, passwordTemporal: password, emailEnviado }

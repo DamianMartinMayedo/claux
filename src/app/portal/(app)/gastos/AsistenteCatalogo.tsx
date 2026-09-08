@@ -40,11 +40,11 @@ const ORDEN: Paso[] = ['semilla', 'fusiones', 'raices', 'conserva', 'cruza', 'de
 const TITULO: Record<Paso, string> = {
   semilla:      'Cargar el catálogo',
   fusiones:     'Categorías repetidas',
-  raices:       'Emparejar tus categorías',
+  raices:       'Emparejar las categorías',
   conserva:     'Colocar subcategorías',
   cruza:        'Subcategorías que cambian de renglón',
   depreciacion: 'Depreciación',
-  revision:     'Lo que va a cambiar en tu informe',
+  revision:     'Lo que va a cambiar en el informe',
   hecho:        'Listo',
 }
 
@@ -120,7 +120,7 @@ export default function AsistenteCatalogo({ onClose, onCambios }: {
     setCargando(true)
     guardar
       .then(r => {
-        if (!r.ok) { toastError(r.error ?? 'No se pudo guardar tu respuesta.'); return }
+        if (!r.ok) { toastError(r.error ?? 'No se ha podido guardar la respuesta.'); return }
         aplicar()
         return correrEnsayo()
       })
@@ -132,7 +132,7 @@ export default function AsistenteCatalogo({ onClose, onCambios }: {
     return analizarAdopcion()
       .then(a => {
         setAnalisis(a)
-        if (!a.ok) { toastError(a.error ?? 'No se pudo leer tu catálogo.'); return null }
+        if (!a.ok) { toastError(a.error ?? 'No se ha podido leer el catálogo.'); return null }
         // Pre-marcado: lo idéntico y que conserva el papel nace marcado; lo demás,
         // visible y sin marcar. Una sugerencia plausible pre-marcada se acepta sin
         // mirar, y eso es exactamente lo que no puede pasar aquí.
@@ -149,7 +149,7 @@ export default function AsistenteCatalogo({ onClose, onCambios }: {
   }
 
   const sembrar = () => {
-    const cargando = toastLoading('Cargando tu catálogo…')
+    const cargando = toastLoading('Cargando el catálogo…')
     setCargando(true)
     sembrarPack().then(r => {
       cargando.dismiss()
@@ -386,12 +386,12 @@ function PasoSemilla({ ensayo, cargando, preguntas, onServicios, onContador }: {
             value={preguntas.servicios.respuesta ?? ''}
             onChange={e => onServicios(e.target.value)}
           >
-            <option value="" disabled>— Elige una —</option>
+            <option value="" disabled>— Seleccionar —</option>
             {preguntas.servicios.opciones.map(o => (
               <option key={o.valor} value={o.valor}>{o.etiqueta}</option>
             ))}
           </select>
-          <span className="input-hint">Decide qué catálogo te cargamos. Se puede cambiar después.</span>
+          <span className="input-hint">Determina qué catálogo se carga. Se puede cambiar después.</span>
         </div>
       )}
       <div className="input-group">
@@ -401,7 +401,7 @@ function PasoSemilla({ ensayo, cargando, preguntas, onServicios, onContador }: {
           value={preguntas.contador.respuesta == null ? '' : String(preguntas.contador.respuesta)}
           onChange={e => onContador(e.target.value === 'true')}
         >
-          <option value="" disabled>— Elige una —</option>
+          <option value="" disabled>— Seleccionar —</option>
           {preguntas.contador.opciones.map(o => (
             <option key={String(o.valor)} value={String(o.valor)}>{o.etiqueta}</option>
           ))}
@@ -423,8 +423,8 @@ function PasoSemilla({ ensayo, cargando, preguntas, onServicios, onContador }: {
   return (<>
     {bloquePreguntas}
     <p className="ado-intro">
-      Vamos a cargar el catálogo de <strong>{ensayo.pack}</strong>. Esto es exactamente
-      lo que va a pasar — nada más, y nada de lo que ya tienes se toca.
+      Se va a cargar el catálogo de <strong>{ensayo.pack}</strong>. Esto es exactamente
+      lo que ocurre — nada más, y nada de lo ya registrado se toca.
     </p>
     <ul className="ado-lista">
       <li className="ado-fila">
@@ -439,8 +439,8 @@ function PasoSemilla({ ensayo, cargando, preguntas, onServicios, onContador }: {
         <li className="ado-fila">
           <Check size={16} strokeWidth={2.5} />
           <span>
-            <span className="ado-fila-nombre">{plural(ancladas.length, 'categoría tuya se reconoce', 'categorías tuyas se reconocen')} como del catálogo</span>
-            <span className="ado-fila-detalle">Se quedan igual: solo pasamos a saber cuál es cuál. {ancladas.join(' · ')}</span>
+            <span className="ado-fila-nombre">{plural(ancladas.length, 'categoría propia se reconoce', 'categorías propias se reconocen')} como del catálogo</span>
+            <span className="ado-fila-detalle">Se quedan igual: solo queda registrado cuál es cuál. {ancladas.join(' · ')}</span>
           </span>
           <span />
         </li>
@@ -540,9 +540,9 @@ function PasoRaices({ a, anclas, setAnclas }: {
   }
   return (<>
     <p className="ado-intro">
-      Estas categorías tuyas se parecen a una del catálogo. Emparejarlas no cambia
-      su nombre ni su renglón: sirve para que CLAUX no te cree una repetida cuando
-      registre un gasto por su cuenta.
+      Estas categorías propias se parecen a una del catálogo. Emparejarlas no cambia
+      su nombre ni su renglón: evita que CLAUX cree una repetida al registrar
+      un gasto por su cuenta.
     </p>
     <ul className="ado-lista">
       {(a.raices ?? []).map(r => (
@@ -604,7 +604,7 @@ function PasoHijas({ hijas, a, destinos, setDestinos, permiteTodas }: {
       {permiteTodas
         ? <>Estas subcategorías encajan mejor bajo otra principal. Moverlas no cambia
             el renglón en el que cuentan, así que tu informe queda igual.</>
-        : <><strong>Aquí sí cambia tu informe.</strong> Una subcategoría cuenta en el
+        : <><strong>Aquí sí cambia el informe.</strong> Una subcategoría cuenta en el
             renglón de su categoría principal, así que moverla cambia dónde suma —
             también en los meses ya cerrados. Van una a una a propósito.</>}
     </p>
@@ -691,9 +691,9 @@ function PasoDepreciacion({ a, marcados, setMarcados }: {
     {apuntes.length > 0 ? (
       <p className="ado-intro">
         Estos gastos de depreciación figuran hoy como <strong>pendientes de pago</strong>,
-        y la depreciación no se le paga a nadie: es el desgaste de lo que ya compraste.
-        Al marcarlos salen de lo que debes y del saldo, pero siguen contando como gasto
-        en tu informe — el resultado no cambia.
+        y la depreciación no se le paga a nadie: es el desgaste de lo ya comprado.
+        Al marcarlos salen de las deudas y del saldo, pero siguen contando como gasto
+        en el informe — el resultado no cambia.
       </p>
     ) : (
       <p className="ado-intro">
@@ -752,8 +752,8 @@ function PasoDepreciacion({ a, marcados, setMarcados }: {
 function PasoRevision({ impacto, cargando, total, depreciacion }: {
   impacto: ImpactoPrevio | null; cargando: boolean; total: number; depreciacion: number
 }) {
-  if (!total) return <p className="ado-intro">No has marcado ningún cambio. Puedes cerrar el asistente.</p>
-  if (cargando) return <p className="ado-intro">Calculando cómo queda tu informe…</p>
+  if (!total) return <p className="ado-intro">Sin cambios marcados.</p>
+  if (cargando) return <p className="ado-intro">Calculando cómo queda el informe…</p>
 
   // Reclasificar depreciación no mueve el informe (sigue siendo gasto), mueve lo
   // que debes. Si no se dice aquí, el dueño ve «tu informe no se mueve» y cree
@@ -782,12 +782,12 @@ function PasoRevision({ impacto, cargando, total, depreciacion }: {
       <AlertTriangle size={16} strokeWidth={2.2} />
       <span>
         {imp.irreversible ? (
-          <><span className="alert-titulo">Esto reescribe tu informe hacia atrás</span>
+          <><span className="alert-titulo">El informe se reescribe hacia atrás</span>
           Los meses ya cerrados se recalculan con el árbol nuevo, y no hay marcha atrás
-          automática. Míralo antes de aplicar.</>
+          automática.</>
         ) : (
-          <><span className="alert-titulo">Tu informe se reorganiza</span>
-          Se recoloca lo que ya tenías; el resultado neto no cambia.</>
+          <><span className="alert-titulo">El informe se reorganiza</span>
+          Se recoloca lo ya registrado; el resultado neto no cambia.</>
         )}
       </span>
     </div>

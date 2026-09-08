@@ -244,7 +244,7 @@ export async function eliminarModulo(clave: string) {
   if ((count ?? 0) > 0) {
     return {
       ok: false,
-      error: `No se puede eliminar: ${count} cliente(s) lo tienen contratado. Archívalo en su lugar.`,
+      error: `No se puede eliminar: ${count} cliente(s) lo tienen contratado. La alternativa es archivarlo.`,
     }
   }
 

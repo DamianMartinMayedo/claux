@@ -79,7 +79,7 @@ function ParModal({
     startTransition(async () => {
       const result = await guardarPar(fd)
       await ld.dismiss()
-      if (!result.ok) { toastError(result.error ?? 'Error inesperado.'); return }
+      if (!result.ok) { toastError(result.error ?? 'No se ha podido completar la operación.'); return }
       onSaved(result.tasa, result.fecha)
     })
   }
@@ -234,7 +234,7 @@ function EliminarMonedaModal({
     startTransition(async () => {
       const r = await eliminarMoneda(moneda.codigo)
       await ld.dismiss()
-      if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
+      if (!r.ok) { toastError(r.error ?? 'No se ha podido completar la operación.'); return }
       onDone()
     })
   }
@@ -250,13 +250,13 @@ function EliminarMonedaModal({
         fd.set('activa',  'false')
         const r = await guardarMoneda(fd)
         await ld.dismiss()
-        if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
+        if (!r.ok) { toastError(r.error ?? 'No se ha podido completar la operación.'); return }
         onDone()
       } else {
-        if (!destino) { await ld.dismiss(); toastError('Elige una moneda destino.'); return }
+        if (!destino) { await ld.dismiss(); toastError('Falta la moneda destino.'); return }
         const r = await eliminarMoneda(moneda.codigo, destino)
         await ld.dismiss()
-        if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
+        if (!r.ok) { toastError(r.error ?? 'No se ha podido completar la operación.'); return }
         onDone()
       }
     })
@@ -483,7 +483,7 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
           {initMonedas.length === 0 ? (
             <div className="mon-empty">
               <Info size={36} strokeWidth={1} />
-              <p>No hay monedas. Añade la primera.</p>
+              <p>Sin monedas registradas.</p>
             </div>
           ) : (
             <ul className="mon-list">
@@ -525,7 +525,7 @@ export default function MonedasView({ monedas: initMonedas, pares: initPares, es
 
           {localPares.length === 0 ? (
             <div className="mon-empty">
-              <p>Añade al menos dos monedas para ver los pares.</p>
+              <p>Los pares requieren al menos dos monedas.</p>
             </div>
           ) : (
             <div className="table-wrapper">

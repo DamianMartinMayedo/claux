@@ -60,7 +60,7 @@ export default function PerfilView({ perfil, panelIa, documentos }: { perfil: Pe
     startRecuperar(async () => {
       const r = await mostrarOnboarding()
       await ld.dismiss()
-      if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
+      if (!r.ok) { toastError(r.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess('Guía de puesta en marcha activada')
       router.refresh()
     })
@@ -77,7 +77,7 @@ export default function PerfilView({ perfil, panelIa, documentos }: { perfil: Pe
     const nueva    = (fd.get('password_nueva')    as string) ?? ''
     const confirma = (fd.get('password_confirma') as string) ?? ''
     if (nueva) {
-      if (!actual)             { toastError('Introduce tu contraseña actual.'); return }
+      if (!actual)             { toastError('Falta la contraseña actual.'); return }
       if (nueva.length < 8)    { toastError('La nueva contraseña debe tener al menos 8 caracteres.'); return }
       if (nueva !== confirma)  { toastError('Las contraseñas nuevas no coinciden.'); return }
     }
@@ -86,7 +86,7 @@ export default function PerfilView({ perfil, panelIa, documentos }: { perfil: Pe
     startTransition(async () => {
       const result = await actualizarMiPerfil(fd)
       await ld.dismiss()
-      if (!result.ok) { toastError(result.error ?? 'Error inesperado.'); return }
+      if (!result.ok) { toastError(result.error ?? 'No se ha podido completar la operación.'); return }
       setShowPwd(false)
       toastSuccess('Perfil actualizado')
       router.refresh()
@@ -100,7 +100,7 @@ export default function PerfilView({ perfil, panelIa, documentos }: { perfil: Pe
       <div className="page-header">
         <div>
           <h1 className="page-title">Mi perfil</h1>
-          <p className="page-subtitle">Datos de tu cuenta y configuración personal.</p>
+          <p className="page-subtitle">Datos de la cuenta y configuración personal.</p>
         </div>
       </div>
 
@@ -222,14 +222,14 @@ export default function PerfilView({ perfil, panelIa, documentos }: { perfil: Pe
               <div className="form-label-with-help">
                 <label>Nombre</label>
                 {perfil.solo_lectura && (
-                  <FormHelp text="Como usuario de solo lectura no puedes cambiar tu nombre; sí tu contraseña. Pídeselo a quien administra los usuarios." label="Por qué no puedo cambiar mi nombre" />
+                  <FormHelp text="Un usuario de solo lectura no cambia su nombre, solo la contraseña. El cambio lo hace quien administra los usuarios." label="Por qué el nombre no es editable" />
                 )}
               </div>
               <input
                 className="input"
                 name="nombre"
                 defaultValue={perfil.nombre ?? ''}
-                placeholder="Tu nombre completo"
+                placeholder="Nombre completo"
                 readOnly={perfil.solo_lectura}
               />
             </div>

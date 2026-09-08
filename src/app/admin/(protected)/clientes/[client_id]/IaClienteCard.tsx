@@ -59,7 +59,7 @@ export default function IaClienteCard({ clientId, cupoNivel, nivelNombre, cupoOv
         <div className="input-group">
           <div className="form-label-with-help">
             <label htmlFor="cupo-cli">Cupo propio de este cliente (conversaciones/mes)</label>
-            <FormHelp text={`Déjalo vacío y usa el de su nivel (${nivelNombre}: ${cupoNivel.toLocaleString('es-ES')}/mes). Súbelo si el cliente paga consumo extra de IA. Pasado el cupo el asistente no se apaga: baja al modelo gratuito hasta el mes siguiente.`} label="Cómo funciona el cupo propio" />
+            <FormHelp text={`En blanco se aplica el de su nivel (${nivelNombre}: ${cupoNivel.toLocaleString('es-ES')}/mes). Se amplía si el cliente paga consumo extra de IA. Pasado el cupo el asistente no se apaga: baja al modelo gratuito hasta el mes siguiente.`} label="Cómo funciona el cupo propio" />
           </div>
           <input id="cupo-cli" type="number" min="0" step="1" className="input"
                  value={valor} onChange={e => setValor(e.target.value)}

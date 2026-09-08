@@ -224,7 +224,7 @@ export async function obtenerCatalogo(): Promise<CatalogoData | null> {
 export async function guardarCategoria(formData: FormData): Promise<{ ok: boolean; error?: string; categoria_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const nombre = ((formData.get('nombre') as string) ?? '').trim()
   if (!nombre) return { ok: false, error: 'El nombre es obligatorio.' }
@@ -260,7 +260,7 @@ export async function guardarCategoria(formData: FormData): Promise<{ ok: boolea
 export async function eliminarCategoria(categoria_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   // Los ítems de la categoría quedan sin categoría (FK on delete set null); no se borran.
@@ -277,7 +277,7 @@ export async function eliminarCategoria(categoria_id: string): Promise<{ ok: boo
 export async function guardarItem(formData: FormData): Promise<{ ok: boolean; error?: string; item_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const nombre = ((formData.get('nombre') as string) ?? '').trim()
   if (!nombre) return { ok: false, error: 'El nombre es obligatorio.' }
@@ -342,7 +342,7 @@ export async function guardarItem(formData: FormData): Promise<{ ok: boolean; er
 export async function duplicarItem(item_id: string): Promise<{ ok: boolean; error?: string; item_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: orig } = await db.from('catalogo_items').select('*')
@@ -370,7 +370,7 @@ export async function duplicarItem(item_id: string): Promise<{ ok: boolean; erro
 export async function eliminarItem(item_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   // Borrar la foto del bucket si la hay (best-effort).
@@ -391,7 +391,7 @@ export async function eliminarItem(item_id: string): Promise<{ ok: boolean; erro
 export async function marcarDisponible(item_id: string, disponible: boolean): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db.from('catalogo_items')
@@ -418,7 +418,7 @@ export async function marcarDisponibleEnLote(
 ): Promise<ResultadoLoteCatalogo> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, hechas: 0, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, hechas: 0, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, hechas: 0, error: 'Sin permiso para editar en este módulo.' }
   if (!ids.length) return { ok: true, hechas: 0 }
 
   const db = createAdminClient()
@@ -437,7 +437,7 @@ export async function marcarDisponibleEnLote(
 export async function eliminarItemsEnLote(ids: string[]): Promise<ResultadoLoteCatalogo> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, hechas: 0, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, hechas: 0, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, hechas: 0, error: 'Sin permiso para editar en este módulo.' }
   if (!ids.length) return { ok: true, hechas: 0 }
 
   const db = createAdminClient()
@@ -485,7 +485,7 @@ async function aplicarOrden(
 export async function reordenarItems(ids: string[]): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
   if (!ids.length) return { ok: true }
 
   const db = createAdminClient()
@@ -499,7 +499,7 @@ export async function reordenarItems(ids: string[]): Promise<{ ok: boolean; erro
 export async function reordenarCategorias(ids: string[]): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
   if (!ids.length) return { ok: true }
 
   const db = createAdminClient()
@@ -515,7 +515,7 @@ export async function reordenarCategorias(ids: string[]): Promise<{ ok: boolean;
 export async function subirFotoItem(formData: FormData): Promise<{ ok: boolean; error?: string; foto_url?: string; foto_thumb_url?: string }> {
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sin permisos.' }
-  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const item_id = ((formData.get('item_id') as string) ?? '').trim()
   const file    = formData.get('foto') as File | null
@@ -574,7 +574,7 @@ export async function subirFotoItem(formData: FormData): Promise<{ ok: boolean; 
 export async function quitarFotoItem(item_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sin permisos.' }
-  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
   const db = createAdminClient()
   const { data: item } = await db.from('catalogo_items')
     .select('foto_path').eq('item_id', item_id).eq('client_id', session.client_id).maybeSingle()
@@ -600,7 +600,7 @@ export async function quitarFotoItem(item_id: string): Promise<{ ok: boolean; er
 export async function guardarMonedaCatalogo(moneda: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const val = (moneda ?? '').trim().toUpperCase() || null
   const db = createAdminClient()
@@ -622,14 +622,14 @@ export async function importarDesdeProductos(
 ): Promise<{ ok: boolean; error?: string; creados?: number }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('catalogo_qr'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: cliente } = await db.from('clients').select('modulos_activos, catalogo_moneda').eq('client_id', session.client_id).single()
   // Vale cualquiera de las dos piezas que dan la lista de artículos: con Servicios a
   // secas el negocio también tiene qué importar (justo lo que vende).
   if (!tieneAlgunModulo(cliente?.modulos_activos, MODULOS_CATALOGO))
-    return { ok: false, error: 'Necesitas Inventario o Servicios para importar.' }
+    return { ok: false, error: 'Importar requiere el módulo Inventario o Servicios.' }
 
   // Monedas válidas del cliente: cualquier precio en una moneda que no exista
   // en su modelo se normaliza a la moneda del catálogo (evita datos como "CUB"

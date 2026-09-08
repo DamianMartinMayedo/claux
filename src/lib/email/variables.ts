@@ -66,7 +66,7 @@ export const PLANTILLAS_VARS: Record<TipoEmail, VarDef[]> = {
   respuesta_soporte: [
     { clave: 'nombre',        label: 'Nombre de contacto',        ejemplo: 'María Pérez' },
     { clave: 'asunto',        label: 'Asunto del mensaje',        ejemplo: 'Duda sobre facturación' },
-    { clave: 'mensaje_admin', label: 'Respuesta escrita por ti',  ejemplo: 'Ya quedó resuelto, revisa tu panel de Ventas.' },
+    { clave: 'mensaje_admin', label: 'Respuesta del equipo',      ejemplo: 'Ya está resuelto. Aparece en el panel de Ventas.' },
   ],
   confirmacion_pago: [
     { clave: 'empresa',          label: 'Nombre de la empresa', ejemplo: 'Restaurante El Sabor' },

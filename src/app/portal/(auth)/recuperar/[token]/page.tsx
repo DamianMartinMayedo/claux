@@ -23,7 +23,7 @@ export default async function RecuperarPasswordPage({
             <div className="login-logo-group">
               <img src="/logo_color.svg" alt="CLAUX" height={48} />
             </div>
-            <p className="login-subtitle">Digitaliza tu negocio</p>
+            <p className="login-subtitle">Gestión integral para negocios</p>
           </div>
           <div className="card card-lg">
             <h1 className="login-card-title">El enlace ya no vale</h1>

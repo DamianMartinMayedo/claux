@@ -35,7 +35,7 @@ export interface Empresa {
 
 function validarColor(color: string): { ok: boolean; color?: string; error?: string } {
   if (!color || !COLORES_EMPRESA.includes(color)) {
-    return { ok: false, error: 'Color no válido. Selecciona un color de la paleta.' }
+    return { ok: false, error: 'Color no válido: debe ser uno de la paleta.' }
   }
   return { ok: true, color }
 }
@@ -110,7 +110,7 @@ export async function guardarEmpresa(
   // de Postgres en vez de saber qué campo le falta.
   const moneda_funcional = ((formData.get('moneda_funcional') as string) ?? '').trim()
   if (!moneda_funcional) {
-    return { ok: false, error: 'Elige la moneda funcional de la empresa.' }
+    return { ok: false, error: 'Falta la moneda funcional de la empresa.' }
   }
 
   const empresa_id_form = ((formData.get('empresa_id') as string) ?? '').trim()
@@ -185,7 +185,7 @@ export async function guardarEmpresa(
       .eq('client_id', session.client_id)
       .eq('activa', true)
     if ((monedasCount ?? 0) === 0) {
-      return { ok: false, error: 'Crea al menos una moneda en «Monedas y tasas» antes de crear una empresa.' }
+      return { ok: false, error: 'Para crear una empresa se necesita al menos una moneda en «Monedas y tasas».' }
     }
 
     // Cuántas empresas caben es cosa del nivel contratado, no de un addon.
@@ -201,7 +201,7 @@ export async function guardarEmpresa(
       ...campos,
     })
 
-    if (error) return { ok: false, error: 'Error al crear la empresa.' }
+    if (error) return { ok: false, error: 'No se ha podido crear la empresa.' }
     revalidatePath('/portal/empresas')
     return { ok: true, empresa_id }
   }
@@ -223,7 +223,7 @@ export async function guardarEmpresa(
       .eq('estado', 'ACTIVO')
       .neq('empresa_id', empresa_id_form)
     if ((activasRestantes ?? 0) === 0) {
-      return { ok: false, error: 'No puedes desactivar tu única empresa activa: el portal necesita al menos una para registrar operaciones.' }
+      return { ok: false, error: 'No se puede desactivar la única empresa activa: el portal necesita al menos una para registrar operaciones.' }
     }
   }
 
@@ -233,7 +233,7 @@ export async function guardarEmpresa(
     .eq('empresa_id', empresa_id_form)
     .eq('client_id', session.client_id)  // garantiza que la empresa es del cliente
 
-  if (error) return { ok: false, error: 'Error al actualizar la empresa.' }
+  if (error) return { ok: false, error: 'No se ha podido actualizar la empresa.' }
   revalidatePath('/portal/empresas')
   return { ok: true, empresa_id: empresa_id_form }
 }

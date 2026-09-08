@@ -1247,7 +1247,7 @@ export async function copiarEmpleadoAEmpresa(
 ): Promise<{ ok: boolean; error?: string; empleado_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const empresas = await obtenerEmpresas()
   if (!empresas.some(e => e.empresa_id === empresa_destino)) {
@@ -1320,8 +1320,8 @@ export async function copiarEmpleadosAEmpresaEnLote(
 ): Promise<ResultadoLote> {
   const session = await getPortalSession()
   if (!session)             return loteVacio('Sesión inválida.')
-  if (!(await puedeEditarModulo('rrhh'))) return loteVacio('No tienes permiso para editar en este módulo.')
-  if (!empresa_destino) return loteVacio('Elige una empresa destino.')
+  if (!(await puedeEditarModulo('rrhh'))) return loteVacio('Sin permiso para editar en este módulo.')
+  if (!empresa_destino) return loteVacio('Falta la empresa destino.')
   if (!ids.length) return loteVacio()
 
   const db = createAdminClient()
@@ -2230,7 +2230,7 @@ export async function guardarEmpleado(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -2240,7 +2240,7 @@ export async function guardarEmpleado(
   const moneda       = (formData.get('moneda')       as string)?.trim()
 
   if (!nombre)      return { ok: false, error: 'El nombre es obligatorio.' }
-  if (!empresa_id)  return { ok: false, error: 'Debes seleccionar una empresa.' }
+  if (!empresa_id)  return { ok: false, error: 'Falta la empresa.' }
 
   const empresas = await obtenerEmpresas()
   if (!empresas.some(e => e.empresa_id === empresa_id)) {
@@ -2284,7 +2284,7 @@ export async function guardarEmpleado(
     notas:                 (formData.get('notas')                 as string) ?? null,
   })
 
-  if (!moneda) return { ok: false, error: 'Debes seleccionar una moneda.' }
+  if (!moneda) return { ok: false, error: 'Falta la moneda.' }
 
   if (!empleado_id) {
     if (!await monedaValida(db, session.client_id, moneda)) {
@@ -2348,7 +2348,7 @@ export async function guardarVacacionesApertura(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   if (isNaN(importe) || importe < 0) return { ok: false, error: 'El importe no puede ser negativo.' }
   if (isNaN(dias)    || dias    < 0) return { ok: false, error: 'Los días no pueden ser negativos.' }
@@ -2378,7 +2378,7 @@ export async function darBajaEmpleado(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const empleado_id = (formData.get('empleado_id') as string)?.trim()
   const fecha_baja  = (formData.get('fecha_baja')  as string)?.trim() || hoy()
@@ -2399,7 +2399,7 @@ export async function darBajaEmpleado(
 export async function reactivarEmpleado(empleado_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -2425,7 +2425,7 @@ export async function reactivarEmpleado(empleado_id: string): Promise<{ ok: bool
 export async function eliminarEmpleado(empleado_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -2456,7 +2456,7 @@ export async function darBajaEmpleadosEnLote(
 ): Promise<ResultadoLote> {
   const session = await getPortalSession()
   if (!session)             return loteVacio('Sesión inválida.')
-  if (!(await puedeEditarModulo('rrhh'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  if (!(await puedeEditarModulo('rrhh'))) return loteVacio('Sin permiso para editar en este módulo.')
   if (!ids.length) return loteVacio()
 
   const { data, error } = await createAdminClient().from('empleados')
@@ -2471,7 +2471,7 @@ export async function darBajaEmpleadosEnLote(
 export async function reactivarEmpleadosEnLote(ids: string[]): Promise<ResultadoLote> {
   const session = await getPortalSession()
   if (!session)             return loteVacio('Sesión inválida.')
-  if (!(await puedeEditarModulo('rrhh'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  if (!(await puedeEditarModulo('rrhh'))) return loteVacio('Sin permiso para editar en este módulo.')
   if (!ids.length) return loteVacio()
 
   const db = createAdminClient()
@@ -2499,7 +2499,7 @@ export async function reactivarEmpleadosEnLote(ids: string[]): Promise<Resultado
 export async function eliminarEmpleadosEnLote(ids: string[]): Promise<ResultadoLote> {
   const session = await getPortalSession()
   if (!session)             return loteVacio('Sesión inválida.')
-  if (!(await puedeEditarModulo('rrhh'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  if (!(await puedeEditarModulo('rrhh'))) return loteVacio('Sin permiso para editar en este módulo.')
   if (!ids.length) return loteVacio()
 
   const db = createAdminClient()
@@ -2552,7 +2552,7 @@ export async function guardarContrato(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const empleado_id  = (formData.get('empleado_id')  as string)?.trim()
   const tipo_raw     = (formData.get('tipo_contrato') as string)?.trim() as TipoContrato
@@ -2615,7 +2615,7 @@ export async function actualizarContrato(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const contrato_id  = (formData.get('contrato_id')  as string)?.trim()
   const tipo_raw     = (formData.get('tipo_contrato') as string)?.trim() as TipoContrato
@@ -2663,7 +2663,7 @@ export async function actualizarContrato(
 export async function eliminarContrato(contrato_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -2913,7 +2913,7 @@ export async function obtenerReciboNomina(
   // recibo de la nómina de otra con solo su id.
   const empresas = await obtenerEmpresas()
   const empresa  = empresas.find(e => e.empresa_id === nomina.empresa_id)
-  if (!empresa) return { ok: false, error: 'No tienes acceso a esta empresa.' }
+  if (!empresa) return { ok: false, error: 'Sin acceso a esta empresa.' }
 
   const [{ data: linea }, { data: empleado }, configs] = await Promise.all([
     db.from('nomina_lineas')
@@ -3014,7 +3014,7 @@ export async function guardarConceptoEmpleado(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const concepto_id = (formData.get('concepto_id') as string)?.trim() || null
   const empleado_id = (formData.get('empleado_id') as string)?.trim()
@@ -3084,7 +3084,7 @@ export async function alternarConceptoEmpleado(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: cpt } = await db.from('conceptos_empleado').select('empleado_id')
@@ -3104,7 +3104,7 @@ export async function alternarConceptoEmpleado(
 export async function eliminarConceptoEmpleado(concepto_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: cpt } = await db.from('conceptos_empleado').select('empleado_id')
@@ -3227,7 +3227,7 @@ export async function guardarIncidencia(
 ): Promise<{ ok: boolean; error?: string; aviso?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const empleado_id = (formData.get('empleado_id') as string)?.trim()
   const periodo     = (formData.get('periodo')     as string)?.trim()
@@ -3334,8 +3334,8 @@ export async function guardarIncidencia(
       if (dias_vacaciones > 0 && vacaciones_importe_manual == null && valorDia <= 0) {
         avisos.push(
           'Este trabajador no tiene saldo de vacaciones acumulado en importe, así que el pago ' +
-          'de los días de vacaciones saldría 0. Marca «Corregir importe de vacaciones» en la ' +
-          'incidencia para fijar a mano cuánto pagarle.')
+          'de los días de vacaciones saldría 0. La incidencia «Corregir importe de vacaciones» ' +
+          'permite fijar el importe.')
       }
       if (diasPagados > saldoDias + EPS) {
         avisos.push(
@@ -3352,7 +3352,7 @@ export async function guardarIncidencia(
 export async function eliminarIncidencia(incidencia_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: inc } = await db.from('incidencias_nomina').select('empleado_id')
@@ -3566,7 +3566,7 @@ export async function guardarIncidenciaDeLinea(
 ): Promise<{ ok: boolean; error?: string; aviso?: string; reabierta?: boolean }> {
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const nomina_id   = (formData.get('nomina_id')   as string)?.trim()
   const empleado_id = (formData.get('empleado_id') as string)?.trim()
@@ -3608,7 +3608,7 @@ export async function guardarDevengadoDeLinea(
 ): Promise<{ ok: boolean; error?: string; reabierta?: boolean }> {
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const linea_id = (formData.get('linea_id') as string)?.trim()
   if (!linea_id) return { ok: false, error: 'Línea no válida.' }
@@ -3644,7 +3644,7 @@ export async function guardarConfigNomina(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const empresa_id = (formData.get('empresa_id') as string)?.trim()
   const modelo     = (formData.get('modelo')     as string)?.trim() as ModeloNomina
@@ -3703,7 +3703,7 @@ export async function guardarMapeoGastoNomina(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const empresa_id = (formData.get('empresa_id') as string)?.trim()
   if (!empresa_id) return { ok: false, error: 'Empresa no válida.' }
@@ -3754,7 +3754,7 @@ export async function guardarReglaDeduccion(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const regla_id   = (formData.get('regla_id')   as string)?.trim() || null
   const nombre     = (formData.get('nombre')     as string)?.trim()
@@ -3808,7 +3808,7 @@ export async function alternarReglaDeduccion(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db.from('deducciones_reglas')
@@ -3823,7 +3823,7 @@ export async function alternarReglaDeduccion(
 export async function eliminarReglaDeduccion(regla_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   // Las excepciones cuelgan de la regla: si la regla desaparece, dejan de tener
@@ -3850,7 +3850,7 @@ export async function guardarExcepcionRegla(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const empleado_id = (formData.get('empleado_id') as string)?.trim()
   const regla_id    = (formData.get('regla_id')    as string)?.trim()
@@ -3918,7 +3918,7 @@ export async function crearNomina(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const empresa_id = (formData.get('empresa_id') as string)?.trim()
   const periodo    = (formData.get('periodo')    as string)?.trim()   // YYYY-MM
@@ -3926,9 +3926,9 @@ export async function crearNomina(
   const fecha      = (formData.get('fecha')      as string)?.trim() || hoy()
   const notas      = (formData.get('notas')      as string)?.trim() || null
 
-  if (!empresa_id)                 return { ok: false, error: 'Debes seleccionar una empresa.' }
+  if (!empresa_id)                 return { ok: false, error: 'Falta la empresa.' }
   if (!periodo || !/^\d{4}-\d{2}$/.test(periodo)) return { ok: false, error: 'El período debe tener formato AAAA-MM.' }
-  if (!moneda)                     return { ok: false, error: 'Debes seleccionar una moneda.' }
+  if (!moneda)                     return { ok: false, error: 'Falta la moneda.' }
 
   const empresas = await obtenerEmpresas()
   if (!empresas.some(e => e.empresa_id === empresa_id)) {
@@ -4110,7 +4110,7 @@ export async function guardarLineaNomina(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const linea_id     = (formData.get('linea_id') as string)?.trim()
   const devengadoRaw = parseFloat(formData.get('devengado') as string)
@@ -4289,7 +4289,7 @@ export async function anadirItemPuntual(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const linea_id = (formData.get('linea_id') as string)?.trim()
   const nombre   = (formData.get('nombre')   as string)?.trim()
@@ -4317,7 +4317,7 @@ export async function anadirItemPuntual(
     const yaRetenido = redondear2(filas.filter(i => i.tipo === 'RETENCION').reduce((s, i) => s + Number(i.monto), 0))
     if (yaRetenido + monto > devengado + EPS) {
       const cabe = redondear2(Math.max(0, devengado - yaRetenido))
-      return { ok: false, error: `No cabe: esta línea devenga ${devengado.toLocaleString('es-ES', { minimumFractionDigits: 2 })} y ya tiene ${yaRetenido.toLocaleString('es-ES', { minimumFractionDigits: 2 })} retenido. Como mucho puedes descontar ${cabe.toLocaleString('es-ES', { minimumFractionDigits: 2 })}.` }
+      return { ok: false, error: `No cabe: esta línea devenga ${devengado.toLocaleString('es-ES', { minimumFractionDigits: 2 })} y ya tiene ${yaRetenido.toLocaleString('es-ES', { minimumFractionDigits: 2 })} retenido. El máximo a descontar es ${cabe.toLocaleString('es-ES', { minimumFractionDigits: 2 })}.` }
     }
   }
 
@@ -4339,7 +4339,7 @@ export async function anadirItemPuntual(
 export async function eliminarItemPuntual(item_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: item } = await db.from('nomina_linea_conceptos')
@@ -4348,7 +4348,7 @@ export async function eliminarItemPuntual(item_id: string): Promise<{ ok: boolea
   // Solo lo puntual se borra a mano. Lo que sale de la ficha del trabajador se quita
   // desde la ficha, o el recálculo volvería a ponerlo y parecería que no se guardó.
   if (item.origen !== 'PUNTUAL') {
-    return { ok: false, error: 'Este concepto sale de la ficha del trabajador. Quítalo desde su ficha.' }
+    return { ok: false, error: 'Este concepto sale de la ficha del trabajador: se quita desde ahí.' }
   }
 
   const chk = await lineaEditable(db, session.client_id, item.linea_id)
@@ -4662,7 +4662,7 @@ export async function recalcularNomina(
 ): Promise<{ ok: boolean; error?: string; actualizadas?: number; total?: number }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: nomina } = await db.from('nominas')
@@ -4702,7 +4702,7 @@ export async function reabrirYActualizarNomina(
 ): Promise<{ ok: boolean; error?: string; actualizadas?: number; total?: number }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: nomina } = await db.from('nominas')
@@ -4732,7 +4732,7 @@ export async function reabrirYActualizarNomina(
       .eq('client_id', session.client_id)
       .in('referencia_id', gastoIds)
     if ((count ?? 0) > 0) {
-      return { ok: false, error: 'Esta nómina ya tiene pagos registrados. Anúlalos en Tesorería y vuelve a intentarlo.' }
+      return { ok: false, error: 'Esta nómina ya tiene pagos registrados. Anúlalos en Tesorería.' }
     }
     const { error: delErr } = await db.from('gastos_cobros').delete()
       .eq('client_id', session.client_id).in('registro_id', gastoIds)
@@ -4798,7 +4798,7 @@ export async function reabrirYActualizarNomina(
 export async function confirmarNomina(nomina_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -4877,7 +4877,7 @@ export async function confirmarNomina(nomina_id: string): Promise<{ ok: boolean;
     if (flojos.length) {
       return {
         ok: false,
-        error: `Esta nómina usa tipos impositivos aún sin verificar (${flojos.join(', ')}), así que no se puede registrar en contabilidad: crearía una deuda con ONAT por un importe provisional. Puedes seguir trabajando el borrador; en cuanto se carguen los tipos reales, se confirma sin tocar nada más.`,
+        error: `Esta nómina usa tipos impositivos aún sin verificar (${flojos.join(', ')}), así que no se puede registrar en contabilidad: crearía una deuda con ONAT por un importe provisional. El borrador se puede seguir trabajando; en cuanto se carguen los tipos reales, se confirma sin tocar nada más.`,
       }
     }
   }
@@ -5130,7 +5130,7 @@ export async function confirmarNomina(nomina_id: string): Promise<{ ok: boolean;
 export async function eliminarNomina(nomina_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -5192,7 +5192,7 @@ export async function eliminarNomina(nomina_id: string): Promise<{ ok: boolean; 
 export async function confirmarNominasEnLote(ids: string[]): Promise<ResultadoLote> {
   const session = await getPortalSession()
   if (!session)             return loteVacio('Sesión inválida.')
-  if (!(await puedeEditarModulo('rrhh'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  if (!(await puedeEditarModulo('rrhh'))) return loteVacio('Sin permiso para editar en este módulo.')
   if (!ids.length) return loteVacio()
 
   const db = createAdminClient()
@@ -5214,7 +5214,7 @@ export async function confirmarNominasEnLote(ids: string[]): Promise<ResultadoLo
 export async function eliminarNominasEnLote(ids: string[]): Promise<ResultadoLote> {
   const session = await getPortalSession()
   if (!session)             return loteVacio('Sesión inválida.')
-  if (!(await puedeEditarModulo('rrhh'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  if (!(await puedeEditarModulo('rrhh'))) return loteVacio('Sin permiso para editar en este módulo.')
   if (!ids.length) return loteVacio()
 
   const db = createAdminClient()
@@ -5245,7 +5245,7 @@ export async function guardarTurno(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const turno_id    = (formData.get('turno_id')    as string)?.trim()
   const empresa_id  = (formData.get('empresa_id')  as string)?.trim()
@@ -5258,7 +5258,7 @@ export async function guardarTurno(
   const hora_fin    = es_descanso ? null : ((formData.get('hora_fin')    as string)?.trim() || null)
 
   if (!nombre)     return { ok: false, error: 'El nombre del turno es obligatorio.' }
-  if (!empresa_id) return { ok: false, error: 'Debes seleccionar una empresa.' }
+  if (!empresa_id) return { ok: false, error: 'Falta la empresa.' }
 
   const empresas = await obtenerEmpresas()
   if (!empresas.some(e => e.empresa_id === empresa_id)) {
@@ -5301,7 +5301,7 @@ export async function alternarTurno(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db.from('turnos')
@@ -5318,7 +5318,7 @@ export async function alternarTurno(
 export async function eliminarTurno(turno_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   // Los slots de rotación que usaban esta franja pasan a descanso (turno_id null) en vez
@@ -5356,7 +5356,7 @@ export async function guardarPatron(
 ): Promise<{ ok: boolean; error?: string; patron_id?: string }> {
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const patron_id  = (fd.get('patron_id')  as string)?.trim() || ''
   const empresa_id = (fd.get('empresa_id') as string)?.trim() || ''
@@ -5439,7 +5439,7 @@ export async function alternarPatron(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db.from('turno_patrones')
@@ -5454,7 +5454,7 @@ export async function alternarPatron(
 export async function eliminarPatron(patron_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   await db.from('turno_miembros').delete().eq('client_id', session.client_id).eq('patron_id', patron_id)
@@ -5479,7 +5479,7 @@ export async function guardarRoster(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
   if (!patron_id) return { ok: false, error: 'Patrón no válido.' }
 
   const db = createAdminClient()
@@ -5543,7 +5543,7 @@ export async function guardarTurnoUnificado(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const patron_id  = (fd.get('patron_id')  as string)?.trim() || ''
   const franja_id  = (fd.get('franja_id')  as string)?.trim() || ''   // banda existente al editar
@@ -5556,7 +5556,7 @@ export async function guardarTurnoUnificado(
   const fecha_ancla = (fd.get('fecha_ancla') as string)?.trim() || ''
 
   if (!nombre)     return { ok: false, error: 'El nombre del turno es obligatorio.' }
-  if (!empresa_id) return { ok: false, error: 'Debes seleccionar una empresa.' }
+  if (!empresa_id) return { ok: false, error: 'Falta la empresa.' }
   if (!(tipo in LONGITUD_POR_TIPO)) return { ok: false, error: 'Tipo de rotación no válido.' }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha_ancla)) return { ok: false, error: 'La fecha de inicio del ciclo no es válida.' }
 
@@ -5682,7 +5682,7 @@ export async function eliminarTurnoUnificado(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('rrhh'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
   if (!patron_id) return { ok: false, error: 'Turno no válido.' }
 
   const db = createAdminClient()

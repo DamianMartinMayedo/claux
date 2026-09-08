@@ -47,7 +47,7 @@ export async function guardarNivel(formData: FormData) {
     const { data: m } = await supabase
       .from('ia_modelos').select('id, activo').eq('id', iaModel).maybeSingle()
     if (!m?.activo) {
-      return { ok: false as const, error: `El modelo «${iaModel}» ya no está disponible. Elige otro en la lista.` }
+      return { ok: false as const, error: `El modelo «${iaModel}» ya no está disponible: hay que seleccionar otro de la lista.` }
     }
   }
 
@@ -101,7 +101,7 @@ export async function guardarLimites(formData: FormData) {
     return { ok: false as const, error: 'La matriz trae un nivel o una dimensión que no existe.' }
   }
   if (validas.some(f => f.base !== null && !(Number(f.base) > 0))) {
-    return { ok: false as const, error: 'Un límite es un número mayor que cero. Déjalo vacío para «ilimitado».' }
+    return { ok: false as const, error: 'Un límite es un número mayor que cero. En blanco significa «ilimitado».' }
   }
 
   // `extra_por_empresa` no viaja en el formulario: hoy es 0 en todas partes

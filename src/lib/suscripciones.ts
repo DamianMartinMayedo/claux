@@ -166,7 +166,7 @@ export interface ServicioSuscribible {
   /**
    * Ya no se ofrece para acuerdos nuevos (archivado o desmarcado como suscribible), pero
    * viaja porque algún acuerdo vivo lo tiene contratado: sin él, editar ese acuerdo
-   * pintaba «— Elige un servicio —» sobre una línea que SÍ tiene servicio, y guardar lo
+   * pintaba «— Seleccionar servicio —» sobre una línea que SÍ tiene servicio, y guardar lo
    * borraba en silencio. Solo se ofrece en la línea que ya lo tenía (`opcionesCon`).
    */
   archivado:            boolean

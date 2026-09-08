@@ -274,7 +274,7 @@ function avisoCobro(r: ResultadoCobro): string | null {
   if (r.accion === 'actualizado') return `El cobro de configuración pasa a ${imp(r.monto)}.`
   if (r.accion === 'creado')      return `Se creó el cobro de configuración ${r.pagoId} por ${imp(r.monto)} (por confirmar).`
   if (r.accion === 'eliminado')   return `Se retiró el cobro de configuración: el presupuesto queda en ${imp(0)}.`
-  if (r.accion === 'congelado')   return `Ojo: el cobro de configuración (${imp(r.monto)}) ya está confirmado y no se toca. Ajústalo a mano si procede.`
+  if (r.accion === 'congelado')   return `El cobro de configuración (${imp(r.monto)}) ya está confirmado y no se modifica. Si procede, se ajusta manualmente.`
   return null
 }
 
@@ -683,7 +683,7 @@ export async function eliminarPresupuesto(
       .eq('id', id)
       .maybeSingle()
     if (!sigue) return { ok: true, yaEliminado: true }
-    return { ok: false, error: 'El presupuesto cambió mientras se eliminaba. Actualiza la lista e inténtalo de nuevo.' }
+    return { ok: false, error: 'El presupuesto cambió mientras se eliminaba. Actualiza la lista.' }
   }
 
   await logActividad(db, {
@@ -896,7 +896,7 @@ export async function revisarPresupuestoIa(
   // Un formulario recién abierto no tiene nada que revisar, y gastar una llamada
   // de la bolsa para que conteste eso mismo es tirar dinero.
   if (!modulosSel.length && resultado.horasTotal === 0) {
-    return { ok: false, error: 'Todavía no hay nada que revisar: marca los módulos y pon los volúmenes.' }
+    return { ok: false, error: 'Sin nada que revisar: marca los módulos y pon los volúmenes.' }
   }
 
   const nombreModulo = new Map(((cat.data ?? []) as { clave: string; nombre: string }[]).map(m => [m.clave, m.nombre]))

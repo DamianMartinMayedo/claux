@@ -22,7 +22,7 @@ export default function NuevoModuloModal({ nombresNivel }: { nombresNivel: Recor
     setLoading(true)
     const res = await crearModulo(new FormData(formRef.current!))
     setLoading(false)
-    if (!res.ok) { toastError(res.error ?? 'Error al crear'); return }
+    if (!res.ok) { toastError(res.error ?? 'No se ha podido crear'); return }
     toastSuccess('Módulo creado')
     handleClose()
   }
@@ -64,7 +64,7 @@ export default function NuevoModuloModal({ nombresNivel }: { nombresNivel: Recor
           <div className="input-group">
             <label>Beneficio</label>
             <textarea name="beneficio" className="input" rows={2} placeholder="Qué gana el negocio con esto…" />
-            <span className="input-hint">Por qué le sirve. Diapositiva «Pensado para tu negocio» de la propuesta.</span>
+            <span className="input-hint">Por qué le sirve. Diapositiva «Pensado para su negocio» de la propuesta.</span>
           </div>
           <div className="input-group">
             <label>Resumen</label>
@@ -87,7 +87,7 @@ export default function NuevoModuloModal({ nombresNivel }: { nombresNivel: Recor
           ))}
           <div className="info-banner info-banner-compacto">
             <Info aria-hidden />
-            <p>Las páginas internas (módulo) o rutas (funcionalidad) se crean con el asistente de IA. Desde aquí solo gestionas el catálogo.</p>
+            <p>Las páginas internas (módulo) o rutas (funcionalidad) se crean con el asistente de IA. Desde aquí solo se gestiona el catálogo.</p>
           </div>
         </div>
         <div className="modal-footer">

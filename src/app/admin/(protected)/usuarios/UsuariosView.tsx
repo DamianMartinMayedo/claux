@@ -108,7 +108,7 @@ export default function UsuariosView({ usuarios }: { usuarios: UsuarioAdmin[] })
           <div className="table-empty">
             <UserCog size={40} strokeWidth={1.5} />
             <h3 className="table-empty-title">Sin usuarios registrados</h3>
-            <p>Crea el primer vendedor con el botón de arriba.</p>
+            <p>El botón de arriba crea el primero.</p>
           </div>
         </div>
       ) : (

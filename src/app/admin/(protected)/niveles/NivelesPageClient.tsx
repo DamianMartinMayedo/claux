@@ -79,7 +79,7 @@ export default function NivelesPageClient(
       return { nivel: n, dimension: f.dimension, base: txt === '' ? null : Number(txt) }
     }))
     if (filas.some(f => f.base !== null && !(f.base > 0))) {
-      toastError('Un límite es un número mayor que cero. Déjalo vacío para «ilimitado».')
+      toastError('Un límite es un número mayor que cero. En blanco significa «ilimitado».')
       return
     }
     const ld = toastLoading('Guardando límites…')
@@ -157,7 +157,7 @@ export default function NivelesPageClient(
                 </select>
                 {n.ia_model && !modelos.some(m => m.id === n.ia_model) && (
                   <span className="input-hint input-hint-warning">
-                    Ese modelo está desactivado: hoy contesta el principal. Elige otro.
+                    Ese modelo está desactivado: hoy contesta el principal.
                   </span>
                 )}
               </div>

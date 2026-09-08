@@ -55,7 +55,7 @@ export default function NotificacionesView({
           </button>
           <h1 className="page-title">Notificaciones</h1>
           <p className="page-subtitle">
-            Avisos de tu negocio. La bandeja es compartida: si la marcas leída o la archivas, se ve así para todo el equipo.
+            Avisos del negocio. La bandeja es compartida: marcar como leída o archivar afecta a todo el equipo.
           </p>
         </div>
       </div>
@@ -247,7 +247,7 @@ function Bandeja({ inicial, categorias }: { inicial: NotificacionFila[]; categor
       {lista.length === 0 ? (
         <div className="ntf-vacio-bloque">
           <BellOff size={28} strokeWidth={1.5} />
-          <p>{filtro === 'no_leidas' ? 'No tienes notificaciones sin leer.' : 'Aquí aparecerán los avisos de tu negocio.'}</p>
+          <p>{filtro === 'no_leidas' ? 'Sin notificaciones pendientes de leer.' : 'Aquí aparecen los avisos del negocio.'}</p>
         </div>
       ) : (
         <ul className="ntf-lista">
@@ -342,8 +342,8 @@ function Preferencias({ inicial }: { inicial: PreferenciaFila[] }) {
   return (
     <div className="card">
       <p className="ntf-prefs-intro">
-        Elige de qué te avisamos y con cuánta insistencia. <strong>Solo en la campana</strong> no interrumpe;
-        <strong> Aviso flotante</strong> aparece un momento en pantalla; <strong>Urgente</strong> se queda hasta que lo atiendas.
+        Qué genera aviso y con cuánta insistencia. <strong>Solo en la campana</strong> no interrumpe;
+        <strong> Aviso flotante</strong> aparece un momento en pantalla; <strong>Urgente</strong> permanece hasta atenderlo.
       </p>
 
       {agrupar(filas).map(([categoria, delGrupo]) => (

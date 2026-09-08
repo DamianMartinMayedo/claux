@@ -218,7 +218,7 @@ export function DocumentoLineasEditor({
                   <DescripcionCatalogo
                     valor={l.descripcion}
                     articulos={productos}
-                    placeholder="Describe lo que vendes…"
+                    placeholder="Descripción del artículo o servicio…"
                     linkCodigo={l.producto_id ? (art?.codigo ?? l.producto_id) : null}
                     inputRef={el => { filasRef.current[i] = el }}
                     importeTexto={p => p.precios[moneda] != null

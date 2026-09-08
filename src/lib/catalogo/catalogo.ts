@@ -137,15 +137,15 @@ export const RAICES: RaizCatalogo[] = [
 
 export const ENTRADAS: EntradaCatalogo[] = [
   // G1 · Compras y mercancía — COSTE_VENTAS
-  { clave: 'gas_mercancia',          nombre: 'Mercancía para reventa',            padre: 'compras', fase: 1, ayuda: 'Productos comprados hechos para vender igual.', noVa: 'Materiales que transformas → Materias primas' },
+  { clave: 'gas_mercancia',          nombre: 'Mercancía para reventa',            padre: 'compras', fase: 1, ayuda: 'Productos comprados hechos para vender igual.', noVa: 'Materiales que se transforman → Materias primas' },
   { clave: 'gas_materias_primas',    nombre: 'Materias primas e insumos',         padre: 'compras', fase: 1, ayuda: 'Lo que se consume al producir o prestar el servicio.', noVa: 'Lo que dura años → Inversiones' },
   { clave: 'gas_envases',            nombre: 'Envases, embalaje y desechables',   padre: 'compras', fase: 1, ayuda: 'Bolsas, cajas, vasos, servilletas, etiquetas.', noVa: 'Envases retornables duraderos → Inversiones' },
-  { clave: 'gas_flete_compra',       nombre: 'Fletes y traslado de compras',      padre: 'compras', fase: 1, ayuda: 'Traer lo que compraste.', noVa: 'Llevar a tus clientes → Reparto y mensajería' },
+  { clave: 'gas_flete_compra',       nombre: 'Fletes y traslado de compras',      padre: 'compras', fase: 1, ayuda: 'Traer lo comprado.', noVa: 'Llevar al cliente → Reparto y mensajería' },
   { clave: 'gas_mermas',             nombre: 'Mermas, roturas y vencidos',        padre: 'compras', fase: 1, ayuda: 'Pérdida normal por deterioro o caducidad.', noVa: 'Robo o siniestro → Pérdidas por siniestro' },
   { clave: 'gas_energia_produccion', nombre: 'Energía y combustible de producción', padre: 'compras', fase: 1, ayuda: 'Energía consumida directamente al producir.', noVa: 'La luz del local → Electricidad' },
 
   // G2 · Servicios para producir o vender — COSTE_VENTAS
-  { clave: 'gas_maquila',        nombre: 'Elaboración o maquila por terceros',      padre: 'servicios_terceros', fase: 1, ayuda: 'Alguien produce para ti parte de lo que vendes.', noVa: 'Un servicio administrativo → Servicios profesionales' },
+  { clave: 'gas_maquila',        nombre: 'Elaboración o maquila por terceros',      padre: 'servicios_terceros', fase: 1, ayuda: 'Un tercero produce parte de lo que se vende.', noVa: 'Un servicio administrativo → Servicios profesionales' },
   { clave: 'gas_comision_venta', nombre: 'Comisiones a vendedores e intermediarios', padre: 'servicios_terceros', fase: 1, ayuda: 'Comisión por venta conseguida.', noVa: 'De una app o pasarela → Comisiones de plataformas' },
   { clave: 'gas_alq_equipos_op', nombre: 'Alquiler de equipos de la operación',     padre: 'servicios_terceros', fase: 1, ayuda: 'Máquinas rentadas para producir o vender.', noVa: 'El local → Alquiler del local' },
   { clave: 'gas_subcontrata',    nombre: 'Subcontratación de mano de obra',        padre: 'servicios_terceros', fase: 1, ayuda: 'Cuadrillas o personas contratadas por obra.', noVa: 'Personal con nómina → Personal' },
@@ -160,14 +160,14 @@ export const ENTRADAS: EntradaCatalogo[] = [
   { clave: 'impuestos_salario',        nombre: 'Impuestos de salario',                 padre: 'gas_personal', fase: 1, claveSistema: 'impuestos_salario',        nuncaSembrar: true, ayuda: 'Tributo por emplear personal (IUFT). Lo escribe la nómina.', noVa: 'No va en Impuestos de la operación: es coste de tener plantilla' },
   { clave: 'contribucion_ss_empresa',  nombre: 'Contribución a la Seguridad Social',   padre: 'gas_personal', fase: 1, claveSistema: 'contribucion_ss_empresa',  nuncaSembrar: true, ayuda: 'Aporte del negocio a la Seguridad Social. Lo escribe la nómina.', noVa: 'Lo retenido al trabajador — no es gasto, va sin categoría' },
   { clave: 'gas_estimulacion',         nombre: 'Estimulación, bonos y propinas',       padre: 'gas_personal', fase: 1, ayuda: 'Pagos al personal fuera de nómina.', noVa: 'Salario formal → lo escribe la nómina' },
-  { clave: 'gas_alimentacion_personal', nombre: 'Alimentación del personal',           padre: 'gas_personal', fase: 1, ayuda: 'Comida del equipo en jornada.', noVa: 'Comida que vendes → Materias primas' },
-  { clave: 'gas_transporte_personal',  nombre: 'Transporte del personal',              padre: 'gas_personal', fase: 1, ayuda: 'Que tu gente llegue o se mueva.', noVa: 'Vehículos del negocio → Combustible de vehículos' },
-  { clave: 'gas_ropa_trabajo',         nombre: 'Ropa de trabajo y protección',         padre: 'gas_personal', fase: 1, ayuda: 'Uniformes, guantes, calzado, cascos.', noVa: 'Ropa que vendes → Mercancía para reventa' },
+  { clave: 'gas_alimentacion_personal', nombre: 'Alimentación del personal',           padre: 'gas_personal', fase: 1, ayuda: 'Comida del equipo en jornada.', noVa: 'Comida que se vende → Materias primas' },
+  { clave: 'gas_transporte_personal',  nombre: 'Transporte del personal',              padre: 'gas_personal', fase: 1, ayuda: 'Desplazamientos del personal.', noVa: 'Vehículos del negocio → Combustible de vehículos' },
+  { clave: 'gas_ropa_trabajo',         nombre: 'Ropa de trabajo y protección',         padre: 'gas_personal', fase: 1, ayuda: 'Uniformes, guantes, calzado, cascos.', noVa: 'Ropa que se vende → Mercancía para reventa' },
   { clave: 'gas_capacitacion',         nombre: 'Capacitación y certificaciones',       padre: 'gas_personal', fase: 1, ayuda: 'Cursos y licencias profesionales del personal.', noVa: 'Licencias del negocio → Licencias y tasas' },
   { clave: 'gas_contratos_servicio',   nombre: 'Contratos por servicios',              padre: 'gas_personal', fase: 1, ayuda: 'Personas que facturan servicios puntuales, sin vínculo laboral.', noVa: 'Cuadrillas por obra → Subcontratación' },
 
   // G4 · Local y servicios básicos — OPERATIVO
-  { clave: 'gas_alquiler',            nombre: 'Alquiler del local',            padre: 'gas_local', fase: 1, ayuda: 'Renta del espacio donde opera el negocio.', noVa: 'La luz y el agua, aunque las pagues con la renta' },
+  { clave: 'gas_alquiler',            nombre: 'Alquiler del local',            padre: 'gas_local', fase: 1, ayuda: 'Renta del espacio donde opera el negocio.', noVa: 'La luz y el agua, aunque se paguen con la renta' },
   { clave: 'gas_electricidad',        nombre: 'Electricidad',                  padre: 'gas_local', fase: 1, ayuda: 'Factura eléctrica del local.', noVa: 'Energía de producción → Energía de producción' },
   { clave: 'gas_agua',                nombre: 'Agua',                          padre: 'gas_local', fase: 1, ayuda: 'Factura, pipas, cisternas.' },
   { clave: 'gas_gas',                 nombre: 'Gas y combustible del local',   padre: 'gas_local', fase: 1, ayuda: 'Gas de cocina, calderas.', noVa: 'Vehículos → Combustible de vehículos' },
@@ -184,7 +184,7 @@ export const ENTRADAS: EntradaCatalogo[] = [
   { clave: 'gas_reparto',           nombre: 'Reparto y mensajería',           padre: 'gas_transporte', fase: 1, ayuda: 'Llevar el pedido al cliente.', noVa: 'Traer lo comprado → Fletes de compras' },
   { clave: 'gas_parqueo',           nombre: 'Parqueo y peajes',               padre: 'gas_transporte', fase: 1, ayuda: 'Parqueo, peajes, permisos de circulación.', noVa: 'Multas → Multas y sanciones' },
   { clave: 'gas_seguro_vehiculo',   nombre: 'Seguro de vehículos',            padre: 'gas_transporte', fase: 1, ayuda: 'Pólizas de los vehículos.', noVa: 'Del local o mercancía → Seguros del negocio' },
-  { clave: 'gas_almacenaje',        nombre: 'Almacenaje y depósito',          padre: 'gas_transporte', fase: 1, ayuda: 'Almacén externo, custodia.', noVa: 'Tu propio almacén → Alquiler del local' },
+  { clave: 'gas_almacenaje',        nombre: 'Almacenaje y depósito',          padre: 'gas_transporte', fase: 1, ayuda: 'Almacén externo, custodia.', noVa: 'Almacén propio → Alquiler del local' },
 
   // G6 · Comercial y publicidad — OPERATIVO
   { clave: 'gas_publicidad',           nombre: 'Publicidad y promoción',            padre: 'gas_comercial', fase: 1, ayuda: 'Anuncios, influencers, promociones pagadas.', noVa: 'Descuentos, que ya bajan el ingreso' },
@@ -196,7 +196,7 @@ export const ENTRADAS: EntradaCatalogo[] = [
   // G7 · Administración y oficina — OPERATIVO
   { clave: 'gas_telecom',       nombre: 'Telefonía, internet y datos',    padre: 'gas_admin', fase: 1, ayuda: 'Recargas, planes de datos, internet del local.' },
   { clave: 'gas_papeleria',     nombre: 'Papelería y útiles de oficina',  padre: 'gas_admin', fase: 1, ayuda: 'Papel, tinta, bolígrafos, carpetas.', noVa: 'Impresión promocional → Diseño e impresión' },
-  { clave: 'gas_profesionales', nombre: 'Servicios profesionales',        padre: 'gas_admin', fase: 1, ayuda: 'Contador, abogado, gestor, consultor.', noVa: 'Quien produce para ti → Elaboración por terceros' },
+  { clave: 'gas_profesionales', nombre: 'Servicios profesionales',        padre: 'gas_admin', fase: 1, ayuda: 'Contador, abogado, gestor, consultor.', noVa: 'Quien produce para el negocio → Elaboración por terceros' },
   { clave: 'gas_software',      nombre: 'Software y suscripciones',       padre: 'gas_admin', fase: 1, ayuda: 'CLAUX, antivirus, apps, licencias mensuales.', noVa: 'Licencias estatales → Licencias y tasas' },
   { clave: 'gas_tramites',      nombre: 'Trámites, notaría y gestiones',  padre: 'gas_admin', fase: 1, ayuda: 'Notaría, registros, gestiones oficiales.', noVa: 'El impuesto en sí → Impuestos de la operación' },
   { clave: 'gas_seguros',       nombre: 'Seguros del negocio',            padre: 'gas_admin', fase: 1, ayuda: 'Local, mercancía, responsabilidad.', noVa: 'Vehículos → Seguro de vehículos' },

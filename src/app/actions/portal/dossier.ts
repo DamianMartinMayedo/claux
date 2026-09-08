@@ -536,7 +536,7 @@ async function categoriasDelAlcanceDossier(
 export async function crearDossier(formData: FormData): Promise<{ ok: boolean; error?: string; dossier_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -552,7 +552,7 @@ export async function crearDossier(formData: FormData): Promise<{ ok: boolean; e
   // que ve el usuario (esta contaba `companies`, que ni siquiera es la tabla de
   // empresas, así que bloqueaba a todo el mundo).
   const empresas = await obtenerEmpresas()
-  if (!empresas.length) return { ok: false, error: 'Necesitas crear al menos una empresa antes de crear un dossier.' }
+  if (!empresas.length) return { ok: false, error: 'Para crear un dossier se necesita al menos una empresa.' }
 
   const titulo   = (formData.get('titulo') as string)?.trim() || 'Dossier para inversores'
   const empresaId = (formData.get('empresa_id') as string)?.trim() || null
@@ -585,7 +585,7 @@ export async function crearDossier(formData: FormData): Promise<{ ok: boolean; e
 export async function duplicarDossier(formData: FormData): Promise<{ ok: boolean; error?: string; dossier_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const origenId = (formData.get('dossier_id') as string)?.trim()
   if (!origenId) return { ok: false, error: 'Falta el dossier.' }
@@ -679,7 +679,7 @@ async function eliminarFilas(db: Db, dossierId: string, clientId: string): Promi
 export async function eliminarDossier(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
@@ -702,7 +702,7 @@ export async function eliminarDossier(formData: FormData): Promise<{ ok: boolean
 export async function guardarBasicos(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
@@ -754,7 +754,7 @@ export async function guardarBasicos(formData: FormData): Promise<{ ok: boolean;
 export async function guardarSerie(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
@@ -812,7 +812,7 @@ export async function guardarSerie(formData: FormData): Promise<{ ok: boolean; e
 export async function guardarDesglose(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
@@ -866,7 +866,7 @@ export async function guardarDesglose(formData: FormData): Promise<{ ok: boolean
 export async function guardarModoEstado(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   const modo      = (formData.get('estado_modo') as string)?.trim()
@@ -899,7 +899,7 @@ export async function guardarModoEstado(formData: FormData): Promise<{ ok: boole
 export async function guardarCostoVentas(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
   if (!(await puedeEditarModulo('base')))    return { ok: false, error: 'Clasificar categorías necesita el módulo de Contabilidad.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
@@ -963,7 +963,7 @@ export async function guardarCostoVentas(formData: FormData): Promise<{ ok: bool
 export async function guardarSecciones(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
@@ -1040,7 +1040,7 @@ export async function sugerirEquipoDesdeRrhh(): Promise<string | null> {
 export async function guardarMarca(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
@@ -1074,7 +1074,7 @@ export async function guardarMarca(formData: FormData): Promise<{ ok: boolean; e
 export async function guardarTraduccionIngles(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
@@ -1143,7 +1143,7 @@ const rutaLogo = (clientId: string, dossierId: string) => `${clientId}/dossier-$
 export async function subirLogoDossier(formData: FormData): Promise<{ ok: boolean; error?: string; logo_url?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   const file = formData.get('logo') as File | null
@@ -1191,7 +1191,7 @@ export async function subirLogoDossier(formData: FormData): Promise<{ ok: boolea
 export async function usarLogoEmpresa(formData: FormData): Promise<{ ok: boolean; error?: string; logo_url?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
@@ -1202,7 +1202,7 @@ export async function usarLogoEmpresa(formData: FormData): Promise<{ ok: boolean
   if (!dos) return { ok: false, error: 'Dossier no encontrado.' }
 
   const logo_url = await logoDeEmpresa(dos.empresa_id ?? null)
-  if (!logo_url) return { ok: false, error: 'Tu empresa no tiene logo configurado.' }
+  if (!logo_url) return { ok: false, error: 'La empresa no tiene logo configurado.' }
 
   const { error } = await db.from('dossiers')
     .update({ logo_url, updated_at: new Date().toISOString() })
@@ -1217,7 +1217,7 @@ export async function usarLogoEmpresa(formData: FormData): Promise<{ ok: boolean
 export async function quitarLogoDossier(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
@@ -1247,7 +1247,7 @@ export async function quitarLogoDossier(formData: FormData): Promise<{ ok: boole
 export async function publicarDossier(formData: FormData): Promise<{ ok: boolean; error?: string; token?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
@@ -1257,14 +1257,14 @@ export async function publicarDossier(formData: FormData): Promise<{ ok: boolean
     .eq('dossier_id', dossierId).eq('client_id', session.client_id).maybeSingle()
   if (!dos) return { ok: false, error: 'Dossier no encontrado.' }
   // Publicar un deck sin números es enseñar un gráfico vacío a un inversor.
-  if (!dos.snapshot_at) return { ok: false, error: 'Carga tus números antes de publicar.' }
+  if (!dos.snapshot_at) return { ok: false, error: 'Carga los números antes de publicar.' }
   // Publicar un snapshot desfasado enseñaría importes en la moneda vieja (o de otra
   // empresa) al inversor. Que lo sincronice primero en «Los números». También si la
   // serie quedó mezclada de monedas (fusiones previas): no es uniforme → desfasado.
   const { data: mezcla } = await db.from('dossier_serie').select('mes')
     .eq('dossier_id', dossierId).eq('client_id', session.client_id)
     .neq('moneda', dos.moneda_presentacion).limit(1).maybeSingle()
-  if (dos.snapshot_stale || mezcla) return { ok: false, error: 'Cambiaste la moneda, la empresa o el período: sincroniza tus números en «Los números» antes de publicar.' }
+  if (dos.snapshot_stale || mezcla) return { ok: false, error: 'Ha cambiado la moneda, la empresa o el período: falta sincronizar los números en «Los números» antes de publicar.' }
 
   const token = (dos.token as string | null) ?? nuevoToken()
   const { error } = await db.from('dossiers').update({
@@ -1283,7 +1283,7 @@ export async function publicarDossier(formData: FormData): Promise<{ ok: boolean
 export async function despublicarDossier(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
@@ -1308,7 +1308,7 @@ export async function despublicarDossier(formData: FormData): Promise<{ ok: bool
 export async function revocarEnlace(formData: FormData): Promise<{ ok: boolean; error?: string; token?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
@@ -1363,7 +1363,7 @@ async function cabecerasLote(
 export async function eliminarDossiersEnLote(ids: string[]): Promise<ResultadoLote> {
   const session = await getPortalSession()
   if (!session) return loteVacio('Sesión inválida.')
-  if (!(await puedeEditarModulo('dossier'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  if (!(await puedeEditarModulo('dossier'))) return loteVacio('Sin permiso para editar en este módulo.')
 
   const db = createAdminClient()
   const meta = await cabecerasLote(db, session.client_id, ids)
@@ -1386,7 +1386,7 @@ export async function eliminarDossiersEnLote(ids: string[]): Promise<ResultadoLo
 export async function despublicarDossiersEnLote(ids: string[]): Promise<ResultadoLote> {
   const session = await getPortalSession()
   if (!session) return loteVacio('Sesión inválida.')
-  if (!(await puedeEditarModulo('dossier'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  if (!(await puedeEditarModulo('dossier'))) return loteVacio('Sin permiso para editar en este módulo.')
 
   const db = createAdminClient()
   const meta = await cabecerasLote(db, session.client_id, ids)
@@ -1415,7 +1415,7 @@ export async function despublicarDossiersEnLote(ids: string[]): Promise<Resultad
 export async function duplicarDossiersEnLote(ids: string[]): Promise<ResultadoLote> {
   const session = await getPortalSession()
   if (!session) return loteVacio('Sesión inválida.')
-  if (!(await puedeEditarModulo('dossier'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  if (!(await puedeEditarModulo('dossier'))) return loteVacio('Sin permiso para editar en este módulo.')
 
   const db = createAdminClient()
   const meta = await cabecerasLote(db, session.client_id, ids)
@@ -1586,7 +1586,7 @@ export async function previsualizarActualizacion(dossierId: string): Promise<Pre
 
   const db = createAdminClient()
   const modulos = await modulosDelCliente(db, session.client_id)
-  if (!tieneModulo(modulos, 'base')) return { error: 'Necesitas la Contabilidad para traer tus números.' }
+  if (!tieneModulo(modulos, 'base')) return { error: 'Traer los números requiere el módulo Contabilidad.' }
 
   const { data: dos } = await db.from('dossiers')
     .select('empresa_id, moneda_presentacion, periodo_desde, periodo_hasta')
@@ -1624,14 +1624,14 @@ export async function previsualizarActualizacion(dossierId: string): Promise<Pre
 export async function aplicarActualizacion(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const dossierId = (formData.get('dossier_id') as string)?.trim()
   if (!dossierId) return { ok: false, error: 'Falta el dossier.' }
 
   const db = createAdminClient()
   const modulos = await modulosDelCliente(db, session.client_id)
-  if (!tieneModulo(modulos, 'base')) return { ok: false, error: 'Necesitas la Contabilidad para traer tus números.' }
+  if (!tieneModulo(modulos, 'base')) return { ok: false, error: 'Traer los números requiere el módulo Contabilidad.' }
 
   const { data: dos } = await db.from('dossiers')
     .select('empresa_id, moneda_presentacion, periodo_desde, periodo_hasta')
@@ -1679,12 +1679,12 @@ export async function aplicarActualizacion(formData: FormData): Promise<{ ok: bo
 export async function resincronizarSnapshot(dossierId: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('dossier'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
   if (!dossierId)           return { ok: false, error: 'Falta el dossier.' }
 
   const db = createAdminClient()
   const modulos = await modulosDelCliente(db, session.client_id)
-  if (!tieneModulo(modulos, 'base')) return { ok: false, error: 'Necesitas la Contabilidad para actualizar tus números.' }
+  if (!tieneModulo(modulos, 'base')) return { ok: false, error: 'Actualizar los números requiere el módulo Contabilidad.' }
 
   const { data: dos } = await db.from('dossiers')
     .select('empresa_id, moneda_presentacion, periodo_desde, periodo_hasta')

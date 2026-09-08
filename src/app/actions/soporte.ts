@@ -218,7 +218,7 @@ function motivoAmpliacion(codigo: string): string {
     case 'no_es_ampliacion':
       return 'No es una ampliación, es un mensaje de soporte: se atiende en Soporte.'
     case 'sin_cliente':
-      return 'Su cliente ya no existe. Revísala antes de borrarla.'
+      return 'Su cliente ya no existe.'
     default:
       return 'No se pudo eliminar.'
   }
@@ -369,11 +369,11 @@ export async function guardarFaq(formData: FormData): Promise<{ ok: boolean; err
     const { error } = await db.from('soporte_faq')
       .update({ modulo_clave, pregunta, respuesta, orden, activo, updated_at: new Date().toISOString() })
       .eq('id', Number(id))
-    if (error) return { ok: false, error: 'Error al guardar la pregunta.' }
+    if (error) return { ok: false, error: 'No se ha podido guardar la pregunta.' }
   } else {
     const { error } = await db.from('soporte_faq')
       .insert({ modulo_clave, pregunta, respuesta, orden, activo })
-    if (error) return { ok: false, error: 'Error al crear la pregunta.' }
+    if (error) return { ok: false, error: 'No se ha podido crear la pregunta.' }
   }
   revalidatePath('/admin/soporte')
   return { ok: true }
@@ -425,7 +425,7 @@ export async function proponerFaqsIa(): Promise<
     id: number; tema: string | null; asunto: string; mensaje: string; respuesta: string
   }[]
   if (mensajes.length < 2) {
-    return { ok: false, error: 'Aún no hay mensajes respondidos suficientes para ver qué se repite.' }
+    return { ok: false, error: 'Sin mensajes respondidos suficientes para ver qué se repite.' }
   }
 
   try {

@@ -82,7 +82,7 @@ export async function notificarPagoConfirmado(params: {
     clientId: params.clientId,
     tipo:     'pago_confirmado',
     titulo:   'Pago confirmado',
-    cuerpo:   `Recibimos tu pago de ${importeClaux(params.monto, params.moneda)}. Tu suscripción queda cubierta hasta el ${fmtFechaEs(params.fechaExpiracion)}.`,
+    cuerpo:   `Pago de ${importeClaux(params.monto, params.moneda)} registrado. La suscripción queda cubierta hasta el ${fmtFechaEs(params.fechaExpiracion)}.`,
     enlace:   '/portal/facturacion',
     // El periodo pagado identifica el hecho: dos pagos distintos, dos avisos.
     entidadTipo: 'pago',
@@ -101,8 +101,8 @@ export async function notificarGraciaActivada(params: {
   await crearNotificacion({
     clientId: params.clientId,
     tipo:     'periodo_gracia_activado',
-    titulo:   'Se activó tu período especial',
-    cuerpo:   `Aunque tu suscripción venció, mantenemos tu acceso hasta el ${fmtFechaEs(params.fechaFinGracia)}. Contáctanos para ponerte al día.`,
+    titulo:   'Período especial activado',
+    cuerpo:   `La suscripción venció, pero el acceso se mantiene hasta el ${fmtFechaEs(params.fechaFinGracia)}. Antes de esa fecha hay que regularizar el pago.`,
     enlace:   '/portal/facturacion',
     // La fecha de fin identifica el período: uno nuevo con otra fecha es un aviso
     // distinto, y volver a guardar la misma fecha no duplica (mismo patrón que

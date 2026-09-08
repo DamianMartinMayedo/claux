@@ -32,7 +32,7 @@ export default function EnlaceGestion({ url, tipo }: {
 
   return (
     <div className="rp-guardar">
-      <p className="rp-guardar-tit">Guarda este enlace</p>
+      <p className="rp-guardar-tit">Guarde este enlace</p>
       <p className="rp-guardar-url">{url}</p>
       <div className="rp-guardar-acciones">
         <button type="button" className="rp-copiar" onClick={copiar}>

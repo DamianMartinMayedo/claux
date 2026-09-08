@@ -35,7 +35,7 @@ export default async function PropuestaOgImage({ params }: Props) {
   const p = await cargarPropuestaPublica(token)
   // Un token muerto no puede delatar que lo estuvo: la tarjeta genérica sale
   // igual, y el 404 lo da la página.
-  const nombre = p?.nombreNegocio || 'Tu negocio'
+  const nombre = p?.nombreNegocio || 'Su negocio'
 
   return new ImageResponse(
     (
@@ -56,7 +56,7 @@ export default async function PropuestaOgImage({ params }: Props) {
             {nombre}
           </div>
           <div style={{ fontSize: '32px', color: 'rgba(253, 248, 238, 0.82)' }}>
-            Lo que hemos entendido de tu negocio, y lo que te proponemos.
+            Lo que hemos entendido de su negocio, y lo que le proponemos.
           </div>
         </div>
 

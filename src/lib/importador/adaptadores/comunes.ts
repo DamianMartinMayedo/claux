@@ -78,7 +78,7 @@ export function defCategoriaFaltante(etiqueta = 'categoría'): DefaultDef {
     etiqueta:    `Si la ${etiqueta} no existe`,
     obligatorio: true,
     valor:       'CREAR',
-    ayuda:       'Si el nombre se parece a una que ya tienes, no se crea nada: se te pregunta en el paso de revisar.',
+    ayuda:       'Si el nombre se parece a uno ya registrado, no se crea nada: se pregunta en el paso de revisar.',
     opciones:    async () => [
       { valor: 'CREAR',    etiqueta: `Crear la ${etiqueta}` },
       { valor: 'RECHAZAR', etiqueta: 'Rechazar la fila' },

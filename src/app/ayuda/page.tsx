@@ -132,10 +132,10 @@ export default async function AyudaPortada() {
           <section className="acad-portada-grupo">
             <div className="acad-portada-grupo-head">
               <p className="acad-sec-label">Por dónde empezar</p>
-              <h2 className="acad-portada-grupo-t">Si es tu primera vez aquí</h2>
+              <h2 className="acad-portada-grupo-t">Si es la primera visita</h2>
               <p className="acad-portada-grupo-n">
                 En este orden: primero qué es esto y cómo encaja todo, después la guía de la pieza
-                que estés usando.
+                que se esté usando.
               </p>
             </div>
             <ol className="acad-ruta">

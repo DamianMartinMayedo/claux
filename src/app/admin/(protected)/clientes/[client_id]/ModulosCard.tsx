@@ -111,7 +111,7 @@ export default function ModulosCard({
     startTransition(async () => {
       const res = await setModulosCliente(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error al guardar'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido guardar'); return }
       toastSuccess(`Módulos actualizados · ${importeClaux(res.precio_mensual, res.moneda)}/mes`)
       // Esta tarjeta no es la única que enseña lo que paga: la cuota de Condiciones
       // comerciales, la cabecera y la capacidad salen del servidor con el nivel y la

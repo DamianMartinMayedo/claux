@@ -52,11 +52,11 @@ function fmtHora(h: string | null): string { return h ? h.substring(0, 5) : '—
 
 export function textoReservaNueva(r: ReservaNotif, negocio: string): string {
   return [
-    `🆕 Nueva reserva — ${negocio}`,
-    `📅 ${fmtFecha(r.fecha)}  🕐 ${fmtHora(r.hora)}`,
-    `👥 ${r.personas}  ·  ${r.nombre_cliente}`,
-    r.telefono ? `📞 ${r.telefono}` : null,
-    r.notas ? `📝 ${r.notas}` : null,
+    `Nueva reserva — ${negocio}`,
+    `${fmtFecha(r.fecha)}  ·  ${fmtHora(r.hora)}`,
+    `${r.personas} pers.  ·  ${r.nombre_cliente}`,
+    r.telefono ? `Teléfono: ${r.telefono}` : null,
+    r.notas ? `Notas: ${r.notas}` : null,
     r.estado === 'PENDIENTE' ? '\nPendiente de confirmar.' : `\nEstado: ${r.estado}`,
   ].filter(Boolean).join('\n')
 }
@@ -64,19 +64,19 @@ export function textoReservaNueva(r: ReservaNotif, negocio: string): string {
 export function botonesGestionReserva(reserva_id: string): ReplyMarkup {
   return {
     inline_keyboard: [[
-      { text: '✅ Confirmar', callback_data: `res:CONFIRMADA:${reserva_id}` },
-      { text: '✕ Rechazar',  callback_data: `res:RECHAZADA:${reserva_id}` },
+      { text: 'Confirmar', callback_data: `res:CONFIRMADA:${reserva_id}` },
+      { text: 'Rechazar',  callback_data: `res:RECHAZADA:${reserva_id}` },
     ]],
   }
 }
 
 function textoCambioEstadoCliente(r: ReservaNotif, estado: EstadoReserva, negocio: string): string | null {
-  const cab = `${negocio}\n📅 ${fmtFecha(r.fecha)} 🕐 ${fmtHora(r.hora)} · ${r.personas} pers.`
+  const cab = `${negocio}\n${fmtFecha(r.fecha)} · ${fmtHora(r.hora)} · ${r.personas} pers.`
   switch (estado) {
-    case 'CONFIRMADA': return `✅ ¡Reserva confirmada!\n${cab}\n¡Te esperamos!`
-    case 'RECHAZADA':  return `❌ Reserva no disponible\n${cab}\nLo sentimos, no podemos atender esa reserva.`
-    case 'CANCELADA':  return `🚫 Reserva cancelada\n${cab}`
-    case 'PENDIENTE':  return `↩️ Reserva recuperada\n${cab}\nVuelve a estar pendiente de confirmar.`
+    case 'CONFIRMADA': return `Reserva confirmada\n${cab}\nLe esperamos.`
+    case 'RECHAZADA':  return `Reserva no disponible\n${cab}\nLamentamos no poder atenderla.`
+    case 'CANCELADA':  return `Reserva cancelada\n${cab}`
+    case 'PENDIENTE':  return `Reserva recuperada\n${cab}\nVuelve a estar pendiente de confirmar.`
     // NO_SHOW, ATENDIDA y CADUCADA son notas internas del negocio: al cliente no se
     // le escribe «no viniste» ni «tu reserva caducó».
     default:           return null

@@ -329,9 +329,9 @@ export default function IaAdminClient({
           <span className={`badge ${activa ? 'badge-success' : 'badge-neutral'}`}>{activa ? 'Encendida' : 'Apagada'}</span>
         </div>
         <p className="config-field-hint mb-4">
-          La que usamos nosotros desde el panel. La paga CLAUX, no sale del cupo de ningún
-          cliente, y a diferencia de la del cliente aquí puede escribir: siempre enseñando
-          antes qué va a cambiar, y siempre aplicándolo alguien.
+          La del panel interno. La paga CLAUX, no sale del cupo de ningún cliente, y a
+          diferencia de la del cliente aquí puede escribir: siempre enseñando antes qué va
+          a cambiar, y siempre con alguien que lo aplica.
         </p>
 
         <div className={activa ? 'ia-master' : 'ia-master ia-master--off'}>
@@ -355,7 +355,7 @@ export default function IaAdminClient({
           <div className="input-group">
             <div className="form-label-with-help">
               <label htmlFor="ia-int-model">Modelo del equipo</label>
-              <FormHelp text="Aquí cabe el caro: lo usamos nosotros, no miles de clientes." label="Qué modelo usa el equipo" />
+              <FormHelp text="Aquí cabe el caro: lo usa el equipo, no miles de clientes." label="Qué modelo usa el equipo" />
             </div>
             <select id="ia-int-model" className="input" value={mInt} onChange={e => setMInt(e.target.value)}>
               <option value="">El mismo que el principal</option>
@@ -365,7 +365,7 @@ export default function IaAdminClient({
           <div className="input-group">
             <div className="form-label-with-help">
               <label htmlFor="ia-int-cupo">Tope del mes (conversaciones)</label>
-              <FormHelp text="Un techo contra un bucle nuestro, no un ahorro: al llegar, las funciones con IA del panel se cortan hasta el mes que viene. Al cliente no se le corta nunca: baja al modelo gratis. Para apagarla, usa el interruptor de arriba." label="Qué pasa al llegar al tope" />
+              <FormHelp text="Un techo contra un bucle interno, no un ahorro: al llegar, las funciones con IA del panel se cortan hasta el mes siguiente. Al cliente no se le corta nunca: baja al modelo gratis. Para apagarla, el interruptor de arriba." label="Qué pasa al llegar al tope" />
             </div>
             <input id="ia-int-cupo" type="number" min="0" step="10" className="input"
                    value={cInt} onChange={e => setCInt(e.target.value)} />

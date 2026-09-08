@@ -136,7 +136,7 @@ function NuevaReservaModal({
         // El sistema avisa, no bloquea: si el motivo es de los que decide el dueño,
         // se le pregunta en vez de dejarle con un error y sin salida.
         if (res.forzable) { setForzar({ motivo: res.error ?? '', datos: fd }); return }
-        toastError(res.error ?? 'Error inesperado.'); return
+        toastError(res.error ?? 'No se ha podido completar la operación.'); return
       }
       toastSuccess(res.avisos?.length ? `Reserva creada — ${res.avisos.join(' ')}` : 'Reserva creada.')
       onSaved()
@@ -228,8 +228,8 @@ function NuevaReservaModal({
         </form>
         {forzar && (
           <ConfirmDialog
-            title="¿La añades igualmente?"
-            body={`${forzar.motivo} Es tu negocio: puedes meterla de todas formas y quedará marcada como forzada.`}
+            title="¿Añadir igualmente?"
+            body={`${forzar.motivo} La decisión es del negocio: se puede añadir de todas formas y quedará marcada como forzada.`}
             confirmLabel="Añadir igualmente"
             onCancel={() => setForzar(null)}
             onConfirm={() => { const fd = forzar.datos; setForzar(null); enviar(fd, true) }}
@@ -407,7 +407,7 @@ function EditarReservaModal({
       await ld.dismiss()
       if (!res.ok) {
         if (res.forzable) { setForzar({ motivo: res.error ?? '', datos: fd }); return }
-        toastError(res.error ?? 'Error inesperado.'); return
+        toastError(res.error ?? 'No se ha podido completar la operación.'); return
       }
       toastSuccess(res.avisos?.length ? `Reserva actualizada — ${res.avisos.join(' ')}` : 'Reserva actualizada.')
       onSaved()
@@ -424,8 +424,8 @@ function EditarReservaModal({
       <div className="modal modal-md" role="dialog" aria-modal>
         {forzar && (
           <ConfirmDialog
-            title="¿La guardas igualmente?"
-            body={`${forzar.motivo} Es tu negocio: puedes guardarla de todas formas y quedará marcada como forzada.`}
+            title="¿Guardar igualmente?"
+            body={`${forzar.motivo} La decisión es del negocio: se puede guardar de todas formas y quedará marcada como forzada.`}
             confirmLabel="Guardar igualmente"
             onCancel={() => setForzar(null)}
             onConfirm={() => { const fd = forzar.datos; setForzar(null); enviar(fd, true) }}
@@ -513,7 +513,7 @@ function FranjaModal({
     startTransition(async () => {
       const res = await guardarFranja(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess(franja ? 'Turno actualizado.' : 'Turno creado.')
       onSaved()
     })
@@ -547,7 +547,7 @@ function FranjaModal({
                     No lo es: veinte parejas llenan un salón de 40 plazas. */}
                 <div className="form-label-with-help">
                   <label>Máx. reservas</label>
-                  <FormHelp text="Cuántas mesas o grupos puedes atender a la vez. 0 = sin tope." label="Qué es el máximo de reservas" />
+                  <FormHelp text="Cuántas mesas o grupos se pueden atender a la vez. 0 = sin tope." label="Qué es el máximo de reservas" />
                 </div>
                 <input className="input" name="max_reservas" type="number" min="0"
                   defaultValue={franja?.max_reservas ?? 0} />
@@ -825,7 +825,7 @@ export default function ReservasView({ data, puedeEditar, children }: { data: Re
     startTransition(async () => {
       const res = await cambiarEstadoReserva(cambioEstado.reserva.reserva_id, cambioEstado.a)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setCambioEstado(null); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); setCambioEstado(null); return }
       toastSuccess(`Reserva ${ESTADO_LABEL[cambioEstado.a].toLowerCase()}.`)
       setCambioEstado(null); router.refresh()
     })
@@ -841,7 +841,7 @@ export default function ReservasView({ data, puedeEditar, children }: { data: Re
     startTransition(async () => {
       const res = await eliminarFranja(delFranja.franja_id)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setDelFranja(null); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); setDelFranja(null); return }
       toastSuccess('Turno eliminado.')
       setDelFranja(null); router.refresh()
     })
@@ -854,7 +854,7 @@ export default function ReservasView({ data, puedeEditar, children }: { data: Re
     startTransition(async () => {
       const res = await guardarSlug(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess('Enlace guardado.')
       setEditandoSlug(false)
       router.refresh()
@@ -877,7 +877,7 @@ export default function ReservasView({ data, puedeEditar, children }: { data: Re
   function handleBotSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!botForm.token.trim() && !botForm.nombre.trim()) {
-      toastError('Introduce al menos el token del bot para guardar la configuración.')
+      toastError('Falta el token del bot.')
       return
     }
     const fd = new FormData(e.currentTarget)
@@ -886,7 +886,7 @@ export default function ReservasView({ data, puedeEditar, children }: { data: Re
     startTransition(async () => {
       const res = await guardarBotConfig(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess('Configuración guardada.')
       router.refresh()
     })
@@ -902,7 +902,7 @@ export default function ReservasView({ data, puedeEditar, children }: { data: Re
     startTransition(async () => {
       const res = await eliminarBotConfig()
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess('Bot eliminado.')
       router.refresh()
     })
@@ -913,7 +913,7 @@ export default function ReservasView({ data, puedeEditar, children }: { data: Re
     startTransition(async () => {
       const res = await toggleActivoBot(activo)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess(activo ? 'Bot activado.' : 'Bot desactivado.')
       router.refresh()
     })
@@ -924,7 +924,7 @@ export default function ReservasView({ data, puedeEditar, children }: { data: Re
     startTransition(async () => {
       const res = await toggleIaBotReservas(activa)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess(activa ? 'La IA gestionará el bot.' : 'La IA ya no gestiona el bot.')
       router.refresh()
     })
@@ -938,12 +938,12 @@ export default function ReservasView({ data, puedeEditar, children }: { data: Re
           <div className="page-title-ia">
             {/* Estaba a fuego: el menú y la página podían decir cosas distintas. */}
             <h1 className="page-title">{data.etiqueta_reservas}</h1>
-            <IaTouchpoint tipo="reservas" descripcion="un análisis de tus reservas" />
+            <IaTouchpoint tipo="reservas" descripcion="un análisis de las reservas" />
           </div>
           <p className="page-subtitle">
             {activeTab === 'reservas' && totalHoy > 0
               ? `Hoy: ${pendientesHoy} pendientes · ${confirmadasHoy} confirmadas · Total ${totalHoy}`
-              : 'Gestiona las reservas de tus clientes.'}
+              : 'Gestiona las reservas de los clientes.'}
           </p>
         </div>
         <div className="tes-header-actions">
@@ -1029,7 +1029,7 @@ export default function ReservasView({ data, puedeEditar, children }: { data: Re
           <div className="mon-empty">
             <Calendar size={40} strokeWidth={1} opacity={0.2} />
             <p>{data.reservas.length === 0
-              ? 'Aún no hay reservas. Crea la primera o comparte el enlace de reservas con tus clientes.'
+              ? 'Sin reservas. Se crean aquí o desde el enlace público.'
               : 'No hay reservas para los filtros seleccionados.'}</p>
           </div>
         ) : (
@@ -1150,7 +1150,7 @@ export default function ReservasView({ data, puedeEditar, children }: { data: Re
         {data.franjas.length === 0 ? (
           <div className="mon-empty">
             <Calendar size={36} strokeWidth={1} opacity={0.2} />
-            <p>Aún no hay turnos. Crea al menos uno (ej: «Almuerzo», «Comida») para empezar a recibir reservas.</p>
+            <p>Sin turnos. Se necesita al menos uno (ej: «Almuerzo», «Comida») para recibir reservas.</p>
           </div>
         ) : (
           <div className="table-wrapper">
@@ -1224,7 +1224,7 @@ export default function ReservasView({ data, puedeEditar, children }: { data: Re
         <div className="card-header"><h2 className="card-title">Confirmación automática</h2></div>
         {data.tieneAmbas && (
           <span className="text-xs-muted res-ambito">
-            Solo para reservas. Tus citas tienen la suya.
+            Solo para reservas. Las citas tienen la suya.
           </span>
         )}
       <div className="res-conf-item">
@@ -1237,7 +1237,7 @@ export default function ReservasView({ data, puedeEditar, children }: { data: Re
                   : 'La IA creará las reservas pendientes para que tú las confirmes.')
               : (confirmAuto
                   ? 'Las reservas se confirman solas al crearse; el cliente lo ve al instante.'
-                  : 'Tú confirmas cada reserva; el cliente queda pendiente hasta que la revises.')}
+                  : 'Cada reserva se confirma manualmente; hasta entonces el cliente queda pendiente.')}
           </span>
         </div>
         <label className="switch">
@@ -1261,7 +1261,7 @@ export default function ReservasView({ data, puedeEditar, children }: { data: Re
         {data.tieneAmbas && (
           <span className="text-xs-muted res-ambito">
             La ruta <code>/reservar</code> es solo de Reservas, pero <strong>la dirección
-            es del negocio</strong>: si la cambias aquí, cambia también en Citas y en tu catálogo.
+            es del negocio</strong>: si la cambias aquí, cambia también en Citas y en el catálogo.
           </span>
         )}
 
@@ -1278,7 +1278,7 @@ export default function ReservasView({ data, puedeEditar, children }: { data: Re
                 <tr>
                   <td data-label="Enlace">
                     <strong>{host}/{data.slug}/reservar</strong>
-                    <div className="text-xs-muted">Comparte este enlace con tus clientes.</div>
+                    <div className="text-xs-muted">Este es el enlace público de reservas.</div>
                   </td>
                   <td className="col-actions">
                     <RowActions>
@@ -1303,12 +1303,12 @@ export default function ReservasView({ data, puedeEditar, children }: { data: Re
             <div className="ter-form-grid res-conf-pad-top">
               <div className="input-group ter-col-full">
                 <div className="form-label-with-help">
-                  <label>{data.slug ? 'Modificar tu enlace' : 'Tu dirección web para compartir'}</label>
+                  <label>{data.slug ? 'Modificar el enlace' : 'La dirección web para compartir'}</label>
                   <FormHelp text="Solo letras, números y guiones." label="Qué puede llevar el enlace" />
                 </div>
                 <div className="res-slug-wrap">
                   <span className="res-slug-prefix">{host}/</span>
-                  <input className="input" name="slug" placeholder="tu-negocio"
+                  <input className="input" name="slug" placeholder="nombre-del-negocio"
                     value={slugForm} onChange={e => setSlugForm(e.target.value)} />
                   <span className="res-slug-suffix">/reservar</span>
                 </div>
@@ -1340,7 +1340,7 @@ export default function ReservasView({ data, puedeEditar, children }: { data: Re
         </div>
         {data.tieneAmbas && (
           <span className="text-xs-muted res-ambito">
-            Solo para Reservas. Tus Citas tienen su propio bot, con otro token y otro
+            Solo para Reservas. Citas tiene su propio bot, con otro token y otro
             código de vínculo, en <strong>Citas › Configuración</strong>.
           </span>
         )}
@@ -1385,17 +1385,17 @@ export default function ReservasView({ data, puedeEditar, children }: { data: Re
 
             {!data.bot_config.notificar_owner_chat_id ? (
               <div className="info-box">
-                <strong className="info-box-title">Vincula tu chat para recibir avisos</strong>
+                <strong className="info-box-title">Chat sin vincular</strong>
                 <span className="text-xs-muted">
-                  Abre tu bot de <strong>Reservas</strong> en Telegram y envía <code>/start {data.bot_config.codigo_vinculo ?? '—'}</code>.
-                  Recibirás ahí cada reserva nueva, con botones para confirmarla o rechazarla.
+                  En el bot de <strong>Reservas</strong> de Telegram, el comando <code>/start {data.bot_config.codigo_vinculo ?? '—'}</code> vincula el chat.
+                  A partir de ahí llega cada reserva nueva, con botones para confirmarla o rechazarla.
                 </span>
               </div>
             ) : (
               <div className="info-box">
                 <span className="text-xs-muted">
-                  ✓ Chat del dueño vinculado · recibes los avisos de reservas nuevas. Si cambias de móvil
-                  o de cuenta de Telegram, vuelve a enviar <code>/start {data.bot_config.codigo_vinculo ?? '—'}</code>.
+                  Chat del dueño vinculado · los avisos de reservas nuevas llegan ahí. Al cambiar de móvil
+                  o de cuenta de Telegram, hay que enviar de nuevo <code>/start {data.bot_config.codigo_vinculo ?? '—'}</code>.
                 </span>
               </div>
             )}
@@ -1407,9 +1407,9 @@ export default function ReservasView({ data, puedeEditar, children }: { data: Re
             <div className="info-box">
               <strong className="info-box-title">Cómo configurarlo</strong>
               <span className="text-xs-muted">
-                Abre <strong>@BotFather</strong> en Telegram, crea un bot con <code>/newbot</code> y pega aquí el token.
+                En <strong>@BotFather</strong> de Telegram, <code>/newbot</code> crea un bot y devuelve el token.
                 El nombre de usuario debe terminar en <strong>_bot</strong> (ej: LaBodeguita_bot).
-                Tras guardar verás un código para vincular tu chat y recibir los avisos de reservas.
+                Al guardar aparece el código con el que se vincula el chat que recibirá los avisos.
               </span>
             </div>
 

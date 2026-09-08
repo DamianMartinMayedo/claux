@@ -128,7 +128,7 @@ export async function subirCaptura(
   const sector = ((formData.get('sector') as string) ?? '').split(',').map(s => s.trim()).filter(Boolean)
   const file   = formData.get('imagen') as File | null
 
-  if (!modulo) return { ok: false, error: 'Elige el módulo.' }
+  if (!modulo) return { ok: false, error: 'Falta el módulo.' }
   if (!vista)  return { ok: false, error: 'Falta el nombre de la pantalla.' }
   // El alt no es opcional y no se autogenera: es lo único que ve quien lee la
   // propuesta con un lector de pantalla, y lo que se lee si la imagen no carga

@@ -133,7 +133,7 @@ export default function EditarModuloModal({
       beneficio:   t.beneficio   ?? prev.beneficio,
       resumen:     t.resumen     ?? prev.resumen,
     }))
-    toastSuccess('Textos sugeridos. Revísalos y guarda.')
+    toastSuccess('Textos sugeridos: quedan pendientes de revisión y guardado.')
   }
 
   function handleLabelChange(val: string) {
@@ -197,7 +197,7 @@ export default function EditarModuloModal({
     fd.set('tipo', editTipo)
     const res = await editarModulo(fd)
     setLoading(false)
-    if (!res.ok) { toastError(res.error ?? 'Error al guardar'); return }
+    if (!res.ok) { toastError(res.error ?? 'No se ha podido guardar'); return }
     const n = res.clientesRecalculados ?? 0
     toastSuccess(n > 0 ? `Módulo guardado · ${n} cuota(s) recalculada(s)` : 'Módulo guardado')
     setTimeout(() => { handleClose(); router.refresh() }, 600)
@@ -290,7 +290,7 @@ export default function EditarModuloModal({
                 value={textos.beneficio}
                 onChange={e => setTextos(t => ({ ...t, beneficio: e.target.value }))}
               />
-              <span className="input-hint">Por qué le sirve al negocio. Diapositiva «Pensado para tu negocio» de la propuesta.</span>
+              <span className="input-hint">Por qué le sirve al negocio. Diapositiva «Pensado para su negocio» de la propuesta.</span>
             </div>
             <div className="input-group">
               <label htmlFor="mod-resumen">Resumen</label>

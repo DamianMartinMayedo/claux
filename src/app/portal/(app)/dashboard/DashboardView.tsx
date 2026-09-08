@@ -95,7 +95,7 @@ export default function DashboardView({ data }: { data: DashboardData }) {
         <div>
           <div className="page-title-ia">
             <h1 className="page-title">Hola, {nombreEmpresa}</h1>
-            <IaTouchpoint tipo="general" descripcion="un análisis general de tu negocio" />
+            <IaTouchpoint tipo="general" descripcion="un análisis general de el negocio" />
           </div>
           <p className="page-subtitle">{fechaLarga(fecha)}</p>
           {/* La lista sale SIEMPRE, también con una sola empresa. Antes, con una, el
@@ -144,7 +144,7 @@ export default function DashboardView({ data }: { data: DashboardData }) {
           ...(setupPendiente.empresa ? [{ label: 'Crear empresa', href: '/portal/empresas' }] : []),
         ]}>
           {setupPendiente.empresa && setupPendiente.moneda
-            ? <>Para empezar a operar, configura <strong>una moneda</strong> y crea <strong>tu empresa</strong>.</>
+            ? <>Para empezar a operar, configura <strong>una moneda</strong> y crea <strong>la empresa</strong>.</>
             : setupPendiente.empresa
               ? <>Para empezar a operar necesitas <strong>una empresa</strong>.</>
               : <>Configura <strong>una moneda</strong> para registrar importes, ventas y cobros.</>}
@@ -154,9 +154,9 @@ export default function DashboardView({ data }: { data: DashboardData }) {
       {!arrancando && (
         <div className="dash-zonas">
           <PendienteFranja items={pendiente} />
-          <Zona titulo="Tu dinero"  tarjetas={zonaDinero} />
-          <Zona titulo="Tu día"     tarjetas={zonaDia} />
-          <Zona titulo="Tu negocio" tarjetas={zonaNegocio} />
+          <Zona titulo="Dinero"    tarjetas={zonaDinero} />
+          <Zona titulo="El día"    tarjetas={zonaDia} />
+          <Zona titulo="El negocio" tarjetas={zonaNegocio} />
           {/* Los accesos rápidos solo tienen sentido cuando NO hay ningún panel:
               con widgets delante, repetir el enlace del menú lateral es ruido. */}
           {!hayPaneles && <AccesosRapidos accesos={accesos} />}

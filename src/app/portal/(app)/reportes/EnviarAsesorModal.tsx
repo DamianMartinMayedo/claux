@@ -83,8 +83,8 @@ export default function EnviarAsesorModal({
   }
 
   function enviar() {
-    if (!asesorId) { toastError('Elige un asesor.'); return }
-    if (!incluirPDF && !incluirXLSX) { toastError('Elige al menos un archivo.'); return }
+    if (!asesorId) { toastError('Falta el asesor.'); return }
+    if (!incluirPDF && !incluirXLSX) { toastError('Falta seleccionar al menos un archivo.'); return }
     const ld = toastLoading('Enviando…')
     startTransition(async () => {
       let pdfBase64: string | undefined
@@ -199,7 +199,7 @@ export default function EnviarAsesorModal({
             <label htmlFor="env-nota">Nota para el asesor <span className="env-asesor-opt">(opcional)</span></label>
             <textarea id="env-nota" className="input env-asesor-nota" value={nota}
               onChange={e => setNota(e.target.value)} maxLength={800} rows={2}
-              placeholder="Aquí van los números de este mes, cualquier duda me dices." />
+              placeholder="Comentario que acompaña al envío…" />
           </div>
 
           {/* Resumen: lo que se envía */}

@@ -227,7 +227,7 @@ export default function IaChatWidget({ nombreAgente, sugerencias }: { nombreAgen
                 ) : conversaciones.length === 0 ? (
                   <div className="ia-historial-empty">
                     <MessageCircle size={32} strokeWidth={1.5} />
-                    <p>Aún no tienes conversaciones guardadas</p>
+                    <p>Sin conversaciones guardadas</p>
                   </div>
                 ) : (
                   <div className="ia-historial-list">
@@ -292,7 +292,7 @@ export default function IaChatWidget({ nombreAgente, sugerencias }: { nombreAgen
               className="input"
               value={entrada}
               onChange={e => setEntrada(e.target.value)}
-              placeholder="Escribe tu pregunta…"
+              placeholder="Escribir una pregunta…"
               aria-label="Mensaje para el asistente"
               disabled={pending || mostrarHistorial}
             />

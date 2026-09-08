@@ -182,18 +182,84 @@ Sin emojis en la UI. Iconos **exclusivamente SVG inline** con `width`/`height` c
 - Tras guardar, feedback de éxito visible con el identificador generado.
 - El texto visible se escribe con las reglas de §5.1. No es cosmética: un texto que sobra se lee tantas veces como se abre la pantalla.
 
-## 5.1 El texto de la interfaz — PROFESIONAL Y CONCISO
+## 5.1 El texto de la interfaz — PROFESIONAL E IMPERSONAL
 
-El registro de toda la plataforma (portal, admin, páginas públicas): **profesional y conciso**. Se enuncia, no se conversa. Es una herramienta de trabajo que alguien abre veinte veces al día, no una campaña ni un asistente simpático. Aplica a todo lo que se lee en pantalla: títulos, subtítulos, botones, etiquetas, columnas, vacíos, avisos, errores, toasts, ayudas y textos de modal.
+El registro de **toda** la plataforma: portal, admin, páginas públicas, correos, PDF,
+plantillas de documento, notificaciones y lo que responde la IA. **Profesional,
+impersonal y conciso.** Se enuncia, no se conversa. Es una herramienta de trabajo que
+alguien abre veinte veces al día, no una campaña ni un asistente simpático.
 
-- **Lo más corto que siga siendo exacto.** Una idea, una frase. Si el texto se entiende sin la segunda frase, la segunda frase se borra entera —no se acorta—. El caso típico: un título que dice el problema y un botón que dice la acción no necesitan nada en medio.
-- **No se explica el mecanismo.** «Se abre en una pestaña nueva», «tu mensaje llega al panel de CLAUX», «se leen sin entrar en el portal»: es cierto, no aporta y envejece con el código. La razón técnica va en el comentario del código, que es donde sirve.
-- **No se vende dentro del producto.** Quien lo lee ya es cliente. Nada de adjetivos de folleto ni de frases que justifican lo buena que es una función («conoce tu negocio y responde al momento»). Se nombra lo que hace y se ofrece la acción.
-- **Ni euforia ni disculpas.** Sin exclamaciones («¡Listo!», «¡Genial!»), sin emoticonos, sin «Lo sentimos mucho». Un error dice **qué ha pasado y qué hacer**, en una frase; un éxito dice qué quedó hecho, con su identificador.
-- **Botón = verbo + objeto** («Enviar mensaje», «Registrar pago»), sin coletillas ni signos. Un vacío dice qué es la pantalla y ofrece la acción; nada de frases de ánimo.
-- **Profesional NO es formal ni técnico.** Se mantiene el tuteo, que es la voz ya instalada en el portal, y se siguen prohibidas la jerga interna y la nomenclatura del código («Recurso» → «Profesional», «Tercero» → el nombre que use el negocio). Preciso y sobrio, no distante.
+### La voz (fijada el 2026-09-08 — sustituye al tuteo anterior)
 
-> Este apartado es la fuente única del registro de los textos de la plataforma. El del **manual** (`/academia`, `/ayuda`) es otro —neutro, en tercera persona, sin tuteo— y vive en `docs/CONTEXTO.md § Academia`.
+- **Impersonal por defecto.** No se interpela a nadie: se nombra el estado y se ofrece la
+  acción. «Sin empresas registradas», no «Aún no tienes empresas». «No se ha podido
+  guardar», no «No pudimos guardarlo». «Añadir empresa», no «Crea tu primera empresa».
+- **De usted solo cuando el trato directo es inevitable**: correo, firma de documentos,
+  respuestas de la IA y las páginas donde el negocio se dirige a su cliente final (reserva,
+  citas, propuesta comercial). «Su suscripción vence el 3 de octubre.»
+- **Nunca de tú, en ninguna superficie.** Tampoco en las públicas del cliente final —bot
+  de Telegram, reserva, citas, catálogo QR, punto de venta—: ahí la voz es la del negocio
+  ante su cliente, y también es profesional.
+- **CLAUX no habla en primera persona.** Nada de «no pudimos», «te cargamos», «hemos
+  reabierto», «escríbenos y lo vemos». El sujeto es el hecho o el sistema, no el equipo.
+  La única excepción es **donde alguien firma y se compromete**, y son cinco sitios, no
+  un criterio: la firma de un correo («El equipo de CLAUX»), lo que un humano escribe en
+  Soporte, la propuesta comercial (`src/lib/propuesta/`, `src/app/(public)/p/`), los
+  mensajes que **el negocio** manda a su comensal (`src/lib/reservas/`) y el embudo del
+  diagnóstico público (`src/app/diagnostico/`). Están uno a uno, con su motivo, en el
+  ALLOWLIST de `scripts/audit-textos.mjs`: ampliarlo es una decisión, no un atajo.
+- **Sin coloquialismos.** «Ojo», «a ojo», «a mano», «de golpe», «toca decidir», «casi
+  listo», «si quieres», «no hace falta», «lo vemos», «en un momento», «de un tirón».
+  Se dicen en seco: «a mano» → «manualmente»; «Ojo:» → se borra y se enuncia el hecho.
+
+### Las reglas de siempre
+
+- **Lo más corto que siga siendo exacto.** Una idea, una frase. Si el texto se entiende
+  sin la segunda frase, la segunda frase se borra entera —no se acorta—. El caso típico:
+  un título que dice el problema y un botón que dice la acción no necesitan nada en medio.
+- **No se explica el mecanismo.** «Se abre en una pestaña nueva», «el mensaje llega al
+  panel de CLAUX», «se leen sin entrar en el portal»: es cierto, no aporta y envejece con
+  el código. La razón técnica va en el comentario del código, que es donde sirve.
+- **No se vende dentro del producto.** Quien lo lee ya es cliente. Nada de adjetivos de
+  folleto ni de frases que justifican lo buena que es una función.
+- **Ni euforia ni disculpas.** Sin exclamaciones, sin emoticonos, sin «Lo sentimos mucho»,
+  sin «correctamente».
+- **Sin jerga interna ni nomenclatura del código.** «Recurso» → «Profesional»,
+  «Tercero» → el nombre que use el negocio. Preciso y sobrio, no distante ni técnico.
+
+### Plantillas canónicas — una sola forma por situación
+
+El fallo más caro no es el tono: es decir lo mismo de seis maneras. Se escribe así y no
+de otra:
+
+| Situación | Forma única | Prohibido |
+|---|---|---|
+| **Error de operación** | `No se ha podido <infinitivo> <objeto>.` | «Error al…», «Error:», «No pudimos…», «No pude…», «Falló…» |
+| **Falta un dato** | `Falta <el dato>.` — «Falta la empresa.», «Falta la moneda.» | «Debes seleccionar una empresa», «Selecciona una moneda» |
+| **Dato inválido** | La regla, no la orden: «El importe debe ser mayor que cero.» | «Escribe un importe válido», «Tienes que…» |
+| **Reintento** | **Se borra.** Quien ve el error reintenta solo. Solo se dice si hay que esperar: «El servicio de IA no responde en este momento.» | «Inténtalo de nuevo», «Vuelve a intentarlo» |
+| **Vacío** | `Sin <plural>.` — el título ya dice qué pantalla es y el botón ya ofrece la acción | «Aún no hay…», «Todavía no tienes…», y toda segunda frase de ánimo |
+| **Éxito** | Qué quedó hecho, con su identificador: «Factura A-000123 emitida.» | «¡Listo!», «Guardado correctamente», «Todo ha ido bien» |
+| **Confirmación** | Qué se hace y qué consecuencia tiene, en una frase. Botón = verbo + objeto | Preguntas retóricas, «¿Seguro?», «Esta acción no se puede deshacer» a secas |
+| **Ayuda de campo** | La regla o la consecuencia: «Se usa en la factura.» | La instrucción: «Escribe aquí el nombre que verá el cliente» |
+| **Carga** | `Cargando…`, `Guardando…`, `Emitiendo factura…` | «Cargando tu catálogo…», «Escribiendo tu relato…» |
+| **Botón** | Verbo + objeto, infinitivo, sin signos: «Registrar pago» | «¡Guardar!», «Guardar cambios ahora», «Vamos allá» |
+| **Permiso denegado** | El hecho: «Sin permiso para editar en este módulo.» | «No puedes…», «No tienes permiso para…» |
+
+### Alcance y control
+
+- La **IA** responde en este mismo registro. Su personalidad y sus prompts viven en
+  `settings` (`ia_instrucciones`, `ia_tono`, `ia_prompt_*`), editables desde /admin: el
+  código solo guarda el valor por defecto y **la fila de la BD manda**. Lo mismo vale
+  para `email_plantillas`, `modulos_catalogo`, `propuesta_textos` y `plantillas_sector`.
+- **`npm run audit:textos`** vigila tuteo, primera persona del equipo, coloquialismos,
+  exclamaciones y emojis. Debe salir en verde antes de dar por terminada una tarea.
+- El centinela lee ficheros, así que **el texto de la BD se le escapa**: lo que se escribe
+  desde /admin no lo revisa nadie. Al editar ahí, el registro se cuida a mano.
+
+> Este apartado es la fuente única del registro de los textos de la plataforma. El del
+> **manual** (`/academia`, `/ayuda`) es otro —neutro, en tercera persona, expositivo— y
+> vive en `docs/CONTEXTO.md § Academia`.
 
 ## 6. Rutas públicas por-negocio (menú/catálogo QR, reservar, citas) — presupuesto Cuba, INNEGOCIABLE
 
@@ -246,7 +312,7 @@ Todo `<input>` con `<label for>` asociado por `id`. Todo botón de solo icono co
 5b. Si hay filtros: ¿una sola declaración con `<Filtros>` (§3.3), estado en la URL, y `npm run audit:filtros` en verde?
 6. ¿Probado en dark mode y en móvil 360 px?
 7. ¿Estados de carga, doble-submit y feedback cubiertos si hay acciones?
-8. ¿El texto visible es profesional y conciso (§5.1)? ¿Sobra alguna frase —mecanismo, adjetivos, ánimo— que se pueda borrar entera?
+8. ¿El texto visible cumple §5.1 —impersonal, sin tuteo, sin primera persona del equipo, con la plantilla canónica de su situación—? ¿Sobra alguna frase —mecanismo, adjetivos, ánimo— que se pueda borrar entera? `npm run audit:textos` en verde.
 
 ---
 *Presupuesto: este archivo ≤ ~1.400 palabras. Si crece, factoriza — los valores exactos viven en `01-tokens.css`, no aquí.*

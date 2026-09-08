@@ -146,20 +146,20 @@ export async function calcularOnboarding(db: Db, ctx: CtxOnboarding): Promise<On
 
   const pasos: OnbPaso[] = [
     basico({
-      clave: 'moneda', titulo: 'Configura tu moneda',
-      apoyo: 'Es la que llevan tus precios, cobros y pagos.',
+      clave: 'moneda', titulo: 'Configurar la moneda',
+      apoyo: 'Es la que llevan los precios, cobros y pagos.',
       hecho: monedas > 0, href: '/portal/monedas', form: 'moneda',
     }),
     basico({
-      clave: 'empresa', titulo: 'Crea tu empresa',
-      apoyo: 'La que emite tus documentos y agrupa tus datos.',
+      clave: 'empresa', titulo: 'Crear la empresa',
+      apoyo: 'La que emite los documentos y agrupa los datos.',
       hecho: empresas.length > 0, href: '/portal/empresas', form: 'empresa',
     }),
   ]
   if (modulos.includes('base')) {
     pasos.push(basico({
-      clave: 'letra', titulo: 'Asigna la letra de facturación',
-      apoyo: 'La llevan todas tus facturas: A-000001.',
+      clave: 'letra', titulo: 'Asignar la letra de facturación',
+      apoyo: 'La llevan todas las facturas: A-000001.',
       hecho: empresas.some(e => !!e.letra_facturacion), href: '/portal/empresas', form: 'letra',
     }))
   }
@@ -174,7 +174,7 @@ export async function calcularOnboarding(db: Db, ctx: CtxOnboarding): Promise<On
   const preguntarImport = acc.disponible && acc.migracion_estado === 'pendiente' && !ctx.importNo
   if (preguntarImport) {
     pasos.push({
-      clave: 'importar', titulo: '¿Traes datos de un sistema anterior?',
+      clave: 'importar', titulo: '¿Hay datos de un sistema anterior?',
       apoyo: 'Productos, terceros y saldos, sin teclearlos uno a uno.',
       hecho: false,
       href: '/portal/importar-datos',

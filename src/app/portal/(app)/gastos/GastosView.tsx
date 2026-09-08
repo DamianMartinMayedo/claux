@@ -182,7 +182,7 @@ function RegistroModal({
     startTransition(async () => {
       const res = await guardarGastoCobro(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       onSaved()
     })
   }
@@ -210,8 +210,8 @@ function RegistroModal({
                 <div className="form-label-with-help">
                   <label htmlFor="gc-concepto">Concepto <span className="required">*</span></label>
                   <FormHelp text={tipo === 'GASTO'
-                    ? 'En dos palabras, de qué es. Lo verás en la tabla; la categoría es para el informe.'
-                    : 'Lo verás en la tabla y en Cuentas por cobrar.'} label="Qué poner en el concepto" />
+                    ? 'En dos palabras, de qué es. Aparece en la tabla; la categoría es para el informe.'
+                    : 'Aparece en la tabla y en Cuentas por cobrar.'} label="Qué poner en el concepto" />
                 </div>
                 <input
                   id="gc-concepto"
@@ -256,13 +256,13 @@ function RegistroModal({
                     </label>
                     {tipo === 'COBRO' && (
                       <FormHelp text={raicesIngreso.length > 0
-                        ? 'Con ella, tu informe desglosa de qué vienen los cobros. Puedes dejarla en blanco.'
-                        : 'Todavía no tienes categorías de ingreso: créalas en la pestaña Categorías para desglosar tus cobros.'} label="Para qué sirve la categoría" />
+                        ? 'Con ella, el informe desglosa de qué vienen los cobros. Puede quedar en blanco.'
+                        : 'Sin categorías de ingreso: se crean en la pestaña Categorías para desglosar los cobros.'} label="Para qué sirve la categoría" />
                     )}
                   </div>
                   <select id="gc-categoria" className="input" value={catSel} required={tipo === 'GASTO'}
                     onChange={e => { setCatSel(e.target.value); setSubSel('') }}>
-                    <option value="">{tipo === 'GASTO' ? '— Elige categoría —' : '— Sin categoría —'}</option>
+                    <option value="">{tipo === 'GASTO' ? '— Seleccionar categoría —' : '— Sin categoría —'}</option>
                     {gruposCat.map(g => g.filas.length === 0 ? null : (
                       <optgroup key={g.label} label={g.label}>
                         {g.filas.map(c => <option key={c.categoria_id} value={c.categoria_id}>{c.nombre}</option>)}
@@ -276,7 +276,7 @@ function RegistroModal({
                     onChange={e => setSubSel(e.target.value)}
                     disabled={!catSel || subOpciones.length === 0}>
                     <option value="">
-                      {!catSel ? '— Elige categoría —' : subOpciones.length === 0 ? '— Sin subcategorías —' : '— Sin subcategoría —'}
+                      {!catSel ? '— Seleccionar categoría —' : subOpciones.length === 0 ? '— Sin subcategorías —' : '— Sin subcategoría —'}
                     </option>
                     {subOpciones.map(c => <option key={c.categoria_id} value={c.categoria_id}>{c.nombre}</option>)}
                   </select>
@@ -323,7 +323,7 @@ function RegistroModal({
                 ) : data.monedas.length === 0 ? (
                   <>
                     <input className="input input-static" readOnly value="Sin monedas activas" />
-                    <span className="input-hint">Crea una moneda en Monedas y Tasas primero.</span>
+                    <span className="input-hint">Se requiere una moneda activa en Monedas y tasas.</span>
                   </>
                 ) : (
                   <select className="input" name="moneda" defaultValue="" required>
@@ -388,7 +388,7 @@ function LiquidarModal({
     startTransition(async () => {
       const res = await registrarLiquidacion(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       onChanged()
     })
   }
@@ -398,7 +398,7 @@ function LiquidarModal({
     startTransition(async () => {
       const res = await anularLiquidacion(movimiento_id)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       onChanged()
     })
   }
@@ -596,7 +596,7 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
     startTransition(async () => {
       const res = await guardarCategoriaGasto(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       // Acuse de éxito siempre (antes no había ninguno: se cerraba el modal y a
       // adivinar). Con el detalle de cuántas hijas entraron, que es lo que confirma
       // que la coma se entendió sin tener que cerrar y mirar la lista.
@@ -628,7 +628,7 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
           <div className="modal-body">
             {categoria?.es_sistema && (
               <div className="alert alert-info mb-3">
-                Categoría del sistema: CLAUX la asigna sola (comisiones de transferencia, nóminas…). Puedes renombrarla, pero no archivarla.
+                Categoría del sistema: CLAUX la asigna sola (comisiones de transferencia, nóminas…). Se puede renombrar, pero no archivar.
               </div>
             )}
 
@@ -673,7 +673,7 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
               <div className="input-group">
                 <div className="form-label-with-help">
                   <label htmlFor="cat-parent">Subcategoría de</label>
-                  <FormHelp text="Cuenta en el informe dentro de esta categoría, con el papel que ella tenga. Cámbiala para moverla a otra." label="Qué implica la categoría madre" />
+                  <FormHelp text="Cuenta en el informe dentro de esta categoría, con el papel que ella tenga. Cambiarla la mueve a otra." label="Qué implica la categoría madre" />
                 </div>
                 <select id="cat-parent" className="input" name="parent_id"
                   defaultValue={categoria?.parent_id ?? padresPosibles[0]?.categoria_id ?? ''}>
@@ -741,7 +741,7 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
                 </div>
               ) : (<>
                 <div className="input-group">
-                  <label>En tu informe</label>
+                  <label>En el informe</label>
                   <p className="gc-cat-efecto">{ROL_PL_EFECTO[rolElegido]}</p>
                   <button type="button" className="btn btn-ghost btn-sm" onClick={volverAPreguntar}>
                     Cambiar
@@ -765,7 +765,7 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
                 <div className="input-group">
                   <div className="form-label-with-help">
                     <label htmlFor="cat-rol">Renglón exacto</label>
-                    <FormHelp text="Ya está elegido por lo que respondiste. Cámbialo solo si sabes cuál quieres." label="Qué es el renglón exacto" />
+                    <FormHelp text="Ya está elegido a partir de las respuestas anteriores. Cambiarlo solo si se conoce el renglón exacto." label="Qué es el renglón exacto" />
                   </div>
                   <select id="cat-rol" className="input" value={rolElegido}
                     onChange={e => setRolElegido(e.target.value as RolPL)}>
@@ -775,7 +775,7 @@ function CategoriaModal({ categoria, categorias, onClose, onSaved }: {
                     <optgroup label="Ingresos">
                       {ROLES_INGRESO.map(r => <option key={r} value={r}>{ROL_PL_LABEL[r]}</option>)}
                     </optgroup>
-                    <optgroup label="No afecta a tu resultado">
+                    <optgroup label="No afecta al resultado">
                       {ROLES_FUERA_RESULTADO.map(r => <option key={r} value={r}>{ROL_PL_LABEL[r]}</option>)}
                     </optgroup>
                   </select>
@@ -1099,7 +1099,7 @@ export default function GastosView({ data, puedeEditar, gaveta, iaCuentas, child
       const res = await eliminarGastoCobro(confirmDel.registro_id)
       await ld.dismiss()
       setConfirmDel(null)
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       router.refresh()
     })
   }
@@ -1121,7 +1121,7 @@ export default function GastosView({ data, puedeEditar, gaveta, iaCuentas, child
     startTransition(async () => {
       const res = await impactoCategoria(c.categoria_id)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       setBorrarCat({ cat: c, impacto: res })
     })
   }
@@ -1133,7 +1133,7 @@ export default function GastosView({ data, puedeEditar, gaveta, iaCuentas, child
       const res = await eliminarCategoriaGasto(borrarCat.cat.categoria_id)
       await ld.dismiss()
       setBorrarCat(null)
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess('Categoría eliminada')
       router.refresh()
     })
@@ -1149,7 +1149,7 @@ export default function GastosView({ data, puedeEditar, gaveta, iaCuentas, child
       const res = await archivarCategoriaGasto(c.categoria_id)
       await ld.dismiss()
       setBorrarCat(null)
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess(`«${c.nombre}» archivada`)
       router.refresh()
     })
@@ -1161,7 +1161,7 @@ export default function GastosView({ data, puedeEditar, gaveta, iaCuentas, child
     startTransition(async () => {
       const res = await archivarCategoriaGasto(confirmCat.categoria_id)
       await ld.dismiss()
-      if (!res.ok) toastError(res.error ?? 'Error inesperado.')
+      if (!res.ok) toastError(res.error ?? 'No se ha podido completar la operación.')
       setConfirmCat(null); router.refresh()
     })
   }
@@ -1179,7 +1179,7 @@ export default function GastosView({ data, puedeEditar, gaveta, iaCuentas, child
         <div>
           <div className="page-title-ia">
             <h1 className="page-title">Gastos y cobros</h1>
-            <IaTouchpoint tipo="gastos" descripcion="un análisis de tus gastos" />
+            <IaTouchpoint tipo="gastos" descripcion="un análisis de los gastos" />
           </div>
           <p className="page-subtitle">Ingresos y egresos sin factura de por medio.</p>
         </div>
@@ -1297,7 +1297,7 @@ export default function GastosView({ data, puedeEditar, gaveta, iaCuentas, child
           <div className="mon-empty">
             <Receipt size={40} strokeWidth={1} opacity={0.2} />
             <p>{data.registros.length === 0
-              ? 'Aún no hay gastos ni cobros. Registra el primero para llevar tus ingresos y egresos directos.'
+              ? 'Sin gastos ni cobros. Registra el primero para llevar los ingresos y egresos directos.'
               : 'No hay registros para los filtros seleccionados.'}</p>
           </div>
         ) : (
@@ -1454,8 +1454,8 @@ export default function GastosView({ data, puedeEditar, gaveta, iaCuentas, child
             <div className="mon-empty">
               <Tag size={36} strokeWidth={1} opacity={0.25} />
               <p>{PERMITIR_RAIZ_MANUAL
-                ? 'Aún no hay categorías. Podemos cargarte las de tu tipo de negocio, o creas la primera a mano.'
-                : 'Aún no hay categorías. Te cargamos las de tu tipo de negocio y luego les añades el detalle que quieras.'}</p>
+                ? 'Sin categorías. Se pueden cargar las del tipo de negocio o crear la primera manualmente.'
+                : 'Sin categorías. Se cargan las del tipo de negocio y después se les añade el detalle.'}</p>
               {puedeEditar && (
                 <button className="btn btn-primary" onClick={() => setAsistente(true)}>
                   <Sprout size={14} strokeWidth={2.5} /> Preparar mi catálogo
@@ -1595,7 +1595,7 @@ export default function GastosView({ data, puedeEditar, gaveta, iaCuentas, child
       {confirmCat && (
         <ConfirmDialog
           title="Archivar categoría"
-          body={`¿Archivar «${confirmCat.nombre}»? Dejará de aparecer al clasificar gastos nuevos, pero los registros que ya la usan la conservan y podrás restaurarla cuando quieras.`}
+          body={`¿Archivar «${confirmCat.nombre}»? Dejará de aparecer al clasificar gastos nuevos; los registros que ya la usan la conservan y se puede restaurar en cualquier momento.`}
           danger
           confirmLabel="Archivar"
           onConfirm={confirmarArchivarCat}
@@ -1629,7 +1629,7 @@ export default function GastosView({ data, puedeEditar, gaveta, iaCuentas, child
               meses ya cerrados</strong>.
               <br /><br />
               Archivarla la quita de los desplegables al registrar gastos nuevos y conserva
-              intacto todo el historial. Puedes restaurarla cuando quieras.
+              intacto todo el historial. Se puede restaurar en cualquier momento.
             </>
           }
         />

@@ -175,13 +175,13 @@ export default function CitasPublicaForm({
   // Paso intermedio: del formulario de datos al resumen de revisión (sin enviar aún).
   function handleRevisar(e: React.FormEvent) {
     e.preventDefault()
-    if (!hora || !horaRecurso) { setError('Selecciona una hora.'); return }
+    if (!hora || !horaRecurso) { setError('Falta la hora.'); return }
     setError(''); setPaso('revisar')
   }
 
   // Envío real: ya con el resumen revisado por el cliente.
   function handleConfirmar() {
-    if (!hora || !horaRecurso) { setError('Selecciona una hora.'); return }
+    if (!hora || !horaRecurso) { setError('Falta la hora.'); return }
     const fd = new FormData()
     fd.set('client_id', clientId)
     fd.set('servicio_id', servicioId)
@@ -223,23 +223,23 @@ export default function CitasPublicaForm({
         {paso === 'ok' ? (
           <div className="rp-success">
             <Check size={40} strokeWidth={2} className="rp-success-icon" />
-            <p className="rp-subtitle">{estadoFinal === 'CONFIRMADA' ? '¡Cita confirmada!' : '¡Cita recibida!'}</p>
+            <p className="rp-subtitle">{estadoFinal === 'CONFIRMADA' ? 'Cita confirmada' : 'Cita recibida'}</p>
             <div className="rp-resumen">
               <span><strong>{servicio?.nombre}</strong></span>
               <span className="rp-resumen-hora">{formatFecha(fecha)} · {hora}</span>
             </div>
-            <p className="rp-hint">{estadoFinal === 'CONFIRMADA' ? '¡Te esperamos!' : 'Te avisaremos en cuanto la confirmemos.'}</p>
+            <p className="rp-hint">{estadoFinal === 'CONFIRMADA' ? 'Le esperamos.' : 'Recibirá un aviso en cuanto se confirme.'}</p>
             {tokenCita && <EnlaceGestion url={`${origen}/${slug}/r/${tokenCita}`} tipo="cita" />}
           </div>
         ) : servicios.length === 0 ? (
-          <p className="rp-hint">Este negocio aún no tiene horarios de cita disponibles. Vuelve pronto.</p>
+          <p className="rp-hint">Este negocio no tiene horarios de cita disponibles por el momento.</p>
         ) : (
           <>
             {/* Paso 1 — Servicio */}
             {paso === 'servicio' && (
               <>
-                <p className="rp-subtitle">Pide tu cita en línea</p>
-                <p className="rp-step-label">Elige un {et.servicio.toLowerCase()}</p>
+                <p className="rp-subtitle">Solicite su cita en línea</p>
+                <p className="rp-step-label">Seleccione un {et.servicio.toLowerCase()}</p>
                 <div className="rp-opt-list">
                   {servicios.map(s => (
                     <button key={s.servicio_id} type="button" className="rp-opt" onClick={() => elegirServicio(s.servicio_id)}>
@@ -283,11 +283,11 @@ export default function CitasPublicaForm({
 
                 <div className="rp-controls">
                   <div className="rp-field">
-                    <span className="rp-label">Elige el día</span>
+                    <span className="rp-label">Seleccione el día</span>
                     {loadingDias ? (
                       <div className="rp-slots-loading"><Loader2 size={18} className="rp-spin" /></div>
                     ) : dias.length === 0 ? (
-                      <p className="rp-hint">No hay horas libres próximamente. Escríbenos y te ayudamos a encontrar hueco.</p>
+                      <p className="rp-hint">No hay horas libres próximamente. Contacte con el negocio para buscar disponibilidad.</p>
                     ) : (
                       <>
                         <div className="rp-day-grid">
@@ -323,7 +323,7 @@ export default function CitasPublicaForm({
                 {dias.length > 0 && (
                 <div className="rp-turnos-section">
                   <div className="rp-turnos-day">{formatFechaCorta(fecha)}</div>
-                  <div className="rp-turnos-sub">Elige una hora</div>
+                  <div className="rp-turnos-sub">Seleccione una hora</div>
 
                   {loadingSlots ? (
                     <div className="rp-slots-loading"><Loader2 size={22} className="rp-spin" /></div>
@@ -361,7 +361,7 @@ export default function CitasPublicaForm({
                 <form onSubmit={handleRevisar} className="rp-form">
                   <div className="rp-field">
                     <label className="rp-label" htmlFor="rp-c-nombre">Nombre <span className="rp-required">*</span></label>
-                    <input id="rp-c-nombre" className="rp-input" value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Tu nombre completo" required autoFocus />
+                    <input id="rp-c-nombre" className="rp-input" value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Nombre completo" required autoFocus />
                   </div>
                   <div className="rp-field">
                     {/* El teléfono pasa a obligatorio: es el único canal real hacia el
@@ -394,11 +394,11 @@ export default function CitasPublicaForm({
             {/* Paso 5 — Revisar (resumen antes de confirmar) */}
             {paso === 'revisar' && (
               <div className="rp-turno-form-section">
-                <p className="rp-step-label">Revisa tu cita</p>
+                <p className="rp-step-label">Revise su cita</p>
 
                 <div className="rp-review-group">
                   <div className="rp-review-head">
-                    <span className="rp-review-title">Tu cita</span>
+                    <span className="rp-review-title">Su cita</span>
                     <button type="button" className="rp-edit-link"
                       onClick={() => { setPaso('horario'); setError('') }}>Cambiar</button>
                   </div>
@@ -412,7 +412,7 @@ export default function CitasPublicaForm({
 
                 <div className="rp-review-group">
                   <div className="rp-review-head">
-                    <span className="rp-review-title">Tus datos</span>
+                    <span className="rp-review-title">Sus datos</span>
                     <button type="button" className="rp-edit-link"
                       onClick={() => { setPaso('datos'); setError('') }}>Cambiar</button>
                   </div>

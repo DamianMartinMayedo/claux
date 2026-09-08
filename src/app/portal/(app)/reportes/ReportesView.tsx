@@ -421,7 +421,7 @@ export default function ReportesView({ data, asesores, gaveta }: {
         <div>
           <div className="page-title-ia">
             <h1 className="page-title">Reportes financieros</h1>
-            <IaTouchpoint tipo="proyeccion" descripcion="una proyección de tus ingresos" />
+            <IaTouchpoint tipo="proyeccion" descripcion="una proyección de los ingresos" />
           </div>
           <p className="page-subtitle">Estado de resultados (devengado) y flujo de caja (efectivo) del período seleccionado.</p>
         </div>

@@ -447,7 +447,7 @@ export async function escanearRenovaciones(
         // creer al dueño que ya reclamó algo que no ha emitido.
         : dias < 0 ? `Cobro vencido sin facturar — ${cliente}` : `Cobro pendiente — ${cliente}`,
       cuerpo:    yaFacturada
-        ? `La factura de ${cliente} por «${servicio}» (${importe}) del ${fmtFechaEs(fecha)} ya está preparada como borrador. Revísala y emítela cuando quieras.`
+        ? `La factura de ${cliente} por «${servicio}» (${importe}) del ${fmtFechaEs(fecha)} está en borrador, pendiente de emitir.`
         : dias < 0
           ? `El cobro de ${cliente} por «${servicio}» (${importe}) vencía el ${fmtFechaEs(fecha)} y sigue sin facturar.`
           : `El cobro de ${cliente} por «${servicio}» (${importe}) corresponde al ${fmtFechaEs(fecha)}${dias === 0 ? ' (hoy)' : ` (faltan ${dias} día${dias === 1 ? '' : 's'})`}.`,
@@ -657,7 +657,7 @@ export async function escanearBorradoresEstancados(
       empresaId:   f.empresa_id as string | null,
       tipo:        'factura_borrador_estancada',
       titulo:      'Borrador sin emitir',
-      cuerpo:      `${etiquetaNumero(f.numero as string)}: ${dinero(Number(f.total), f.moneda as string)} en borrador desde el ${fmtFechaEs(f.fecha_emision as string)}. Sin emitir no cuenta en tus informes ni en lo que te deben.`,
+      cuerpo:      `${etiquetaNumero(f.numero as string)}: ${dinero(Number(f.total), f.moneda as string)} en borrador desde el ${fmtFechaEs(f.fecha_emision as string)}. Mientras no se emita, no cuenta en los informes ni en el saldo por cobrar.`,
       enlace:      `/portal/ventas/facturas/${f.factura_id}`,
       entidadTipo: 'documento',
       entidadId:   f.factura_id as string,
@@ -737,7 +737,7 @@ export async function escanearCaja(db: Db, tenants: ContextoTenant[]): Promise<n
       clientId:    s.client_id as string,
       empresaId:   s.empresa_id as string | null,
       tipo:        'caja_abierta_sin_cerrar',
-      titulo:      'Tienes una caja sin cerrar',
+      titulo:      'Caja sin cerrar',
       cuerpo:      `La caja lleva ${Math.round(horas)} horas abierta. Ciérrala para que la venta llegue a Tesorería.`,
       enlace:      '/portal/caja',
       entidadTipo: 'caja_sesion',
@@ -806,8 +806,8 @@ export async function escanearCajaContabilidad(db: Db, tenants: ContextoTenant[]
         clientId,
         empresaId:   null,
         tipo:        'caja_venta_sin_contabilizar',
-        titulo:      'Tienes ventas de caja sin contabilizar',
-        cuerpo:      `${nombreDe.get(g.caja_id) ?? g.caja_id}: ${g.tickets} ${g.tickets === 1 ? 'venta' : 'ventas'} (${importes}) de un turno que no se cerró. Hasta que se cierre, ese dinero no está en tu contabilidad.`,
+        titulo:      'Ventas de caja sin contabilizar',
+        cuerpo:      `${nombreDe.get(g.caja_id) ?? g.caja_id}: ${g.tickets} ${g.tickets === 1 ? 'venta' : 'ventas'} (${importes}) de un turno que no se cerró. Hasta que se cierre, ese dinero no está en la contabilidad.`,
         enlace:      '/portal/caja/cierres',
         entidadTipo: 'caja_pendiente',
         entidadId:   g.sesion_uuid,
@@ -879,7 +879,7 @@ export async function escanearCajaConfig(db: Db, tenants: ContextoTenant[]): Pro
           empresaId:   c.empresa_id,
           tipo:        'caja_sin_cuenta_configurada',
           titulo:      'Un punto de venta no puede llevar su dinero a Tesorería',
-          cuerpo:      `${c.nombre} acepta ${faltan.join(', ')} y no tiene caja de Tesorería para ${faltan.length === 1 ? 'esa moneda' : 'esas monedas'}. Lo que cobre en ${faltan.length === 1 ? 'ella' : 'ellas'} no entrará en tu contabilidad.`,
+          cuerpo:      `${c.nombre} acepta ${faltan.join(', ')} y no tiene caja de Tesorería para ${faltan.length === 1 ? 'esa moneda' : 'esas monedas'}. Lo que cobre en ${faltan.length === 1 ? 'ella' : 'ellas'} no entrará en la contabilidad.`,
           enlace:      `/portal/caja/${c.caja_id}`,
           entidadTipo: 'caja_config',
           entidadId:   c.caja_id,
@@ -1306,8 +1306,8 @@ export async function escanearReservas(
     const ok = await crearNotificacion({
       clientId,
       tipo:        'reservas_hoy',
-      titulo:      `Hoy tienes ${partes.join(' y ')}`,
-      cuerpo:      'Repasa la agenda del día antes de abrir.',
+      titulo:      'Agenda de hoy',
+      cuerpo:      `Hoy: ${partes.join(' y ')}.`,
       enlace:      n.citas > 0 && n.reservas === 0 ? '/portal/citas' : '/portal/reservas',
       entidadTipo: 'agenda_dia',
       entidadId:   hoy,
@@ -1411,8 +1411,8 @@ export async function escanearAgendaSalud(
       const ok = await crearNotificacion({
         clientId:    t.clientId,
         tipo:        'bot_sin_vincular',
-        titulo:      `Tu bot de ${col === 'bot_config' ? 'reservas' : 'citas'} no te avisa a ti`,
-        cuerpo:      'Está activo pero tu chat no está vinculado: los avisos no llegan a ningún sitio. Vincúlalo desde Configuración.',
+        titulo:      `El bot de ${col === 'bot_config' ? 'reservas' : 'citas'} no envía avisos`,
+        cuerpo:      'Está activo, pero no hay ningún chat vinculado: los avisos no llegan a ningún sitio.',
         enlace:      col === 'bot_config' ? '/portal/reservas' : '/portal/citas',
         entidadTipo: 'bot_vinculo',
         entidadId:   col,
@@ -1448,8 +1448,8 @@ export async function escanearAgendaSalud(
           const ok = await crearNotificacion({
             clientId:    t.clientId,
             tipo:        'agenda_sin_configurar',
-            titulo:      'Tu web de reservas no ofrece nada',
-            cuerpo:      'El enlace está publicado pero no tienes ningún turno activo: quien lo abra no puede reservar.',
+            titulo:      'La web de reservas no ofrece nada',
+            cuerpo:      'El enlace está publicado, pero no hay ningún turno activo: quien lo abra no puede reservar.',
             enlace:      '/portal/reservas',
             entidadTipo: 'agenda_vacia',
             entidadId:   'reservas',
@@ -1468,10 +1468,10 @@ export async function escanearAgendaSalud(
           const ok = await crearNotificacion({
             clientId:    t.clientId,
             tipo:        'agenda_sin_configurar',
-            titulo:      'Tu web de citas no ofrece nada',
+            titulo:      'La web de citas no ofrece nada',
             cuerpo:      (nServ ?? 0) === 0
-              ? 'El enlace está publicado pero no tienes servicios activos.'
-              : 'El enlace está publicado pero nadie tiene horario: no hay huecos que ofrecer.',
+              ? 'El enlace está publicado, pero no hay servicios activos.'
+              : 'El enlace está publicado, pero nadie tiene horario: no hay huecos que ofrecer.',
             enlace:      '/portal/citas',
             entidadTipo: 'agenda_vacia',
             entidadId:   'citas',
@@ -1494,8 +1494,8 @@ export async function escanearIa(tenants: ContextoTenant[]): Promise<number> {
     const ok = await crearNotificacion({
       clientId:    t.clientId,
       tipo:        'ia_cupo_cerca',
-      titulo:      'Tu asistente está cerca del cupo',
-      cuerpo:      `Llevas ${uso.conversaciones} de ${uso.cupo} conversaciones este mes. No se corta nada: el cupo se renueva al empezar el mes.`,
+      titulo:      'El asistente está cerca del cupo',
+      cuerpo:      `${uso.conversaciones} de ${uso.cupo} conversaciones este mes. No se interrumpe nada: el cupo se renueva al empezar el mes.`,
       enlace:      '/portal/ia',
       entidadTipo: 'ia_cupo',
       entidadId:   uso.periodo,   // una vez por mes
@@ -1533,9 +1533,9 @@ export async function escanearDossier(db: Db, tenants: ContextoTenant[]): Promis
       clientId:    d.client_id as string,
       empresaId:   d.empresa_id as string | null,
       tipo:        'dossier_snapshot_desactualizado',
-      titulo:      `Tu dossier muestra números viejos${d.titulo ? ` — ${d.titulo}` : ''}`,
+      titulo:      `El dossier muestra números desactualizados${d.titulo ? ` — ${d.titulo}` : ''}`,
       cuerpo:      dias !== null
-        ? `Los datos publicados son de hace ${dias} días. Actualízalos para que el enlace enseñe la foto de ahora.`
+        ? `Los datos publicados son de hace ${dias} días.`
         : 'Han cambiado datos desde la última actualización del dossier.',
       enlace:      '/portal/dossier',
       entidadTipo: 'dossier',
@@ -1596,11 +1596,11 @@ export async function escanearLimites(
         clientId:    t.clientId,
         tipo:        lleno ? 'limite_alcanzado' : 'limite_cerca',
         titulo:      lleno
-          ? `Llegaste al tope de ${def.varios}`
-          : `Te quedan pocos huecos de ${def.varios}`,
+          ? `Tope de ${def.varios} alcanzado`
+          : `Quedan pocos huecos de ${def.varios}`,
         cuerpo:      lleno
-          ? `Tienes ${usado} de ${limite} ${def.varios}, el máximo de tu nivel ${ctx.nivelNombre}. No se corta nada: para añadir más, archiva ${def.genero === 'f' ? 'alguna' : 'alguno'} o escríbenos y subimos de nivel.`
-          : `Llevas ${usado} de ${limite} ${def.varios} de tu nivel ${ctx.nivelNombre}.`,
+          ? `${usado} de ${limite} ${def.varios}, el máximo del nivel ${ctx.nivelNombre}. No se interrumpe nada: para añadir más, hay que archivar ${def.genero === 'f' ? 'alguna' : 'alguno'} o ampliar el nivel.`
+          : `${usado} de ${limite} ${def.varios} del nivel ${ctx.nivelNombre}.`,
         entidadTipo: 'limite',
         entidadId:   `${dim}:${periodo}`,
       }, t)

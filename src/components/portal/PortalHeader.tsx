@@ -203,7 +203,7 @@ export default function PortalHeader({ session, nombreEmpresa, empresas, verNoti
       {showLogoutDialog && (
         <ConfirmDialog
           title="Cerrar sesión"
-          body="¿Estás seguro de que deseas cerrar sesión?"
+          body="¿Cerrar sesión?"
           confirmLabel="Cerrar sesión"
           pendingLabel="Cerrando sesión…"
           pending={cerrando}

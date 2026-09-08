@@ -36,8 +36,8 @@ export default function PuntoVentaWidget({ data }: { data: PuntoVentaResumen }) 
 
       {data.puntos.length === 0 ? (
         <p className="dash-muted">
-          Aún no tienes puntos de venta.{' '}
-          <Link href="/portal/caja" className="link-primary">Crea el primero</Link>.
+          Sin puntos de venta.{' '}
+          <Link href="/portal/caja" className="link-primary">Añadir el primero</Link>.
         </p>
       ) : (
         <ul className="dash-list">

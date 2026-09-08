@@ -80,8 +80,8 @@ export default function PasoMarca({
     startGenerar(async () => {
       const res = await redactarResumenPortada(dossier.dossier_id, semilla || undefined)
       await ld.dismiss()
-      if (res.ok) { setResumenPortada(res.linea); toastSuccess(semilla ? 'Lo mejoré a partir de lo tuyo: revísalo' : 'Resumen listo: revísalo y ajústalo') }
-      else toastError(res.error || 'No se pudo generar el resumen')
+      if (res.ok) { setResumenPortada(res.linea); toastSuccess(semilla ? 'Resumen mejorado a partir del texto original' : 'Resumen listo') }
+      else toastError(res.error || 'No se ha podido generar el resumen')
     })
   }
 
@@ -118,7 +118,7 @@ export default function PasoMarca({
       fd.set('dossier_id', dossier.dossier_id)
       const res = await usarLogoEmpresa(fd)
       await ld.dismiss()
-      if (res.ok) { setLogoUrl(res.logo_url ?? null); toastSuccess('Logo copiado de tu empresa'); onCambio?.() }
+      if (res.ok) { setLogoUrl(res.logo_url ?? null); toastSuccess('Logo copiado de la empresa'); onCambio?.() }
       else toastError(res.error || 'No se pudo copiar el logo')
     })
   }
@@ -128,7 +128,7 @@ export default function PasoMarca({
       <div className="dos-body">
         <h2 className="dos-section-title">La marca</h2>
         <p className="dos-section-hint">
-          El nombre, el color y el logo son de esta presentación, no de tu negocio: cámbialos sin tocar nada más.
+          El nombre, el color y el logo son de esta presentación, no del negocio: se cambian sin afectar a nada más.
         </p>
 
         <div className="dos-campo">
@@ -146,7 +146,7 @@ export default function PasoMarca({
         <div className="dos-campo">
           <div className="dos-relato-head">
             <div className="dos-relato-titulos">
-              <label className="dos-label" htmlFor="dos-resumen-portada">Una línea que resuma tu negocio</label>
+              <label className="dos-label" htmlFor="dos-resumen-portada">Una línea que resuma el negocio</label>
             </div>
             {tieneIa && (
               <button className="btn btn-ia btn-sm" onClick={generarResumen} disabled={generando}>
@@ -165,7 +165,7 @@ export default function PasoMarca({
         </div>
 
         <div className="dos-campo">
-          <span className="dos-label">¿Cuál es tu color?</span>
+          <span className="dos-label">Color de la marca</span>
           <div className="dos-colores">
             {SUGERIDOS.map(c => (
               <button
@@ -193,7 +193,7 @@ export default function PasoMarca({
         {/* Preview de la paleta derivada, en vivo */}
         <div className="dos-paleta" style={paletaVars(paleta)}>
           <div className="dos-paleta-hero">
-            <span className="dos-paleta-titulo">Tu presentación</span>
+            <span className="dos-paleta-titulo">La presentación</span>
             <span className="dos-paleta-sub">Así se verá la portada del enlace</span>
           </div>
           {/* La etiqueta va AL LADO del color, no encima: `derivarPaleta` solo
@@ -206,14 +206,14 @@ export default function PasoMarca({
           </div>
           <p className="dos-paleta-nota">
             {ajustado
-              ? `Ajustamos un poco tu color (${normalizado} → ${paleta.principal}) para que el texto encima se lea. Contraste ${ratio.toFixed(1)}:1.`
-              : `Contraste del texto sobre tu color: ${ratio.toFixed(1)}:1. Legible.`}
+              ? `Ajustamos un poco el color (${normalizado} → ${paleta.principal}) para que el texto encima se lea. Contraste ${ratio.toFixed(1)}:1.`
+              : `Contraste del texto sobre el color: ${ratio.toFixed(1)}:1. Legible.`}
           </p>
         </div>
 
         <div className="dos-campo">
-          <span className="dos-label">Tu logo</span>
-          <p className="dos-section-hint">Opcional. Si no pones ninguno, la presentación sale solo con el nombre.</p>
+          <span className="dos-label">Logo</span>
+          <p className="dos-section-hint">Opcional. Sin logo, la presentación sale solo con el nombre.</p>
           <ImageUpload
             key={logoUrl ?? 'vacio'}
             valorInicial={logoUrl}

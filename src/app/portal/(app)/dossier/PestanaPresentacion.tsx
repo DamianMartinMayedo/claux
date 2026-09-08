@@ -147,7 +147,7 @@ export default function PestanaPresentacion({
       setCopiado(true)
       setTimeout(() => setCopiado(false), 2000)
     } catch {
-      toastError('No se pudo copiar. Selecciona el enlace y cópialo a mano.')
+      toastError('No se ha podido copiar. El enlace se puede seleccionar y copiar manualmente.')
     }
   }
 
@@ -156,7 +156,7 @@ export default function PestanaPresentacion({
       <div className="dos-body">
         <h2 className="dos-section-title">Presentación</h2>
         <p className="dos-section-hint">
-          Un enlace web con tus números y tu relato, pensado para enseñárselo a un inversor desde el móvil.
+          Un enlace web con los números y el relato, pensado para mostrarlo a un inversor desde el móvil.
         </p>
 
         {desfasado && (
@@ -169,13 +169,13 @@ export default function PestanaPresentacion({
             puedeEditar={puedeEditar}
             mensaje={
               <>
-                <strong>{dossier.frescura.motivo === 'ANTIGUEDAD' ? 'Tu dossier necesita una revisión.' : 'Tus números están desfasados.'}</strong>{' '}
+                <strong>{dossier.frescura.motivo === 'ANTIGUEDAD' ? 'El dossier necesita una revisión.' : 'Los números están desfasados.'}</strong>{' '}
                 {dossier.frescura.motivo === 'ANTIGUEDAD'
                   ? `Lleva ${dossier.frescura.diasDesdeSnapshot ?? 0} días sin actualizarse.`
-                  : 'Cambiaste la moneda, la empresa o el período.'}{' '}
+                  : 'Ha cambiado la moneda, la empresa o el período.'}{' '}
                 {publicado
                   ? ' El enlace en vivo sigue mostrando el snapshot anterior.'
-                  : ' No podrás publicar hasta actualizarlos.'}
+                  : ' No se puede publicar hasta actualizarlos.'}
               </>
             }
           />
@@ -194,7 +194,7 @@ export default function PestanaPresentacion({
         />
 
         {sinNumeros ? (
-          <p className="dos-vacio">Carga tus números en «Mi dossier» y podrás publicar tu presentación.</p>
+          <p className="dos-vacio">Sin números cargados. Se cargan en «Mi dossier» y desde ahí se publica la presentación.</p>
         ) : !publicado ? (
           <>
             {/* Tercera ubicación del gancho (M3): publicar es el momento en que se
@@ -202,12 +202,12 @@ export default function PestanaPresentacion({
                 números estén al día solos. */}
             {!tieneBase && (
               <AvisoContabilidad
-                texto="Vas a enseñar estos números a alguien. Con Contabilidad se actualizan solos desde tus ventas y gastos, así que el enlace nunca queda viejo — y lo que escribiste a mano se conserva."
+                texto="Estos números se van a mostrar a un tercero. Con Contabilidad se actualizan solos desde las ventas y gastos, de modo que el enlace nunca queda desfasado — y lo introducido manualmente se conserva."
               />
             )}
             <p className="dos-section-hint">
-              Todavía no está publicada: nadie puede verla. Al publicar obtendrás un enlace privado que
-              solo funciona para quien se lo des.
+              Sin publicar: nadie puede verla. Al publicar se genera un enlace privado, válido solo para
+              quien lo reciba.
             </p>
             <div className="dos-acciones">
               {puedeEditar && (
@@ -231,7 +231,7 @@ export default function PestanaPresentacion({
             </div>
 
             <div className="dos-enlace-row">
-              <input className="input dos-enlace-input" value={url} readOnly aria-label="Enlace de tu presentación" onFocus={e => e.target.select()} />
+              <input className="input dos-enlace-input" value={url} readOnly aria-label="Enlace de la presentación" onFocus={e => e.target.select()} />
               <button className="btn btn-secondary" onClick={copiar}>
                 {copiado ? <Check size={14} strokeWidth={2.5} /> : <Copy size={14} strokeWidth={2.5} />}
                 {copiado ? 'Copiado' : 'Copiar'}
@@ -306,16 +306,16 @@ export default function PestanaPresentacion({
                   {observaciones.map((o, i) => <li key={i}>{o}</li>)}
                 </ul>
               ) : (
-                <p className="dos-section-hint">Sin observaciones: tu dossier se ve coherente.</p>
+                <p className="dos-section-hint">Sin observaciones: el dossier es coherente.</p>
               )
             )}
             {tieneEn && !enDesactualizado && (
-              <p className="dos-section-hint">Tu enlace lleva el botón <strong>ES / EN</strong>: el inversor cambia de idioma en vivo.</p>
+              <p className="dos-section-hint">El enlace lleva el botón <strong>ES / EN</strong>: el inversor cambia de idioma en vivo.</p>
             )}
             {tieneEn && enDesactualizado && (
               <div className="alert alert-warning" role="alert">
                 <AlertTriangle size={14} strokeWidth={2} />
-                <span>Cambiaste el dossier después de traducirlo: la versión en inglés puede estar desactualizada. Regénérala para ponerla al día.</span>
+                <span>El dossier ha cambiado después de traducirlo: la versión en inglés puede estar desfasada. Conviene regenerarla.</span>
               </div>
             )}
           </div>

@@ -24,7 +24,7 @@ export default function SolicitarAcceso({ modulo }: { modulo: string }) {
       if (!r.ok) { toastError(r.error ?? 'No se pudo enviar la solicitud.'); return }
       setEnviado(true)
       toastSuccess(r.yaEnviada
-        ? 'Ya habías pedido este acceso; los administradores lo tienen.'
+        ? 'La solicitud ya estaba registrada; los administradores la tienen.'
         : 'Solicitud enviada a los administradores.')
     })
   }
@@ -32,7 +32,7 @@ export default function SolicitarAcceso({ modulo }: { modulo: string }) {
   return (
     <div className="acceso-aviso" role="note">
       <Lock size={15} strokeWidth={2} />
-      <span className="acceso-aviso-texto">Solo puedes consultar este módulo.</span>
+      <span className="acceso-aviso-texto">Este módulo es de solo consulta.</span>
       {enviado
         ? <span className="acceso-aviso-ok">Solicitud enviada</span>
         : (

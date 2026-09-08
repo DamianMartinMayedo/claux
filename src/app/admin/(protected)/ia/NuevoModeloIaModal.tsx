@@ -114,7 +114,7 @@ export default function NuevoModeloIaModal() {
                 <div className="input-group">
                   <div className="form-label-with-help">
                     <label>API key <span className="required">*</span></label>
-                    <FormHelp text="La clave del proveedor. Se guarda cifrada en el sistema y nunca se vuelve a mostrar. No hace falta tocar Vercel." label="Información sobre la API key" />
+                    <FormHelp text="La clave del proveedor. Se guarda cifrada en el sistema y nunca se vuelve a mostrar. No requiere tocar Vercel." label="Información sobre la API key" />
                   </div>
                   <CampoPassword name="api_key" autoComplete="off" className="input" placeholder="se guarda cifrada" />
                 </div>
@@ -127,7 +127,7 @@ export default function NuevoModeloIaModal() {
                 </label>
                 <p className="config-field-hint">
                   {usarEnv
-                    ? 'La clave vivirá en una variable de entorno que creas tú en Vercel (y en .env.local para local). Aquí solo pones su nombre.'
+                    ? 'La clave vivirá en una variable de entorno creada en Vercel (y en .env.local para local). Aquí solo va su nombre.'
                     : 'La clave se guarda cifrada en el sistema. Recomendado: no hay que tocar Vercel.'}
                 </p>
               </div>

@@ -34,13 +34,13 @@ export default function CambiarPasswordForm({ email }: { email: string }) {
           <div className="login-logo-group">
             <img src="/logo_color.svg" alt="CLAUX" height={48} />
           </div>
-          <p className="login-subtitle">Digitaliza tu negocio</p>
+          <p className="login-subtitle">Gestión integral para negocios</p>
         </div>
 
         <div className="card card-lg">
-          <h1 className="login-card-title">Crea tu contraseña</h1>
+          <h1 className="login-card-title">Nueva contraseña</h1>
           <p className="text-sm-muted mb-3">
-            Por seguridad, define una contraseña propia para <strong>{email}</strong>.
+            Por seguridad, se define una contraseña propia para <strong>{email}</strong>.
             La temporal deja de funcionar tras este paso.
           </p>
 

@@ -95,7 +95,7 @@ function FilaAlmacen({
 
   function guardar() {
     const limpio = texto.trim()
-    if (limpio && !/^\d+([.,]\d+)?$/.test(limpio)) { toastError('Escribe un número, o déjalo vacío.'); return }
+    if (limpio && !/^\d+([.,]\d+)?$/.test(limpio)) { toastError('El mínimo debe ser un número, o quedar vacío.'); return }
     // El toast de carga se crea ANTES de la transición: dentro no llega a pintarse.
     const t = toastLoading('Guardando mínimo…')
     start(async () => {
@@ -330,7 +330,7 @@ function TabPrecios({ data }: { data: ProductoDetalleData }) {
           puente es blando y en UNA dirección (mig. 119): Citas sigue funcionando sola. */}
       {data.agenda && (
         <div className="det-card">
-          <div className="det-section-title">En tu agenda</div>
+          <div className="det-section-title">En la agenda</div>
           <p className="det-nota det-nota-link">
             <CalendarClock size={15} strokeWidth={2} />
             Se agenda como «{data.agenda.nombre}»: {data.agenda.duracion_minutos} min.
@@ -539,7 +539,7 @@ function TabHistorialPrecios({ data }: { data: ProductoDetalleData }) {
       <div className="det-empty">
         <div className="det-empty-icon"><TrendingUp size={40} strokeWidth={1} opacity={0.2} /></div>
         <div className="det-empty-title">Historial de precios</div>
-        <div className="det-empty-text">Aquí verás los cambios de precio y costo cuando los edites.</div>
+        <div className="det-empty-text">Los cambios de precio y costo quedan registrados aquí.</div>
       </div>
     )
   }

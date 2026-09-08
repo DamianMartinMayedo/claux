@@ -194,9 +194,9 @@ export default function EstadoResultadosCard({ r, anterior, comparando, labelAnt
               <div className="rep-line rep-sub"><span>Coste de lo vendido</span><span>−{formatMonto(r.costo_directo)}</span></div>
               <p className="rep-info-nota">
                 Informativo: <strong>no se resta del resultado neto</strong>. Es el margen de
-                cada artículo o servicio que vendiste, no el de tu período — lo que compras a
+                cada artículo o servicio vendido, no el del período — lo que se compra a
                 un proveedor ya está arriba, dentro de los gastos.
-                {r.costo_sin_proveedor > 0 && ` De este coste, ${formatMonto(r.costo_sin_proveedor)} no tiene proveedor detrás y no ha generado ninguna deuda: si es trabajo de tu gente, su sueldo ya cuenta en los gastos de personal.`}
+                {r.costo_sin_proveedor > 0 && ` De este coste, ${formatMonto(r.costo_sin_proveedor)} no tiene proveedor detrás y no ha generado ninguna deuda: si corresponde a trabajo propio, su sueldo ya cuenta en los gastos de personal.`}
               </p>
             </>
           )}

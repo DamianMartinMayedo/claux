@@ -129,7 +129,7 @@ export default function PestanaEstado({
     return (
       <div className="card mon-empty">
         <BarChart3 size={40} strokeWidth={1} opacity={0.2} />
-        <p>Aún no hay números. Cárgalos en «Mi dossier» y aquí tendrás tu estado de resultados.</p>
+        <p>Sin números cargados. Se cargan en «Mi dossier» y el estado de resultados aparece aquí.</p>
       </div>
     )
   }
@@ -177,7 +177,7 @@ export default function PestanaEstado({
                 <strong>{dossier.frescura.motivo === 'ANTIGUEDAD' ? 'Este dossier necesita una revisión.' : 'Datos desfasados.'}</strong>{' '}
                 {dossier.frescura.motivo === 'ANTIGUEDAD'
                   ? `Lleva ${dossier.frescura.diasDesdeSnapshot ?? 0} días sin actualizarse.`
-                  : 'Cambiaste la moneda, la empresa o el período: este estado y el PDF aún corresponden al snapshot anterior.'}
+                  : 'Ha cambiado la moneda, la empresa o el período: este estado y el PDF aún corresponden al snapshot anterior.'}
               </>
             }
           />
@@ -189,7 +189,7 @@ export default function PestanaEstado({
             tampoco lo lleva. */}
         <GavetaLanzador
           resumen={gaveta}
-          nota="Esos gastos no están en este estado de resultados, así que tu resultado sale mejor de lo que es. Clasifícalos antes de enseñárselo a nadie."
+          nota="Esos gastos no están en este estado de resultados, así que el resultado sale mejor de lo que es. Clasifícalos antes de enseñárselo a nadie."
         />
 
         {/* Segunda ubicación del gancho (M3): el desglose vacío es exactamente lo
@@ -197,7 +197,7 @@ export default function PestanaEstado({
             Con desglose no aparece: ya tiene lo que se le ofrecería. */}
         {!tieneBase && sinDesglose && (
           <AvisoContabilidad
-            texto="Tu estado de resultados tiene los totales, pero no dice en qué se va el dinero. Puedes escribirlo en «El desglose», o dejar que Contabilidad lo saque de tus gastos reales."
+            texto="El estado de resultados tiene los totales, pero no dice en qué se va el dinero. Se puede escribir en «El desglose» o dejar que Contabilidad lo saque de los gastos reales."
           />
         )}
 
@@ -224,7 +224,7 @@ export default function PestanaEstado({
           <div className="dos-modo">
             <div className="dos-modo-cabeza">
               <Eye size={14} strokeWidth={2} aria-hidden="true" />
-              <span className="dos-modo-titulo">Así verá tu estado de resultados quien lo reciba</span>
+              <span className="dos-modo-titulo">Así verá el estado de resultados quien lo reciba</span>
             </div>
             <div className="dos-modo-opciones" role="group" aria-label="Qué se publica del estado de resultados">
               {MODOS_ESTADO.map(m => (
@@ -241,7 +241,7 @@ export default function PestanaEstado({
             </div>
             <p className="dos-modo-ayuda">
               {AYUDA_MODO_ESTADO[modo]}
-              {detallar && sinDesglose && ' Todavía no has escrito ningún concepto: complétalo en el paso «El desglose».'}
+              {detallar && sinDesglose && ' Sin conceptos escritos: se completan en el paso «El desglose».'}
             </p>
           </div>
         )}

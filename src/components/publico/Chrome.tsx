@@ -57,7 +57,7 @@ export function PublicFooter() {
         <img src="/logo_blanco.svg" alt="CLAUX" className="logo-dark" />
       </Link>
       <p className="ld-footer-text">
-        Hecho para hacer crecer tu negocio. Simple, rápido, sin complicaciones.
+        Software de gestión para negocios. Simple, rápido, sin complicaciones.
       </p>
       {/* Los legales van en el pie COMPARTIDO: deben estar accesibles desde
           cualquier página pública, no solo desde la landing. */}

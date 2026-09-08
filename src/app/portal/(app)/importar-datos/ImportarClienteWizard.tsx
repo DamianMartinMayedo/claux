@@ -45,13 +45,13 @@ export type EntidadImportable = { entidad: string; etiqueta: string }
  * con su etiqueta y sin enlace, no rompe.
  */
 const META: Record<string, { desc: string; destino: string }> = {
-  terceros:        { desc: 'Tus clientes y proveedores: contacto y datos de pago.',        destino: '/portal/terceros' },
+  terceros:        { desc: 'Los clientes y proveedores: contacto y datos de pago.',        destino: '/portal/terceros' },
   productos:       { desc: 'Catálogo físico: precios, costos y unidad.',                   destino: '/portal/productos' },
   servicios:       { desc: 'Catálogo de servicios y suscribibles.',                        destino: '/portal/servicios' },
   catalogo:        { desc: 'De cara al público: nombres, precios y secciones. Sin fotos.', destino: '/portal/catalogo' },
   profesionales:   { desc: 'Barberos, estilistas… solo nombre y tipo.',                    destino: '/portal/citas' },
   suscripciones:   { desc: 'Acuerdos recurrentes por cliente (los servicios, ya creados).', destino: '/portal/suscripciones' },
-  personal:        { desc: 'Tus trabajadores: identidad, puesto y contacto.',              destino: '/portal/rrhh' },
+  personal:        { desc: 'Los trabajadores: identidad, puesto y contacto.',              destino: '/portal/rrhh' },
   stock_inicial:   { desc: 'Existencias a la fecha de corte (catálogo y almacenes ya creados).', destino: '/portal/inventario' },
   tesoreria_saldo: { desc: 'Lo que hay en cada cuenta a la fecha de corte.',               destino: '/portal/tesoreria' },
   gastos:          { desc: 'Histórico de gastos por categoría. Lo pendiente va a CxP.',    destino: '/portal/gastos' },
@@ -97,15 +97,15 @@ const TIER2 = new Set(['gastos', 'cobros', 'stock_inicial', 'tesoreria_saldo'])
 function avisoCorte(entidad: string): { titulo: string; cuerpo: string } | null {
   if (entidad === 'gastos' || entidad === 'cobros') {
     return {
-      titulo: 'Esto es tu histórico anterior, no el día a día',
-      cuerpo: 'Cada fila lleva su fecha: es lo que pasó ANTES de empezar con CLAUX. Fija una fecha de corte y, a partir de ahí, registra en vivo. No subas el resumen de un mes y además lo registres a mano ese mismo mes: contaría dos veces.',
+      titulo: 'Esto es el histórico anterior, no el día a día',
+      cuerpo: 'Cada fila lleva su fecha: es lo ocurrido ANTES de empezar con CLAUX. Con una fecha de corte fijada, a partir de ahí se registra en vivo. Subir el resumen de un mes y además registrarlo dentro de ese mismo mes lo contaría dos veces.',
     }
   }
   if (entidad === 'stock_inicial' || entidad === 'tesoreria_saldo') {
     const foto = entidad === 'stock_inicial' ? 'las existencias' : 'los saldos'
     return {
       titulo: `Es la foto de ${foto} a una fecha`,
-      cuerpo: `Pon la fecha de corte y sube lo que tenías ESE día. A partir de ahí, deja que CLAUX lleve los movimientos: no vuelvas a subir esta foto más adelante o duplicarás.`,
+      cuerpo: `Se fija la fecha de corte y se sube el estado de ESE día. A partir de ahí, los movimientos los lleva CLAUX: repetir esta foto más adelante duplicaría los datos.`,
     }
   }
   return null
@@ -236,9 +236,9 @@ function BuscarFicha({
         className="input"
         type="text"
         autoComplete="off"
-        aria-label={`Buscar entre tus ${etiquetaTipo.toLowerCase()}s`}
+        aria-label={`Buscar entre los ${etiquetaTipo.toLowerCase()}s`}
         placeholder={opciones.length > 6
-          ? `Busca entre tus ${opciones.length} fichas…`
+          ? `Buscar entre ${opciones.length} fichas…`
           : 'Busca la ficha que es…'}
         value={texto || elegida?.etiqueta || ''}
         onChange={e => { setTexto(e.target.value); setAbierto(true); setActivo(0) }}
@@ -591,7 +591,7 @@ export default function ImportarClienteWizard({ entidades }: { entidades: Entida
     const res = await obtenerCamposEntidad(en.entidad)
     await ld.dismiss()
     setCargando(false)
-    if (!res.ok || !res.campos) { toastError(res.error ?? 'Error inesperado.'); return }
+    if (!res.ok || !res.campos) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
     // El archivo pertenece a la entidad con la que se subió: al elegir entidad se
     // suelta, o se acabaría mapeando las columnas de un archivo a los campos de otra.
     setLoteId(''); setCabeceras([]); setTotal(0); setColumnas({}); setAvisos([]); setResultado(null)
@@ -808,7 +808,7 @@ export default function ImportarClienteWizard({ entidades }: { entidades: Entida
       <div className="page-header">
         <div>
           <h1 className="page-title">Importar datos</h1>
-          <p className="page-subtitle">Sube tus datos desde un archivo Excel o CSV. Nada se guarda hasta que lo confirmes, y puedes deshacerlo.</p>
+          <p className="page-subtitle">Carga de datos desde un archivo Excel o CSV. Nada se guarda hasta la confirmación, y es reversible.</p>
         </div>
       </div>
 
@@ -843,7 +843,7 @@ export default function ImportarClienteWizard({ entidades }: { entidades: Entida
                 <button key={en.entidad} type="button" className="imprt-entidad"
                   disabled={cargando} onClick={() => elegirEntidad(en)}>
                   <strong>{en.etiqueta}</strong>
-                  <span>{META[en.entidad]?.desc ?? 'Sube tus datos de esta sección.'}</span>
+                  <span>{META[en.entidad]?.desc ?? 'Datos de esta sección.'}</span>
                 </button>
               ))}
             </div>
@@ -883,7 +883,7 @@ export default function ImportarClienteWizard({ entidades }: { entidades: Entida
                 Las columnas con <span className="required">*</span> son obligatorias; la fila de
                 ejemplo se puede dejar, no se importa. {plantillaBajada
                   ? 'Ya la tienes: rellénala y súbela abajo.'
-                  : 'Descárgala para poder subir tu archivo.'}
+                  : 'Se descarga para preparar el archivo.'}
               </span>
             </div>
             <div className="input-group ter-col-span-3">
@@ -896,7 +896,7 @@ export default function ImportarClienteWizard({ entidades }: { entidades: Entida
           </div>
 
           <label className="input-group">
-            <span className="label-text">Paso 2 · Sube tu archivo relleno</span>
+            <span className="label-text">Paso 2 · Subir el archivo relleno</span>
           </label>
           <input ref={fileRef} type="file" accept=".csv,.xlsx,text/csv" className="imprt-drop-input"
             onChange={onElegir} disabled={cargando || !plantillaBajada} aria-label="Elegir archivo" />
@@ -1175,7 +1175,7 @@ export default function ImportarClienteWizard({ entidades }: { entidades: Entida
               {corte && (
                 <li>
                   <AlertTriangle size={14} strokeWidth={2} />
-                  <span>Esto es lo <strong>anterior</strong> a tu fecha de corte. A partir de ahí, registra en vivo y no vuelvas a subir este período, o contará dos veces.</span>
+                  <span>Esto es lo <strong>anterior</strong> a la fecha de corte. A partir de ahí el registro es en vivo: volver a subir este período lo contaría dos veces.</span>
                 </li>
               )}
             </ul>
@@ -1211,7 +1211,7 @@ export default function ImportarClienteWizard({ entidades }: { entidades: Entida
                 <button type="button" className="btn btn-primary" onClick={() => validar()} disabled={cargando}>
                   {cargando
                     ? <><span className="spinner spinner-sm" /> Comprobando {etiquetaProgreso}…</>
-                    : <>Recalcular con tus decisiones <ArrowRight size={15} strokeWidth={2} /></>}
+                    : <>Recalcular con las decisiones <ArrowRight size={15} strokeWidth={2} /></>}
                 </button>
               ) : (
                 <button type="button" className="btn btn-primary" onClick={aplicar} disabled={cargando || (resultado.nuevos + resultado.actualizar) === 0}>

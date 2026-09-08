@@ -92,11 +92,11 @@ export default function DossierSecciones({
           onActualizado={marcarGuardado}
           mensaje={
             <>
-              <strong>{data.frescura.motivo === 'ANTIGUEDAD' ? 'Tu dossier necesita una revisión.' : 'Tus números están desfasados.'}</strong>{' '}
+              <strong>{data.frescura.motivo === 'ANTIGUEDAD' ? 'El dossier necesita una revisión.' : 'Los números están desfasados.'}</strong>{' '}
               {data.frescura.motivo === 'ANTIGUEDAD'
                 ? `El snapshot lleva ${data.frescura.diasDesdeSnapshot ?? 0} días sin actualizarse.`
-                : 'Cambiaste la moneda, la empresa o el período, pero la presentación y el estado de resultados siguen mostrando el snapshot anterior.'}{' '}
-              {data.tieneBase ? 'Actualízalos para que todo cuadre.' : 'Revísalos antes de volver a publicarlos.'}
+                : 'Ha cambiado la moneda, la empresa o el período, pero la presentación y el estado de resultados siguen mostrando el snapshot anterior.'}{' '}
+              {data.tieneBase ? 'Conviene actualizarlos para que todo cuadre.' : 'Conviene revisarlos antes de volver a publicarlos.'}
             </>
           }
         />
@@ -164,8 +164,8 @@ export default function DossierSecciones({
 
       {pendiente && (
         <ConfirmDialog
-          title="Tienes cambios sin guardar"
-          body="Si cambias de sección ahora, se perderá lo que escribiste aquí y no has guardado."
+          title="Hay cambios sin guardar"
+          body="Al cambiar de sección se perderá lo escrito aquí y no guardado."
           confirmLabel="Descartar y salir"
           cancelLabel="Seguir aquí"
           danger

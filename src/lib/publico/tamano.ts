@@ -39,8 +39,8 @@ export interface PreguntaTamano {
 }
 
 export const PREGUNTAS_TAMANO_BASE: PreguntaTamano[] = [
-  { clave: 'empresas',     dim: 'empresas',     pregunta: '¿Cuántos negocios o locales llevas?',   cosa: 'negocios', etiqueta: 'Negocios o locales' },
-  { clave: 'trabajadores', dim: 'trabajadores', pregunta: '¿Cuántas personas trabajan contigo?',   cosa: 'personas', etiqueta: 'Personas en el equipo' },
+  { clave: 'empresas',     dim: 'empresas',     pregunta: '¿Cuántos negocios o locales lleva?',   cosa: 'negocios', etiqueta: 'Negocios o locales' },
+  { clave: 'trabajadores', dim: 'trabajadores', pregunta: '¿Cuántas personas trabajan en el negocio?',   cosa: 'personas', etiqueta: 'Personas en el equipo' },
 ]
 
 /**
@@ -52,8 +52,8 @@ export const PREGUNTAS_TAMANO_BASE: PreguntaTamano[] = [
 export function preguntaCatalogo(modulosDelSector: string[]): PreguntaTamano {
   const soloServicios = modulosDelSector.includes('servicios') && !modulosDelSector.includes('inventario')
   return soloServicios
-    ? { clave: 'catalogo', dim: 'servicios', pregunta: '¿Cuántos servicios distintos ofreces?', cosa: 'servicios', etiqueta: 'Servicios distintos' }
-    : { clave: 'catalogo', dim: 'productos', pregunta: '¿Cuántos productos distintos vendes?',  cosa: 'productos', etiqueta: 'Productos distintos' }
+    ? { clave: 'catalogo', dim: 'servicios', pregunta: '¿Cuántos servicios distintos ofrece?', cosa: 'servicios', etiqueta: 'Servicios distintos' }
+    : { clave: 'catalogo', dim: 'productos', pregunta: '¿Cuántos productos distintos vende?',  cosa: 'productos', etiqueta: 'Productos distintos' }
 }
 
 export interface OpcionTamano {

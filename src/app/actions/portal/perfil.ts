@@ -128,7 +128,7 @@ export async function actualizarMiPerfil(formData: FormData): Promise<{
 
   if (password_nueva) {
     // Validaciones de contraseña
-    if (!password_actual) return { ok: false, error: 'Introduce tu contraseña actual.' }
+    if (!password_actual) return { ok: false, error: 'Falta la contraseña actual.' }
     if (password_nueva.length < 8)
       return { ok: false, error: 'La nueva contraseña debe tener al menos 8 caracteres.' }
 
@@ -157,18 +157,18 @@ export async function actualizarMiPerfil(formData: FormData): Promise<{
       .from('client_users')
       .update(cambios)
       .eq('user_id', session.user_id)
-    if (error) return { ok: false, error: 'Error al actualizar.' }
+    if (error) return { ok: false, error: 'No se ha podido actualizar.' }
 
   } else {
     // Sin cambio de contraseña, solo queda el nombre: si no puede tocarlo, no hay nada
     // que guardar y se le dice por qué (en vez de un «guardado» que no guardó nada).
     if (!puedeCambiarNombre)
-      return { ok: false, error: 'Como usuario de solo lectura solo puedes cambiar tu contraseña, no tu nombre.' }
+      return { ok: false, error: 'Un usuario de solo lectura solo puede cambiar la contraseña, no el nombre.' }
     const { error } = await db
       .from('client_users')
       .update({ nombre })
       .eq('user_id', session.user_id)
-    if (error) return { ok: false, error: 'Error al actualizar.' }
+    if (error) return { ok: false, error: 'No se ha podido actualizar.' }
   }
 
   revalidatePath('/portal/perfil')

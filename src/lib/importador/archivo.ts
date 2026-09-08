@@ -153,7 +153,7 @@ export async function leerArchivo(contenido: string, formato: FormatoArchivo): P
   if (formato === 'csv') {
     // Un binario renombrado a .csv entra aquí como texto ilegible; decirlo por su
     // nombre ahorra la media hora de mirar un mapeo en blanco sin entender nada.
-    if (limpio.startsWith('PK\u0003\u0004')) throw new ArchivoIlegible('Esto es un Excel (.xlsx). Súbelo tal cual: ya se aceptan.')
+    if (limpio.startsWith('PK\u0003\u0004')) throw new ArchivoIlegible('Esto es un Excel (.xlsx): se admite tal cual.')
     if (limpio.startsWith('%PDF'))           throw new ArchivoIlegible('Esto es un PDF, no una tabla de datos.')
     if (limpio.trimStart().startsWith('<'))  throw new ArchivoIlegible('Esto parece una página web o un XML, no un CSV.')
   }
@@ -168,7 +168,7 @@ export async function leerArchivo(contenido: string, formato: FormatoArchivo): P
   // en español guardado como CSV se lee en Windows-1252, no en UTF-8).
   if (formato === 'csv') {
     const rotos = leido.cabeceras.join('').match(/�/g)?.length ?? 0
-    if (rotos) leido.avisos.push('Hay caracteres ilegibles en las cabeceras: prueba a subirlo con la otra codificación, o súbelo en Excel.')
+    if (rotos) leido.avisos.push('Hay caracteres ilegibles en las cabeceras: el archivo debe venir con la otra codificación, o en Excel.')
   }
   return leido
 }

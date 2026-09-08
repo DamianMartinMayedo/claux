@@ -20,10 +20,10 @@ export function rellenar(texto: string, vars: Record<string, string | number>): 
 export const QUE_ES_TITULO = '¿Qué es CLAUX?'
 
 export const QUE_ES_TARJETAS: Tarjeta[] = [
-  { titulo: 'Varios negocios',   cuerpo: 'Todos tus locales en la misma cuenta, cada uno con sus cuentas y el total sumado.' },
+  { titulo: 'Varios negocios',   cuerpo: 'Todos los locales en la misma cuenta, cada uno con las suyas y el total sumado.' },
   { titulo: 'Varias monedas',    cuerpo: 'Pesos, dólares y euros a la vez, con la tasa del día. Cada cifra sabe en qué moneda está.' },
-  { titulo: 'IA incorporada',    cuerpo: 'Un asistente que atiende a tus clientes y te responde sobre tu propio negocio.' },
-  { titulo: 'Módulos a la carta', cuerpo: 'Pagas por lo que usas. Se añade y se quita según cambie el negocio.' },
+  { titulo: 'IA incorporada',    cuerpo: 'Un asistente que atiende a los clientes y responde sobre el propio negocio.' },
+  { titulo: 'Módulos a la carta', cuerpo: 'Se paga por lo que se usa. Se añade y se quita según cambie el negocio.' },
   { titulo: 'Hecho para aquí',   cuerpo: 'Funciona en el móvil y con mala conexión. Lo que se cobra sin línea se sincroniza al volver.' },
 ]
 
@@ -41,18 +41,18 @@ export const PROBLEMA_HOY: Record<string, string[]> = {
   ],
   excel: [
     'Cada cosa en un archivo distinto.',
-    'Los números se copian de una hoja a otra a mano.',
+    'Los números se copian manualmente de una hoja a otra.',
     'Nadie sabe con seguridad cuál es la versión buena.',
   ],
   nada: [
     'Los números están en la cabeza.',
     'No hay con qué comparar un mes con otro.',
-    'Cada decisión se toma a ojo.',
+    'Cada decisión se toma sin datos delante.',
   ],
   otra: [
     'El sistema de ahora no hace lo que el negocio necesita.',
     'Sacar un dato cuesta pedírselo a alguien.',
-    'Lo que falta se completa a mano, por fuera.',
+    'Lo que falta se completa manualmente, por fuera.',
   ],
 }
 
@@ -73,23 +73,23 @@ export const PROBLEMA_CLAUX: string[] = [
 export const CONFIANZA_TITULO = 'Por qué confiar en CLAUX'
 
 export const CONFIANZA_TARJETAS: Tarjeta[] = [
-  { titulo: 'Tus datos son tuyos', cuerpo: 'Solo los ve quien tú autorices. No se comparten con nadie ni se venden.' },
+  { titulo: 'Sus datos son suyos', cuerpo: 'Solo los ve quien usted autorice. No se comparten con nadie ni se venden.' },
   { titulo: 'Cada negocio, aparte', cuerpo: 'La información de un cliente no se cruza con la de otro.' },
-  { titulo: 'Puedes llevártelos',  cuerpo: 'Todo lo que entra se puede exportar. Si un día te vas, te vas con tus datos.' },
+  { titulo: 'Puede llevárselos',   cuerpo: 'Todo lo que entra se puede exportar. Si un día se va, se va con sus datos.' },
 ]
 
 // ── Diapositiva 16: empecemos ──
 export const EMPECEMOS_TITULO = 'Empecemos'
 
 export const EMPECEMOS_PASOS: Tarjeta[] = [
-  { titulo: 'Eliges lo que activas', cuerpo: 'Los módulos que necesitas hoy. El resto queda para cuando haga falta.' },
-  { titulo: 'Lo pruebas {dias} días', cuerpo: 'Con tus propios datos y sin pagar. Si no encaja, no hay nada firmado.' },
-  { titulo: 'Firmamos',              cuerpo: 'Contrato y presupuesto, desde el propio sistema.' },
-  { titulo: 'Te acompañamos',        cuerpo: 'La puesta en marcha la hacemos nosotros, y después seguimos ahí.' },
+  { titulo: 'Selección de módulos',  cuerpo: 'Los módulos que necesita hoy. El resto queda disponible para más adelante.' },
+  { titulo: 'Prueba de {dias} días', cuerpo: 'Con sus propios datos y sin pagar. Si no encaja, no hay nada firmado.' },
+  { titulo: 'Firma',                 cuerpo: 'Contrato y presupuesto, desde el propio sistema.' },
+  { titulo: 'Puesta en marcha',      cuerpo: 'La configuración corre por nuestra cuenta, y el acompañamiento sigue después.' },
 ]
 
 // ── Diapositiva 14: el reparto del pago ──
 export const PAGO_POR_DEFECTO = '50 % al empezar y 50 % al entregar.'
 
 // ── Diapositiva 2: lo que entendimos ──
-export const ENTENDIMOS_TITULO = 'Lo que entendimos de tu negocio'
+export const ENTENDIMOS_TITULO = 'Lo que entendimos del negocio'

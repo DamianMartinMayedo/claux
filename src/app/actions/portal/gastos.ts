@@ -324,8 +324,8 @@ export async function guardarGastoCobro(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (session.solo_lectura) return { ok: false, error: 'Cuenta de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -342,7 +342,7 @@ export async function guardarGastoCobro(
   const notas       = (formData.get('notas')       as string)?.trim() || null
 
   if (tipo !== 'GASTO' && tipo !== 'COBRO') return { ok: false, error: 'Tipo no válido.' }
-  if (!empresa_id)                          return { ok: false, error: 'Debes seleccionar una empresa.' }
+  if (!empresa_id)                          return { ok: false, error: 'Falta la empresa.' }
   if (isNaN(montoRaw) || montoRaw <= 0)     return { ok: false, error: 'El monto debe ser un número positivo.' }
 
   const empresas = await obtenerEmpresas()
@@ -366,7 +366,7 @@ export async function guardarGastoCobro(
   const concepto = conceptoForm
 
   if (tipo === 'GASTO') {
-    if (!categoria_id_in) return { ok: false, error: 'Debes elegir una categoría para el gasto.' }
+    if (!categoria_id_in) return { ok: false, error: 'Falta la categoría para el gasto.' }
     // La derivación de la etiqueta vive en el núcleo compartido con el importador.
     const etq = await etiquetaDeCategoria(db, session.client_id, categoria_id_in)
     if (!etq) return { ok: false, error: 'Categoría de gasto no válida o inactiva.' }
@@ -390,7 +390,7 @@ export async function guardarGastoCobro(
   }
 
   if (!registro_id) {
-    if (!moneda) return { ok: false, error: 'Debes seleccionar una moneda.' }
+    if (!moneda) return { ok: false, error: 'Falta la moneda.' }
     if (!await monedaValida(db, session.client_id, moneda)) {
       return { ok: false, error: `La moneda "${moneda}" no está configurada.` }
     }
@@ -418,7 +418,7 @@ export async function guardarGastoCobro(
     // el importe de «Retenciones de nómina» descuadra la nómina contra sus libros sin
     // que nada avise, y el recálculo no lo arregla porque la fila ya está posteada.
     const duenno = await documentoDeOrigen(db, session.client_id, registro_id)
-    if (duenno) return { ok: false, error: `Este registro lo generó ${duenno}. Corrígelo desde ahí.` }
+    if (duenno) return { ok: false, error: `Este registro lo generó ${duenno}: la corrección se hace desde ahí.` }
 
     // Gaveta del TPV: el dinero ya salió del cajón y Tesorería lo tiene posteado por
     // su cuenta (por el uuid del movimiento, no por este registro). Cambiar aquí el
@@ -540,8 +540,8 @@ async function documentoDeOrigen(
 export async function eliminarGastoCobro(registro_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (session.solo_lectura) return { ok: false, error: 'Cuenta de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -550,7 +550,7 @@ export async function eliminarGastoCobro(registro_id: string): Promise<{ ok: boo
   // de origen apuntando a un gasto inexistente y, en compras, el stock sin revertir.
   // Se elimina borrando/anulando su documento de origen (que sí revierte todo).
   const duenno = await documentoDeOrigen(db, session.client_id, registro_id)
-  if (duenno) return { ok: false, error: `Este registro lo generó ${duenno}. Elimínalo desde ahí.` }
+  if (duenno) return { ok: false, error: `Este registro lo generó ${duenno}: la eliminación se hace desde ahí.` }
 
   // Aquí SÍ se bloquea entero: el dinero salió de la gaveta de verdad. Borrar la fila
   // no devuelve el efectivo ni la manda de vuelta a la bandeja (el movimiento queda
@@ -559,7 +559,7 @@ export async function eliminarGastoCobro(registro_id: string): Promise<{ ok: boo
   if (await filaDeGaveta(db, session.client_id, registro_id)) {
     return {
       ok: false,
-      error: 'Esta salida ocurrió en tu punto de venta: no se puede eliminar. Si la clasificaste mal, edítala y cámbiale la categoría.',
+      error: 'Esta salida ocurrió en el punto de venta: no se puede eliminar. Si la clasificación es incorrecta, se edita y se le cambia la categoría.',
     }
   }
 
@@ -603,7 +603,7 @@ function loteVacio(error?: string): ResultadoLote {
 export async function eliminarGastosCobrosEnLote(ids: string[]): Promise<ResultadoLote> {
   const session = await getPortalSession()
   if (!session) return loteVacio('Sesión inválida.')
-  if (!(await puedeEditarModulo('base'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  if (!(await puedeEditarModulo('base'))) return loteVacio('Sin permiso para editar en este módulo.')
 
   const db = createAdminClient()
   const { data: regs } = await db.from('gastos_cobros')
@@ -629,8 +629,8 @@ export async function registrarLiquidacion(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (session.solo_lectura) return { ok: false, error: 'Cuenta de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -642,7 +642,7 @@ export async function registrarLiquidacion(
   const notas       = (formData.get('notas')       as string)?.trim() || null
 
   if (!registro_id)                      return { ok: false, error: 'Registro no válido.' }
-  if (!cuenta_id)                        return { ok: false, error: 'Debes seleccionar una cuenta.' }
+  if (!cuenta_id)                        return { ok: false, error: 'Falta la cuenta.' }
   if (isNaN(montoRaw) || montoRaw <= 0)  return { ok: false, error: 'El monto debe ser un número positivo.' }
 
   const { data: registro } = await db.from('gastos_cobros')
@@ -730,8 +730,8 @@ export async function registrarLiquidacion(
 export async function anularLiquidacion(movimiento_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (session.solo_lectura) return { ok: false, error: 'Cuenta de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -833,8 +833,8 @@ export async function guardarCategoriaGasto(
 }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (session.solo_lectura) return { ok: false, error: 'Cuenta de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -896,7 +896,7 @@ export async function guardarCategoriaGasto(
     // PERMITIR_RAIZ_MANUAL. Editar/renombrar una raíz sembrada sigue permitido (esto
     // es solo el ALTA); el sistema (RPC) y el importador crean raíces por su cuenta.
     if (!parent_id && !PERMITIR_RAIZ_MANUAL) {
-      return { ok: false, error: 'Ahora solo se pueden crear subcategorías dentro de una categoría existente. Usa «Preparar mi catálogo» para cargar las de tu tipo de negocio.' }
+      return { ok: false, error: 'Solo se pueden crear subcategorías dentro de una categoría existente. Las del tipo de negocio se cargan con «Preparar mi catálogo».' }
     }
     // Crear nueva categoría
     const categoria_id = generarCategoriaGastoId()
@@ -989,8 +989,8 @@ export async function archivarCategoriaGasto(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (session.solo_lectura) return { ok: false, error: 'Cuenta de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -1097,8 +1097,8 @@ export async function eliminarCategoriaGasto(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (session.solo_lectura) return { ok: false, error: 'Cuenta de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   // La comprobación se REPITE aquí aunque el diálogo ya la haya hecho: entre que se
   // pinta el diálogo y se confirma puede entrar un gasto con esa categoría, y el
@@ -1113,7 +1113,7 @@ export async function eliminarCategoriaGasto(
     return {
       ok: false,
       error: `«${impacto.nombre}» se usa en ${usos} ${usos === 1 ? 'registro' : 'registros'}. `
-           + 'Elimínalos o archívala: archivar la quita de los desplegables y conserva el historial.',
+           + 'Hay que eliminarlos o archivar la categoría: archivarla la quita de los desplegables y conserva el historial.',
     }
   }
 
@@ -1135,8 +1135,8 @@ export async function restaurarCategoriaGasto(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (session.solo_lectura) return { ok: false, error: 'Cuenta de solo lectura.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const { error } = await createAdminClient()
     .from('categorias_gastos')

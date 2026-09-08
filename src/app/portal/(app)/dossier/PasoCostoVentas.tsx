@@ -10,12 +10,12 @@ import { ConfirmDialog } from '@/components/portal/Dialog'
 
 const ROL_PL_UI: Record<RolPL, { titulo: string; descripcion: string }> = {
   COSTE_VENTAS: {
-    titulo: 'Lo que vendes',
-    descripcion: 'Mercancía, materia prima o el proveedor del servicio que vendes.',
+    titulo: 'Lo que se vende',
+    descripcion: 'Mercancía, materia prima o el proveedor del servicio que se vende.',
   },
   PERSONAL: {
-    titulo: 'Tu equipo',
-    descripcion: 'Sueldos, seguridad social y todo lo que cuesta tu gente.',
+    titulo: 'El equipo',
+    descripcion: 'Sueldos, seguridad social y el resto del coste de personal.',
   },
   OPERATIVO: {
     titulo: 'Mantener abierto',
@@ -36,7 +36,7 @@ const ROL_PL_UI: Record<RolPL, { titulo: string; descripcion: string }> = {
   },
   PATRIMONIO: {
     titulo: 'Movimientos del dueño',
-    descripcion: 'Tu dinero entrando o saliendo. Ni ingreso ni gasto.',
+    descripcion: 'Dinero del dueño entrando o saliendo. Ni ingreso ni gasto.',
   },
   FINANCIACION: {
     titulo: 'Préstamos',
@@ -49,11 +49,11 @@ const ROL_PL_UI: Record<RolPL, { titulo: string; descripcion: string }> = {
   // trata el paso.
   INGRESO_OPERATIVO: {
     titulo: 'Ingresos del negocio',
-    descripcion: 'Dinero que ENTRA por lo que vendes, cobrado sin factura.',
+    descripcion: 'Dinero que ENTRA por la actividad, cobrado sin factura.',
   },
   INGRESO_OTRO: {
     titulo: 'Otros ingresos',
-    descripcion: 'Lo que entra sin ser lo que vendes: la tasa, un reembolso.',
+    descripcion: 'Lo que entra al margen de la actividad: la tasa, un reembolso.',
   },
   // Los dos de la fase 4. Estos SÍ se ofrecen en el desplegable —son renglones
   // del resultado, no del ingreso—, pero no en la guía de arriba: solo existen
@@ -61,11 +61,11 @@ const ROL_PL_UI: Record<RolPL, { titulo: string; descripcion: string }> = {
   // para todos los demás.
   DEPRECIACION: {
     titulo: 'Desgaste de lo que compraste',
-    descripcion: 'El reparto anual de un equipo, una obra o un vehículo. No sale de tu caja.',
+    descripcion: 'El reparto anual de un equipo, una obra o un vehículo. No sale de la caja.',
   },
   IMPUESTO_UTILIDAD: {
     titulo: 'Impuesto sobre utilidades',
-    descripcion: 'Se calcula sobre tu resultado, así que se resta debajo de él.',
+    descripcion: 'Se calcula sobre el resultado, así que se resta debajo de él.',
   },
 }
 
@@ -127,16 +127,16 @@ export default function PasoCostoVentas({
   return (
     <section className="card dos-costo-card">
       <div className="dos-body">
-        <h2 className="dos-section-title">¿En qué se te va el dinero?</h2>
+        <h2 className="dos-section-title">¿En qué se va el dinero?</h2>
         <p className="dos-section-hint dos-costo-intro">
-          Clasifica tus categorías para que el estado de resultados separe el <strong>margen bruto</strong>,
+          Clasificar las categorías permite que el estado de resultados separe el <strong>margen bruto</strong>,
           el coste de mantener el negocio y los gastos de personal.
         </p>
 
         <div className="dos-costo-guia">
-          <p className="dos-costo-guia-titulo">Qué estás decidiendo</p>
+          <p className="dos-costo-guia-titulo">Qué se decide aquí</p>
           <p className="dos-costo-guia-texto">
-            No cambias importes ni eliminas gastos. Solo indicas qué significa cada categoría.
+            No cambia importes ni elimina gastos: solo define qué significa cada categoría.
             Esta clasificación también se usa en Reportes.
           </p>
           {/* La guía explica el WATERFALL, así que enseña los cuatro renglones
@@ -158,8 +158,7 @@ export default function PasoCostoVentas({
 
         {categorias.length === 0 ? (
           <PrerequisitoAviso acciones={[{ label: 'Crear categorías de gasto', href: '/portal/gastos?tab=categorias' }]}>
-            Aún no tienes categorías de gasto registradas: sin ellas no hay nada que clasificar.
-            Créalas en Gastos y vuelve a este paso.
+            Sin categorías de gasto registradas no hay nada que clasificar. Se crean en Gastos.
           </PrerequisitoAviso>
         ) : (
           <>
@@ -192,10 +191,10 @@ export default function PasoCostoVentas({
                     >
                       {/* Los dos encabezados son la enseñanza: sin ellos, «Inversiones»
                           parece un renglón más del gasto y se elige por error. */}
-                      <optgroup label="En tu resultado">
+                      <optgroup label="En el resultado">
                         {ROLES_RESULTADO.map(r => <option key={r} value={r}>{ROL_PL_UI[r].titulo}</option>)}
                       </optgroup>
-                      <optgroup label="Fuera de tu resultado">
+                      <optgroup label="Fuera de el resultado">
                         {ROLES_FUERA_RESULTADO.map(r => <option key={r} value={r}>{ROL_PL_UI[r].titulo}</option>)}
                       </optgroup>
                       {/* Y las de ingreso, porque esta lista son TODAS las raíces

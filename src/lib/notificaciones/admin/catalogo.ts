@@ -150,7 +150,7 @@ export const CATALOGO_ADMIN = {
   ia_consumo_alto: {
     categoria: 'plataforma', seccion: null, severidad: 'aviso', implementado: true,
     etiqueta: 'Consumo de IA interna alto',
-    descripcion: 'La bolsa de IA que pagamos nosotros se acerca al tope del mes, o se agotó.',
+    descripcion: 'La bolsa de IA interna se acerca al tope del mes, o se agotó.',
     umbrales: ['vencido'],
   },
 } satisfies Record<string, TipoAvisoAdmin>

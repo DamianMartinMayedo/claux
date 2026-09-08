@@ -147,7 +147,7 @@ export async function redactarPropuesta(args: {
     'entendimos: exactamente 4 frases (array). 1) qué negocio es. 2) cómo lleva hoy sus cuentas. 3) qué necesita. 4) su mayor reto, deducido de lo anterior; null si no hay base para deducirlo.',
     'hoy: exactamente 3 frases (array) que describan su forma de trabajar HOY y lo que le cuesta. En presente y sin dramatismo.',
     'modulos: un objeto con una frase por cada clave de módulo que te doy, diciendo por qué le sirve A ESTE negocio.',
-    'Registro profesional y conciso, en español de Cuba, tratando de tú. Frases cortas. Nada de superlativos ni lenguaje de folleto.',
+    'Registro profesional, impersonal y conciso, en español de Cuba. Sin tutear. Frases cortas. Nada de superlativos ni lenguaje de folleto.',
     'No inventes datos del negocio que no te haya dado: si no sabes algo, escribe la frase sin ese dato.',
     'No añadas texto fuera del JSON.',
   ].join(' ')
@@ -212,7 +212,7 @@ export async function borradorSoporte(args: {
     'Escribes el BORRADOR de una respuesta para que un compañero la revise y la envíe. No eres tú quien la manda.',
     'Devuelves SOLO un objeto JSON con la clave: respuesta (el texto, en español, tratando de usted al cliente).',
     'Registro profesional y conciso: saludo breve, la respuesta al grano, y cierre corto. Sin florituras.',
-    'NO prometas plazos, precios, descuentos ni arreglos concretos: si hace falta comprometerse a algo, escribe que lo revisamos y contestamos.',
+    'NO prometas plazos, precios, descuentos ni arreglos concretos: si hace falta comprometerse a algo, escribe que se revisará y se dará respuesta.',
     'Si la respuesta está en las preguntas frecuentes que te doy, contesta con eso. Si no sabes, dilo y pide el dato que falte.',
     'No inventes funciones de la plataforma que no aparezcan en lo que te doy.',
     'No añadas texto fuera del JSON.',
@@ -265,7 +265,7 @@ export async function sugerirTextosModulo(args: {
     'beneficio: por qué le sirve al negocio, en una o dos frases (máx. 220 caracteres). Sale en la propuesta comercial.',
     'resumen: la misma idea en unos 55 caracteres, nunca más de 80. Sale en una ficha de precios donde no cabe más.',
     'Los tres dicen cosas distintas: uno describe, otro vende y el tercero cabe. No repitas la misma frase recortada.',
-    'Registro profesional y conciso, tratando de tú al dueño del negocio. Sin superlativos ni lenguaje de folleto.',
+    'Registro profesional, impersonal y conciso. Sin tutear. Sin superlativos ni lenguaje de folleto.',
     'No inventes funciones que no se deduzcan del nombre y de las pantallas que te doy.',
     'No añadas texto fuera del JSON.',
   ].join(' ')
@@ -610,7 +610,7 @@ export async function explicarErrores(args: {
     'i = el número del grupo. c = qué pasa, una frase corta. a = qué hacer, una frase corta y concreta (qué columna tocar y cómo).',
     'No repitas el motivo técnico palabra por palabra: tradúcelo. No inventes números de fila ni cantidades: las pone el sistema.',
     'Si un grupo no se puede explicar mejor que su propio motivo, no lo incluyas.',
-    'Escribe en español de España, en segunda persona y sin tecnicismos. Los datos son de Cuba.',
+    'Escribe en español de España, en registro impersonal y sin tecnicismos. No tutees. Los datos son de Cuba.',
     'No añadas texto fuera del JSON.',
   ].join(' ')
 
@@ -1529,7 +1529,7 @@ export async function clasificarCuentas(args: {
 
     const nota = [
       confirmadas ? `${confirmadas} se quedan donde están.` : '',
-      dudosas.length ? `Estas no las sabe colocar, míralas tú: ${dudosas.join(', ')}.` : '',
+      dudosas.length ? `Estas no las sabe colocar, hay que revisarlas: ${dudosas.join(', ')}.` : '',
     ].filter(Boolean).join(' ')
 
     return { lineas, ...(nota ? { nota } : {}) }

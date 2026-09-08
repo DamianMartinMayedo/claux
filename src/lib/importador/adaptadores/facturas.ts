@@ -97,7 +97,7 @@ const CAMPOS: CampoDef[] = [
   { campo: 'cantidad',       etiqueta: 'Cantidad',        obligatorio: false, alias: ['cantidad', 'unidades', 'cant'], ejemplo: '' },
   { campo: 'precio_unitario', etiqueta: 'Precio unitario', obligatorio: false, alias: ['precio', 'precio unitario', 'precio unit'], ayuda: 'Con él, la línea sale detallada y su total tiene que cuadrar con el importe.', ejemplo: '' },
   { campo: 'descuento_pct',  etiqueta: 'Descuento (%)',   obligatorio: false, alias: ['descuento', 'descuento %', 'descuento pct', 'dto'], ejemplo: '' },
-  { campo: 'notas',          etiqueta: 'Notas',           obligatorio: false, alias: ['notas', 'observaciones', 'comentarios'], ejemplo: 'Fila de ejemplo: puedes dejarla, no se importa' },
+  { campo: 'notas',          etiqueta: 'Notas',           obligatorio: false, alias: ['notas', 'observaciones', 'comentarios'], ejemplo: 'Fila de ejemplo: no se importa' },
   { campo: 'notas_internas', etiqueta: 'Notas internas',  obligatorio: false, alias: ['notas internas', 'observaciones internas'], ejemplo: '' },
 ]
 

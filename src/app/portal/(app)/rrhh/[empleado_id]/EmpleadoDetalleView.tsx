@@ -96,7 +96,7 @@ function ContratoModal({
         res = await guardarContrato(fd)
       }
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       onSaved()
     })
   }
@@ -111,7 +111,7 @@ function ContratoModal({
         <form onSubmit={handleSubmit}>
           <div className="modal-body">
             <p className="text-sm-muted mb-3">
-              Registra el contrato del empleado y, si quieres, adjunta su PDF. Es un documento de archivo:
+              Registro del contrato del empleado, con su PDF opcional. Es un documento de archivo:
               no cambia el salario ni la nómina.
             </p>
             <div className="ter-form-grid">
@@ -144,7 +144,7 @@ function ContratoModal({
                     <a href={contrato.pdf_url} target="_blank" rel="noopener noreferrer" className="link-primary det-meta-inline">
                       <FileText size={14} strokeWidth={2} /> {contrato.pdf_nombre ?? 'Ver PDF actual'}
                     </a>
-                    <span className="text-xs-muted">Elige un archivo para reemplazarlo.</span>
+                    <span className="text-xs-muted">Un archivo nuevo reemplaza el actual.</span>
                   </div>
                 )}
                 <input className="input" name="pdf" type="file" accept="application/pdf"
@@ -243,7 +243,7 @@ function IncidenciaModal({
     startTransition(async () => {
       const res = await guardarIncidencia(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       // El aviso no bloquea: la incidencia ya se guardó, solo conviene revisarla.
       if (res.aviso) toastWarning(res.aviso)
       onDone()
@@ -299,7 +299,7 @@ function IncidenciaModal({
                   <div className="input-group ter-col-span-3">
                     <div className="form-label-with-help">
                       <label htmlFor="inc-liq">Días de vacaciones a liquidar</label>
-                      <FormHelp text="Solo al causar baja: el saldo pendiente se paga de golpe." label="Cuándo se liquidan las vacaciones" />
+                      <FormHelp text="Solo al causar baja: el saldo pendiente se paga íntegro." label="Cuándo se liquidan las vacaciones" />
                     </div>
                     <input className="input" id="inc-liq" name="dias_liquidacion" type="number"
                       min="0" step="any" defaultValue={incidencia?.dias_liquidacion ?? 0} />
@@ -316,8 +316,8 @@ function IncidenciaModal({
                     </label>
                     <span className="text-xs-muted">
                       Sin marcar, el importe de las vacaciones disfrutadas se calcula al promedio
-                      del saldo acumulado. Márcalo si el trabajador no tiene acumulado registrado
-                      (saldría 0) o si quieres fijar tú el importe.
+                      del saldo acumulado. Se marca cuando el trabajador no tiene acumulado
+                      registrado (saldría 0) o cuando el importe se fija manualmente.
                     </span>
                   </div>
                   {corregir && (
@@ -426,7 +426,7 @@ function AperturaModal({
     startTransition(async () => {
       const res = await guardarVacacionesApertura(empleadoId, isNaN(n) ? 0 : n, isNaN(d) ? 0 : d)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       onDone()
     })
   }
@@ -445,7 +445,7 @@ function AperturaModal({
               <span className="text-xs-muted">
                 Es el <strong>punto de partida</strong>: a partir de ahí el saldo lo lleva el
                 sistema con cada nómina confirmada. No es el saldo actual — ese se calcula solo.
-                Si empezó de cero, déjalo en blanco.
+                Si empezó de cero, queda en blanco.
               </span>
             </div>
             <div className="ter-form-grid">
@@ -501,7 +501,7 @@ function IncidenciasSection({
     startTransition(async () => {
       const res = await eliminarIncidencia(borrando.incidencia_id)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setBorrando(null); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); setBorrando(null); return }
       setBorrando(null); onChanged()
     })
   }
@@ -664,7 +664,7 @@ function ConceptoModal({
     startTransition(async () => {
       const res = await guardarConceptoEmpleado(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       onDone()
     })
   }
@@ -782,7 +782,7 @@ function ConceptosSection({
     startTransition(async () => {
       const res = await eliminarConceptoEmpleado(c.concepto_id)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setDelId(null); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); setDelId(null); return }
       setDelId(null); onChanged()
     })
   }
@@ -792,7 +792,7 @@ function ConceptosSection({
     startTransition(async () => {
       const res = await alternarConceptoEmpleado(c.concepto_id, !c.activo)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       onChanged()
     })
   }
@@ -1036,7 +1036,7 @@ export default function EmpleadoDetalleView({ detalle, puedeEditar }: { detalle:
     startTransition(async () => {
       const res = await reactivarEmpleado(empleado.empleado_id)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       router.refresh()
     })
   }
@@ -1069,7 +1069,7 @@ export default function EmpleadoDetalleView({ detalle, puedeEditar }: { detalle:
     startTransition(async () => {
       const res = await eliminarEmpleado(empleado.empleado_id)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setShowDelete(false); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); setShowDelete(false); return }
       router.push('/portal/rrhh')
     })
   }
@@ -1080,7 +1080,7 @@ export default function EmpleadoDetalleView({ detalle, puedeEditar }: { detalle:
     startTransition(async () => {
       const res = await eliminarContrato(delContrato.contrato_id)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setDelContrato(null); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); setDelContrato(null); return }
       setDelContrato(null); router.refresh()
     })
   }

@@ -43,7 +43,7 @@ export function leerParaSubir(
   // nombre: decirlo por su nombre ahorra la media hora de mirar un error sin entenderlo.
   if (/\.xls$/i.test(file.name)) {
     return Promise.reject(new ArchivoNoSoportado(
-      'El .xls antiguo no se puede leer. Ábrelo en Excel y guárdalo como .xlsx o CSV.',
+      'El .xls antiguo no se puede leer. Debe guardarse como .xlsx o CSV.',
     ))
   }
   const esExcel = /\.xlsx$/i.test(file.name)

@@ -139,7 +139,7 @@ function filasQueSeEscriben(nomina: NominaConLineas): {
     // El subsidio lo cobra el trabajador pero no le cuesta a la empresa al pagarlo. Tiene
     // dos caras (mig. 212): la de maternidad la reembolsa el Estado (cuenta por COBRAR); la
     // de enfermedad sale del fondo del 1,5 % que la empresa fue acumulando, no se recupera.
-    sumar('__sub_mat__', 'Subsidio de maternidad', 'Lo cobras tú de la Seguridad Social', l.subsidios_maternidad)
+    sumar('__sub_mat__', 'Subsidio de maternidad', 'Reembolsable por la Seguridad Social', l.subsidios_maternidad)
     sumar('__sub_enf__', 'Subsidio por enfermedad', 'Del fondo del 1,5 %', l.subsidios - l.subsidios_maternidad)
     for (const it of l.items) {
       if (it.tipo === 'RETENCION') {
@@ -231,7 +231,7 @@ export function ConfirmarNominaModal({
             La nómina de {formatPeriodo(nomina.periodo)} tiene un coste real
             de <strong>{formatMonto(devengado)} {nomina.moneda}</strong>. Confirmar
             {tieneContabilidad
-              ? ' registra en tu contabilidad '
+              ? ' registra en la contabilidad '
               : ' deja registrado '}
             {filas.length === 1
               ? 'este apunte'
@@ -259,8 +259,8 @@ export function ConfirmarNominaModal({
             {tieneContabilidad
               ? <>Cada deuda se paga <strong>por separado</strong> desde Cuentas por pagar o Tesorería,
                   con su propio vencimiento: pagarle a la plantilla no paga los impuestos.</>
-              : <>Los apuntes quedan guardados; con el módulo de <strong>Contabilidad</strong> los
-                  verías en tus cuentas y podrías liquidarlos.</>}
+              : <>Los apuntes quedan guardados; con el módulo de <strong>Contabilidad</strong>
+                  aparecerían en las cuentas y podrían liquidarse.</>}
             {' '}La nómina dejará de ser editable.
           </p>
 

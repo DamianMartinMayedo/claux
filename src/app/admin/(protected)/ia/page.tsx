@@ -65,7 +65,7 @@ export default async function AdminIaPage() {
   // desplegable lo dice con todas las letras.
   const modeloInterno  = activo(S.ia_model_interno) ? S.ia_model_interno : ''
   const nombreAgente   = S.ia_nombre_agente || 'Claux'
-  const tono           = S.ia_tono || 'cercano y directo, como un asesor de confianza'
+  const tono           = S.ia_tono || 'profesional y directo, como un analista que conoce el negocio'
   const principalGratis = modelos.find(m => m.id === principal)?.gratis ?? false
 
   // Documentos de IA (personalidad + prompts por sección), con su valor efectivo.

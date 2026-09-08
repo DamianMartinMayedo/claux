@@ -102,16 +102,16 @@ export function StockAjusteModal({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!almacenId)      return toastError('Selecciona un almacén.')
-    if (!numOk)           return toastError('Ingresa una cantidad válida.')
+    if (!almacenId)      return toastError('Falta el almacén.')
+    if (!numOk)           return toastError('La cantidad no es válida.')
     if (delta === 0)      return toastError(modo === 'fijar' ? 'El stock no ha cambiado.' : 'La cantidad debe ser mayor que cero.')
-    if (negativo)         return toastError(`No puedes quitar más de lo disponible (${stockActual.toLocaleString('es-ES')} ${unidad}).`)
+    if (negativo)         return toastError(`La salida supera lo disponible: ${stockActual.toLocaleString('es-ES')} ${unidad}.`)
     if (!motivo.trim())   return toastError('El motivo del ajuste es obligatorio.')
     const ld = toastLoading('Aplicando…')
     startTransition(async () => {
       const res = await ajustarStock(producto_id, almacenId, delta, motivo.trim())
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       onSaved()
     })
   }
@@ -134,7 +134,7 @@ export function StockAjusteModal({
         <form onSubmit={handleSubmit}>
           <div className="modal-body">
             {almacenes.length === 0 ? (
-              <p className="input-hint prd-stock-warn">Necesitas un almacén para ajustar el stock. Crea uno en Almacenes.</p>
+              <p className="input-hint prd-stock-warn">El ajuste de stock requiere un almacén, que se crea en Almacenes.</p>
             ) : cargando ? (
               <p className="input-hint"><span className="spinner spinner-sm" /> Cargando stock…</p>
             ) : (

@@ -225,7 +225,7 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
     setEditLoading(true)
     const res = await editarCliente(new FormData(formEditarRef.current!))
     setEditLoading(false)
-    if (!res.ok) { toastError(res.error ?? 'Error al guardar'); return }
+    if (!res.ok) { toastError(res.error ?? 'No se ha podido guardar'); return }
     toastSuccess('Cliente actualizado')
     handleClose()
     router.refresh()
@@ -260,7 +260,7 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
     fd.append('estado', 'DESACTIVADO')
     const res = await cambiarEstadoCliente(fd)
     setLoading(false)
-    if (!res.ok) { toastError(res.error ?? 'Error al suspender'); return }
+    if (!res.ok) { toastError(res.error ?? 'No se ha podido suspender'); return }
     toastSuccess('Cliente desactivado')
     setTimeout(() => { handleClose(); router.refresh() }, 1200)
   }
@@ -272,7 +272,7 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
     setLoading(true)
     const res = await archivarCliente(cliente.client_id)
     setLoading(false)
-    if (!res.ok) { toastError(res.error ?? 'Error al archivar'); return }
+    if (!res.ok) { toastError(res.error ?? 'No se ha podido archivar'); return }
     toastSuccess('Cliente archivado')
     setTimeout(() => { handleClose(); router.refresh() }, 1000)
   }
@@ -282,7 +282,7 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
     setLoading(true)
     const res = await desarchivarCliente(cliente.client_id)
     setLoading(false)
-    if (!res.ok) { toastError(res.error ?? 'Error al desarchivar'); return }
+    if (!res.ok) { toastError(res.error ?? 'No se ha podido desarchivar'); return }
     toastSuccess('Cliente desarchivado')
     router.refresh()
   }
@@ -291,7 +291,7 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
     setLoading(true)
     const res = await eliminarCliente(cliente.client_id, nombreConfirm)
     setLoading(false)
-    if (!res.ok) { toastError(res.error ?? 'Error al borrar'); return }
+    if (!res.ok) { toastError(res.error ?? 'No se ha podido borrar'); return }
     toastSuccess('Cliente borrado')
     setTimeout(() => { router.push('/admin/clientes') }, 1000)
   }
@@ -301,7 +301,7 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
     setLoading(true)
     const res = await aplicarGracia(new FormData(formGraciaRef.current!))
     setLoading(false)
-    if (!res.ok) { toastError(res.error ?? 'Error al aplicar período'); return }
+    if (!res.ok) { toastError(res.error ?? 'No se ha podido aplicar período'); return }
     toastSuccess(`Período especial aplicado hasta ${formatDateES(res.hasta ?? '')}`)
     setTimeout(() => { handleClose(); router.refresh() }, 1400)
   }
@@ -310,7 +310,7 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
     setLoading(true)
     const res = await retirarGracia(cliente.client_id)
     setLoading(false)
-    if (!res.ok) { toastError(res.error ?? 'Error al retirar el período'); return }
+    if (!res.ok) { toastError(res.error ?? 'No se ha podido retirar el período'); return }
     toastSuccess(res.estado === 'DESACTIVADO'
       ? 'Período retirado — el cliente queda desactivado'
       : `Período retirado — el cliente queda en ${res.estado}`)
@@ -323,7 +323,7 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
     setLoading(true)
     const res = await registrarPago(new FormData(formPagoRef.current!))
     setLoading(false)
-    if (!res.ok) { toastError(res.error ?? 'Error al registrar pago'); return }
+    if (!res.ok) { toastError(res.error ?? 'No se ha podido registrar pago'); return }
     if (res.advertencia_gap) setAdvertencia(res.advertencia_gap)
     toastSuccess(`Pago ${res.pago_id} registrado`)
     setTimeout(() => { handleClose(); router.refresh() }, res.advertencia_gap ? 2500 : 1500)
@@ -406,7 +406,7 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
           <div className="input-group">
             <label>Motivo <span className="required">*</span></label>
             <select name="motivo" className="input" required defaultValue="">
-              <option value="" disabled>Selecciona un motivo</option>
+              <option value="" disabled>— Seleccionar motivo —</option>
               {MOTIVOS_GRACIA.map(m => (
                 <option key={m.value} value={m.value}>{m.label}</option>
               ))}
@@ -642,7 +642,7 @@ export default function AccionesHeader({ cliente, tienePagosConfirmados = false 
         {clienteInfo}
         <p className="text-sm-muted">
           Se ocultará de las listas activas, pero se conservan <strong>todos</strong> sus datos
-          (pagos, facturación e historial). Puedes desarchivarlo cuando quieras.
+          (pagos, facturación e historial). Se puede desarchivar en cualquier momento.
         </p>
       </div>
       <div className="modal-footer">

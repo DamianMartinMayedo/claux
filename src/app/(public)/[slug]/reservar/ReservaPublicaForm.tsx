@@ -136,14 +136,14 @@ export default function ReservaPublicaForm({
   // Paso intermedio: del formulario de datos al resumen de revisión (sin enviar aún).
   function handleRevisar(e: React.FormEvent) {
     e.preventDefault()
-    if (!sel) { setError('Selecciona una hora.'); return }
+    if (!sel) { setError('Falta la hora.'); return }
     setError('')
     setRevisando(true)
   }
 
   // Envío real: ya con el resumen revisado por el cliente.
   function handleConfirmar() {
-    if (!sel) { setError('Selecciona una hora.'); return }
+    if (!sel) { setError('Falta la hora.'); return }
     const fd = new FormData()
     fd.set('client_id', clientId)
     fd.set('franja_id', sel.franja_id)
@@ -179,7 +179,7 @@ export default function ReservaPublicaForm({
           {listo ? (
             <div className="rp-success">
               <Check size={40} strokeWidth={2} className="rp-success-icon" />
-              <p className="rp-subtitle">{estadoFinal === 'CONFIRMADA' ? '¡Reserva confirmada!' : '¡Reserva recibida!'}</p>
+              <p className="rp-subtitle">{estadoFinal === 'CONFIRMADA' ? 'Reserva confirmada' : 'Reserva recibida'}</p>
               <div className="rp-resumen">
                 <span><strong>{formatFecha(fecha)}</strong></span>
                 <span className="rp-resumen-hora">{sel?.hora} · {personas} persona{personas !== 1 ? 's' : ''}</span>
@@ -200,11 +200,11 @@ export default function ReservaPublicaForm({
           /* ── Paso revisar (resumen antes de confirmar) ──────────── */
           ) : revisando ? (
             <div className="rp-turno-form-section">
-              <p className="rp-subtitle">Revisa tu reserva</p>
+              <p className="rp-subtitle">Revise su reserva</p>
 
               <div className="rp-review-group">
                 <div className="rp-review-head">
-                  <span className="rp-review-title">Tu reserva</span>
+                  <span className="rp-review-title">Su reserva</span>
                   <button type="button" className="rp-edit-link"
                     onClick={() => { setRevisando(false); setSel(null); setError('') }}>Cambiar</button>
                 </div>
@@ -217,7 +217,7 @@ export default function ReservaPublicaForm({
 
               <div className="rp-review-group">
                 <div className="rp-review-head">
-                  <span className="rp-review-title">Tus datos</span>
+                  <span className="rp-review-title">Sus datos</span>
                   <button type="button" className="rp-edit-link"
                     onClick={() => { setRevisando(false); setError('') }}>Cambiar</button>
                 </div>
@@ -249,7 +249,7 @@ export default function ReservaPublicaForm({
                 <div className="rp-field">
                   <label className="rp-label" htmlFor="rp-nombre">Nombre <span className="rp-required">*</span></label>
                   <input id="rp-nombre" className="rp-input" value={nombre} onChange={e => setNombre(e.target.value)}
-                    placeholder="Tu nombre completo" required autoFocus />
+                    placeholder="Nombre completo" required autoFocus />
                 </div>
                 <div className="rp-field">
                   <label className="rp-label" htmlFor="rp-tel">Teléfono <span className="rp-required">*</span></label>
@@ -287,7 +287,7 @@ export default function ReservaPublicaForm({
           /* ── Paso elegir día/personas/hora ──────────────────────── */
           ) : (
             <>
-              <p className="rp-subtitle">Haz tu reserva</p>
+              <p className="rp-subtitle">Haga su reserva</p>
 
               <div className="rp-controls">
                 <div className="rp-field">
@@ -302,7 +302,7 @@ export default function ReservaPublicaForm({
                 </div>
 
                 <div className="rp-field">
-                  <span className="rp-label">Elige el día</span>
+                  <span className="rp-label">Seleccione el día</span>
                   {loadingDias ? (
                     <div className="rp-slots-loading"><Loader2 size={18} className="rp-spin" /></div>
                   ) : (

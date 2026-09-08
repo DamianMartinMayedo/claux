@@ -258,7 +258,7 @@ export async function revisarDossier(
     `Lo que ha escrito en el relato: ${relato}`,
     `Busca: (1) dónde el relato CONTRADICE los números o promete algo que las cifras no sostienen; (2) si la proyección parece agresiva frente al histórico; (3) qué le FALTA a un dossier de inversión (modelo de negocio, uso de fondos, equipo, mercado) y no está; (4) frases vagas o de marketing hueco que un inversor descartaría.`,
     `NO calcules ni inventes cifras: usa solo las que te he dado. Si algo está bien, no te lo inventes como problema.`,
-    `Devuelves SOLO un objeto JSON con la clave: observaciones, un array de 2 a 5 strings. Cada string es una observación concreta y accionable en español, máximo 200 caracteres, en tono cercano y directo (tuteo). Si el dossier está sólido, dilo y señala 1-2 detalles menores.`,
+    `Devuelves SOLO un objeto JSON con la clave: observaciones, un array de 2 a 5 strings. Cada string es una observación concreta y accionable en español, máximo 200 caracteres, en registro profesional e impersonal, sin tutear. Si el dossier está sólido, dilo y señala 1-2 detalles menores.`,
   ].filter(Boolean).join(' ')
 
   try {

@@ -51,8 +51,8 @@ export default function BotDiagnostico({ columna }: {
     startTransition(async () => {
       const r = await enviarPruebaBot(columna)
       await ld.dismiss()
-      if (!r.ok) { toastError(r.error ?? 'No se pudo enviar.'); return }
-      toastSuccess('Enviado. Míralo en tu Telegram.')
+      if (!r.ok) { toastError(r.error ?? 'No se ha podido enviar.'); return }
+      toastSuccess('Enviado. El mensaje está en Telegram.')
     })
   }
 
@@ -82,7 +82,7 @@ export default function BotDiagnostico({ columna }: {
           )}
           {!diag.chat_vinculado && (
             <div className="text-xs-muted">
-              Tu chat no está vinculado: aunque el bot funcione, <strong>a ti no te llega ningún aviso</strong>.
+              El chat no está vinculado: aunque el bot funcione, <strong>no llega ningún aviso</strong>.
             </div>
           )}
           {!diag.coincide && (

@@ -180,7 +180,7 @@ function Formulario({
     setLoading(true)
     const res = await crearCliente(new FormData(formRef.current!))
     setLoading(false)
-    if (!res.ok) { toastError(res.error ?? 'Error desconocido'); return }
+    if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación'); return }
     setResultado({ client_id: res.client_id!, passwordTemporal: res.passwordTemporal!, estado: res.estado! })
   }
 
@@ -191,7 +191,7 @@ function Formulario({
   return (
     <ModalShell
       title={resultado ? 'Cliente creado' : 'Nuevo cliente'}
-      subtitle={resultado ? 'Guarda las credenciales iniciales del cliente.' : undefined}
+      subtitle={resultado ? 'Credenciales iniciales del cliente: conviene guardarlas ahora.' : undefined}
       size="modal-560"
       onClose={handleClose}
     >
@@ -403,7 +403,7 @@ function Formulario({
                 <FormHelp
                   text={presupuestoId
                     ? 'Viene del presupuesto aprobado. Cambiarlo aquí lo separa de las horas cotizadas.'
-                    : 'Pago único inicial. Déjalo vacío para omitirlo. La estimación no cuenta volúmenes ni descuentos: para eso, un presupuesto — se le puede hacer luego desde su ficha y queda enlazado.'}
+                    : 'Pago único inicial. En blanco se omite. La estimación no cuenta volúmenes ni descuentos: para eso, un presupuesto — se le puede hacer luego desde su ficha y queda enlazado.'}
                   label="Información sobre el pago de configuración" />
               </div>
               <input

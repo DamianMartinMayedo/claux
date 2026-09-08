@@ -85,8 +85,8 @@ export default function DeudasWidget({ data }: { data: DeudasResumen }) {
         <p className="dash-muted">No hay nada pendiente de cobrar ni de pagar.</p>
       ) : (
         <div className="dash-deudas">
-          <Lado titulo="Te deben"  lado={data.cobrar} ruta="/portal/cxc" tono="cobrar" />
-          <Lado titulo="Tú debes"  lado={data.pagar}  ruta="/portal/cxp" tono="pagar" />
+          <Lado titulo="Por cobrar" lado={data.cobrar} ruta="/portal/cxc" tono="cobrar" />
+          <Lado titulo="Por pagar"  lado={data.pagar}  ruta="/portal/cxp" tono="pagar" />
         </div>
       )}
     </section>

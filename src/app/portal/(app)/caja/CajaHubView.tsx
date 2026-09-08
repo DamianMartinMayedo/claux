@@ -73,7 +73,7 @@ export default function CajaHubView({ cajas, empresas, salud, puedeEditar, child
         <div>
           <div className="page-title-ia">
             <h1 className="page-title">Puntos de venta</h1>
-            <IaTouchpoint tipo="caja" descripcion="un análisis de tus puntos de venta" />
+            <IaTouchpoint tipo="caja" descripcion="un análisis de los puntos de venta" />
           </div>
           <p className="page-subtitle">Cobran sin conexión y sincronizan con Claux cuando vuelve la señal.</p>
         </div>
@@ -87,7 +87,7 @@ export default function CajaHubView({ cajas, empresas, salud, puedeEditar, child
 
       {empresas.length === 0 && (
         <PrerequisitoAviso acciones={[{ label: 'Crear empresa', href: '/portal/empresas' }]}>
-          Para crear un punto de venta necesitas <strong>una empresa</strong>. El almacén es opcional: solo se necesita para que las ventas descuenten stock.
+          Para crear un punto de venta se necesita <strong>una empresa</strong>. El almacén es opcional: solo se necesita para que las ventas descuenten stock.
         </PrerequisitoAviso>
       )}
 
@@ -96,7 +96,7 @@ export default function CajaHubView({ cajas, empresas, salud, puedeEditar, child
           <div className="mon-empty">
             <Store size={36} strokeWidth={1} opacity={0.25} />
             <p className="table-empty-title">Sin puntos de venta</p>
-            <p>Crea el primero para obtener su enlace de instalación.</p>
+            <p>El enlace de instalación se genera al crear el primero.</p>
           </div>
         ) : (
           <div className="table-wrapper">

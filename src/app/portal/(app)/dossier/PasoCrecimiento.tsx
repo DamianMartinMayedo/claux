@@ -61,7 +61,7 @@ export default function PasoCrecimiento({
         </p>
 
         {serie.length === 0 ? (
-          <p className="dos-vacio">Carga tus números primero y aquí verás la proyección.</p>
+          <p className="dos-vacio">Sin números cargados: la proyección aparece al cargarlos.</p>
         ) : (
           <>
             <div className="dos-campo">

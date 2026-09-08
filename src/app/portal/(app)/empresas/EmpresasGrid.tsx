@@ -140,7 +140,7 @@ export default function EmpresasGrid({ empresas: init, monedas, maxEmpresas, niv
       const r = await registrarInteresModulo('nivel_superior', 'Subir de nivel')
       if (!r.ok) { toastError(r.error ?? 'No se pudo enviar.'); return }
       setInteresEnviado(true)
-      toastSuccess('Recibido. Te contactamos enseguida.')
+      toastSuccess('Solicitud recibida.')
     })
   }
 
@@ -184,7 +184,7 @@ export default function EmpresasGrid({ empresas: init, monedas, maxEmpresas, niv
             onClick={abrirCrear}
             disabled={bloqueado}
             title={sinMonedas
-              ? 'Crea una moneda en Monedas y Tasas primero.'
+              ? 'Se requiere una moneda activa en Monedas y tasas.'
               : limiteAlcanzado ? `Límite de ${maxEmpresas} empresa${maxEmpresas === 1 ? '' : 's'} alcanzado` : undefined}
           >
             <Plus size={16} />
@@ -195,7 +195,7 @@ export default function EmpresasGrid({ empresas: init, monedas, maxEmpresas, niv
 
       {sinMonedas && puedeEditar && (
         <PrerequisitoAviso acciones={[{ label: 'Crear moneda', href: '/portal/monedas' }]}>
-          Para crear una empresa necesitas <strong>al menos una moneda</strong> configurada.
+          Para crear una empresa se necesita <strong>al menos una moneda</strong> configurada.
         </PrerequisitoAviso>
       )}
 
@@ -237,8 +237,8 @@ export default function EmpresasGrid({ empresas: init, monedas, maxEmpresas, niv
             <Briefcase size={48} strokeWidth={1} />
             <h3>Sin empresas configuradas</h3>
             <p>{sinMonedas
-              ? 'Primero crea una moneda en Monedas y Tasas; después podrás crear tu empresa.'
-              : 'Crea tu primera empresa para empezar a registrar operaciones.'}</p>
+              ? 'Falta una moneda en Monedas y Tasas: es el paso previo a crear la empresa.'
+              : 'Sin empresas: la primera habilita el registro de operaciones.'}</p>
           </div>
         )}
       </div>

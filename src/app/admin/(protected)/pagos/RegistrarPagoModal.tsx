@@ -165,7 +165,7 @@ export default function RegistrarPagoModal({
     setLoading(true)
     const res = await registrarPago(new FormData(formRef.current!))
     setLoading(false)
-    if (!res.ok) { toastError(res.error ?? 'Error desconocido'); return }
+    if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación'); return }
     if (res.advertencia_gap) setAdvertencia(res.advertencia_gap)
     toastSuccess(`Pago ${res.pago_id} registrado`)
     setTimeout(() => { handleClose(); router.refresh() }, res.advertencia_gap ? 3000 : 1400)
@@ -217,7 +217,7 @@ export default function RegistrarPagoModal({
               value={clienteId}
               onChange={onClienteChange}
             >
-              <option value="" disabled>Selecciona un cliente</option>
+              <option value="" disabled>— Seleccionar cliente —</option>
               {clientes.map(c => (
                 <option key={c.client_id} value={c.client_id}>
                   {c.client_id} — {c.nombre_empresa}

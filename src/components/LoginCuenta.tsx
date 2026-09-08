@@ -36,7 +36,7 @@ export default function LoginCuenta({ subtitulo, destino, pie }: {
     const supabase = createClient()
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) {
-      setError('Credenciales incorrectas. Verifica tu email y contraseña.')
+      setError('Credenciales incorrectas.')
       setLoading(false)
       return
     }
@@ -79,7 +79,7 @@ export default function LoginCuenta({ subtitulo, destino, pie }: {
                   <input
                     className="form-input" type="email" value={email}
                     onChange={e => setEmail(e.target.value)}
-                    required placeholder="tu@email.com"
+                    required placeholder="nombre@empresa.com"
                   />
                 </div>
                 <div className="form-group">
@@ -100,7 +100,7 @@ export default function LoginCuenta({ subtitulo, destino, pie }: {
                   className="login-forgot-link"
                   onClick={() => { setMode('forgot'); setError(''); setSentOk(false) }}
                 >
-                  ¿Olvidaste tu contraseña?
+                  ¿Contraseña olvidada?
                 </button>
               </form>
             </>
@@ -116,7 +116,7 @@ export default function LoginCuenta({ subtitulo, destino, pie }: {
                     <div>
                       <p className="reset-sent-title">Enlace enviado</p>
                       <p className="reset-sent-email">{email}</p>
-                      <p className="reset-sent-hint">Revisa tu bandeja de entrada y sigue el enlace para establecer tu nueva contraseña.</p>
+                      <p className="reset-sent-hint">El enlace para establecer la nueva contraseña está en la bandeja de entrada.</p>
                     </div>
                   </div>
                   <button
@@ -130,14 +130,14 @@ export default function LoginCuenta({ subtitulo, destino, pie }: {
               ) : (
                 <form onSubmit={handleForgot} className="login-form">
                   <p className="text-sm-muted mb-4">
-                    Introduce tu email y te enviaremos un enlace para restablecer tu contraseña.
+                    Con el correo de la cuenta se envía un enlace para restablecer la contraseña.
                   </p>
                   <div className="form-group">
                     <label className="form-label">Email</label>
                     <input
                       className="form-input" type="email" value={email}
                       onChange={e => setEmail(e.target.value)}
-                      required placeholder="tu@email.com"
+                      required placeholder="nombre@empresa.com"
                     />
                   </div>
                   {error && <div className="alert alert-error">{error}</div>}

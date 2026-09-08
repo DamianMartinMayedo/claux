@@ -64,8 +64,8 @@ function ImportarPersonalModal({ personal, onClose, onImportar, isPending }: {
         <div className="modal-body">
           {personal.length === 0 ? (
             <p className="input-hint">
-              No hay nadie en el personal de esta empresa. Da de alta a tus trabajadores en
-              RRHH, o escribe el nombre a mano en la lista de cajeros.
+              Sin personal en esta empresa. Las altas se hacen en RRHH; también se puede escribir
+              el nombre directamente en la lista de cajeros.
             </p>
           ) : (
             <>
@@ -278,8 +278,8 @@ export default function CajaConfigView({ data, puedeEditar }: { data: CajaConfig
     e.preventDefault()
     if (monedasSinCuenta.length > 0) {
       toastError(
-        `Elige la caja de Tesorería para ${monedasSinCuenta.join(', ')}. ` +
-        'Sin ella, las ventas en esa moneda no llegan a tu contabilidad.',
+        `Falta la caja de Tesorería para ${monedasSinCuenta.join(', ')}. ` +
+        'Sin ella, las ventas en esa moneda no llegan a la contabilidad.',
       )
       return
     }
@@ -343,8 +343,8 @@ export default function CajaConfigView({ data, puedeEditar }: { data: CajaConfig
       if (r.nuevos?.length) setOpsCaja(prev => [...new Set([...prev, ...r.nuevos!])])
       setPersonal(null)
       toastSuccess(r.importados
-        ? `${r.importados} ${r.importados === 1 ? 'persona importada y marcada' : 'personas importadas y marcadas'}. Guarda la configuración.`
-        : 'No se importó a nadie.')
+        ? `${r.importados} ${r.importados === 1 ? 'persona importada y marcada' : 'personas importadas y marcadas'}. Falta guardar la configuración.`
+        : 'Sin personas importadas.')
     })
   }
 
@@ -427,7 +427,7 @@ export default function CajaConfigView({ data, puedeEditar }: { data: CajaConfig
           <div className="card caja-config-section">
             <h2 className="mon-section-title">Enlace de instalación</h2>
             <p className="caja-section-sub">
-              Instala este punto de venta en un móvil o una tablet. Cópialo o compártelo con quien
+              Instala este punto de venta en un móvil o una tablet. Se copia o se comparte con quien
               vaya a usarlo.
             </p>
             <div className="caja-install">
@@ -484,9 +484,9 @@ export default function CajaConfigView({ data, puedeEditar }: { data: CajaConfig
           <div className="card caja-entrega">
             <h2 className="mon-section-title">Cómo instalarlo</h2>
             <ol className="caja-entrega-pasos">
-              <li>Abre el enlace en el móvil o la tablet que hará de punto de venta.</li>
-              <li>Pulsa <strong>«Instalar»</strong> para añadirlo a la pantalla de inicio.</li>
-              <li>Abre el turno y empieza a cobrar: desde ahí funciona <strong>sin conexión</strong>.</li>
+              <li>Abrir el enlace en el móvil o la tablet que hará de punto de venta.</li>
+              <li>Pulsar <strong>«Instalar»</strong> para añadirlo a la pantalla de inicio.</li>
+              <li>Abrir el turno y cobrar: desde ahí funciona <strong>sin conexión</strong>.</li>
             </ol>
           </div>
         </>
@@ -588,10 +588,10 @@ export default function CajaConfigView({ data, puedeEditar }: { data: CajaConfig
                     <span>
                       <strong>{data.suscribiblesActivos}</strong>{' '}
                       {data.suscribiblesActivos === 1
-                        ? 'de tus servicios se factura'
-                        : 'de tus servicios se facturan'}{' '}
+                        ? 'de los servicios se factura'
+                        : 'de los servicios se facturan'}{' '}
                       por suscripción. Si además {data.suscribiblesActivos === 1 ? 'lo cobras' : 'los cobras'}{' '}
-                      aquí, esa venta se contará <strong>dos veces</strong> en tus informes.
+                      aquí, esa venta se contará <strong>dos veces</strong> en los informes.
                     </span>
                   </div>
                 )}
@@ -622,7 +622,7 @@ export default function CajaConfigView({ data, puedeEditar }: { data: CajaConfig
                               <select className="input" value={cuentas[m] ?? ''}
                                 aria-label={`Caja de efectivo para ${m}`}
                                 onChange={e => setCuentas(prev => ({ ...prev, [m]: e.target.value }))}>
-                                <option value="">— Elige la caja de {m} —</option>
+                                <option value="">— Seleccionar caja de {m} —</option>
                                 {cuentasM.map(c => <option key={c.cuenta_id} value={c.cuenta_id}>{c.nombre}</option>)}
                               </select>
                               {/* Lo cobrado por transferencia no entra en la gaveta, entra en
@@ -680,7 +680,7 @@ export default function CajaConfigView({ data, puedeEditar }: { data: CajaConfig
 
               {operadores.length === 0 ? (
                 <p className="caja-install-hint">
-                  Aún no hay nadie. Añade a quien atienda el mostrador.
+                  Sin operadores. Se añade a quien atienda el mostrador.
                 </p>
               ) : (
                 <div className="caja-moneda-list">
@@ -801,7 +801,7 @@ export default function CajaConfigView({ data, puedeEditar }: { data: CajaConfig
           body={
             <>
               <p>
-                El enlace actual <strong>dejará de funcionar</strong>. Hazlo si se perdió el
+                El enlace actual <strong>dejará de funcionar</strong>. Procede si se perdió el
                 dispositivo o el enlace quedó en manos ajenas.
               </p>
               <p>

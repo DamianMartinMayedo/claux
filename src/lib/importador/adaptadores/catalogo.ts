@@ -61,7 +61,7 @@ async function hayAlmacenes(ctx: CtxImport): Promise<boolean> {
 const CAMPOS_COMUNES: CampoDef[] = [
   { campo: 'nombre',           etiqueta: 'Nombre',            obligatorio: true,  alias: ['nombre', 'producto', 'articulo', 'artículo', 'servicio', 'descripcion corta'], ejemplo: 'Café molido 500 g' },
   { campo: 'codigo',           etiqueta: 'Código',            obligatorio: false, alias: ['codigo', 'código', 'sku', 'referencia', 'ref', 'cod'], ayuda: 'El del cliente. Si se deja vacío, CLAUX genera el suyo.', ejemplo: 'CAF-500' },
-  { campo: 'descripcion',      etiqueta: 'Descripción',       obligatorio: false, alias: ['descripcion', 'descripción', 'detalle'], ejemplo: 'Fila de ejemplo: puedes dejarla, no se importa' },
+  { campo: 'descripcion',      etiqueta: 'Descripción',       obligatorio: false, alias: ['descripcion', 'descripción', 'detalle'], ejemplo: 'Fila de ejemplo: no se importa' },
   { campo: 'categoria',        etiqueta: 'Categoría',         obligatorio: false, alias: ['categoria', 'categoría', 'familia', 'grupo', 'rubro'], ayuda: 'Por nombre. Debe existir ya en el catálogo de categorías.', ejemplo: 'Bebidas' },
   { campo: 'precio',           etiqueta: 'Precio de venta',   obligatorio: false, alias: ['precio', 'pvp', 'precio venta', 'venta', 'importe'], ejemplo: '1500' },
   { campo: 'costo',            etiqueta: 'Costo',             obligatorio: false, alias: ['costo', 'coste', 'precio compra', 'compra'], ejemplo: '900' },
@@ -136,7 +136,7 @@ function crearAdaptadorCatalogo(tipo: TipoProducto): Adaptador {
 
       // Un producto físico necesita dónde guardar existencias (igual que el alta manual).
       if (!esServicio && !(await hayAlmacenes(ctx)))
-        return { ok: false, motivo: 'Crea un almacén antes de importar productos físicos.' }
+        return { ok: false, motivo: 'Falta un almacén: es obligatorio para importar productos físicos.' }
 
       const unidad = (valores.unidad ?? '').trim()
       if (!esServicio && !unidad) return { ok: false, motivo: 'Falta la unidad.' }

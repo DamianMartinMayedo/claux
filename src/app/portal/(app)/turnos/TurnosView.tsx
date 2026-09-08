@@ -245,11 +245,11 @@ function TurnoUnificadoModal({
       if (!posiciones.length) { toastError('Marca al menos un día de la semana.'); return }
     } else if (tipo === 'CICLO') {
       if (cicloOn < 1) { toastError('En un ciclo N×M pon los días que se trabaja.'); return }
-      if (!anclaOk)    { toastError('Elige la fecha de inicio del ciclo.'); return }
+      if (!anclaOk)    { toastError('Falta la fecha de inicio del ciclo.'); return }
       tipoFinal = 'CICLO'; longitudFinal = cicloOn + cicloOff; anclaFinal = ancla
       posiciones = Array.from({ length: cicloOn }, (_, i) => i)
     } else {
-      if (!anclaOk) { toastError('Elige la fecha de inicio del ciclo.'); return }
+      if (!anclaOk) { toastError('Falta la fecha de inicio del ciclo.'); return }
       tipoFinal = tipo; longitudFinal = LONGITUD_AVANZADO[tipo]!; anclaFinal = ancla
       posiciones = Array.from(pos).filter(p => p < longitudFinal).sort((a, b) => a - b)
       if (!posiciones.length) { toastError('Marca al menos un día de trabajo del ciclo.'); return }
@@ -274,7 +274,7 @@ function TurnoUnificadoModal({
     startTransition(async () => {
       const res = await guardarTurnoUnificado(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess(isEdit ? 'Turno actualizado' : 'Turno creado')
       onSaved()
     })
@@ -384,7 +384,7 @@ function TurnoUnificadoModal({
                   </div>
                   <div className="input-group ter-col-span-2">
                     <div className="form-label-with-help">
-                      <label htmlFor="tur-ancla">Empieza el <span className="required">*</span></label>
+                      <label htmlFor="tur-ancla">Inicio del ciclo <span className="required">*</span></label>
                       <FormHelp text="El primer día del ciclo. Desde aquí se cuenta la rotación."
                         label="Información sobre la fecha de inicio" />
                     </div>
@@ -452,7 +452,7 @@ function TurnoUnificadoModal({
                           </label>
                           {activo && pideOffset && (
                             <label className="turno-roster-offset">
-                              Empieza el día
+                              Día de entrada
                               <input className="input turno-nm-num" type="number" min={0} max={longitud - 1}
                                 value={roster.get(e.empleado_id) ?? 0}
                                 onChange={ev => setOffset(e.empleado_id, Math.max(0, Number(ev.target.value) || 0))}
@@ -761,7 +761,7 @@ export default function TurnosView({ data, puedeEditar, children }: { data: Turn
     startTransition(async () => {
       const res = await eliminarTurnoUnificado(patron_id, banda)
        await ld.dismiss()
-       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setDelTurno(null); return }
+       if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); setDelTurno(null); return }
        toastSuccess('Turno eliminado')
        setDelTurno(null); router.refresh()
     })
@@ -771,7 +771,7 @@ export default function TurnosView({ data, puedeEditar, children }: { data: Turn
     startTransition(async () => {
       const res = await alternarPatron(p.patron_id, !p.activo)
        await ld.dismiss()
-       if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+       if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
        toastSuccess(p.activo ? 'Turno desactivado' : 'Turno activado')
        router.refresh()
     })
@@ -783,15 +783,15 @@ export default function TurnosView({ data, puedeEditar, children }: { data: Turn
         <div>
           <h1 className="page-title">Turnos</h1>
           <p className="page-subtitle">
-            Crea los <strong>turnos</strong> del personal —horario, días que se trabajan y equipo— y velos
-            cubiertos en el calendario.
+            <strong>Turnos</strong> del personal —horario, días que se trabajan y equipo— y su cobertura
+            en el calendario.
           </p>
         </div>
         <div className="tes-header-actions">
           <ExportarMenu
             opciones={[
               { clave: 'turnos_cuadrante', etiqueta: vistaCuadrante === 'persona' ? 'Por persona' : 'Calendario',
-                detalle: 'La vista y el período que estás viendo',
+                detalle: 'La vista y el período en pantalla',
                 filtro: filtroCalendarioExport, resumen: resumenCalendarioExport },
               { clave: 'turnos', etiqueta: 'Configuración de turnos',
                 detalle: 'Rotaciones, horarios, colores y personas asignadas',
@@ -809,7 +809,7 @@ export default function TurnosView({ data, puedeEditar, children }: { data: Turn
 
       {data.empresas.length === 0 && (
         <PrerequisitoAviso acciones={[{ label: 'Crear empresa', href: '/portal/empresas' }]}>
-          Para crear turnos necesitas <strong>una empresa</strong>.
+          Para crear turnos se necesita <strong>una empresa</strong>.
         </PrerequisitoAviso>
       )}
 
@@ -829,8 +829,8 @@ export default function TurnosView({ data, puedeEditar, children }: { data: Turn
         {patrones.length === 0 ? (
           <div className="mon-empty">
             <Repeat size={36} strokeWidth={1} opacity={0.2} />
-            <p>Crea tu primer turno: su horario, los días que se trabaja y quién lo cubre. Para rotaciones
-              (2×3, semanas que alternan) marca «Rotación avanzada».</p>
+            <p>Sin turnos. Cada turno lleva su horario, los días que se trabajan y quién lo cubre. Para
+              rotaciones (2×3, semanas que alternan) está «Rotación avanzada».</p>
           </div>
         ) : (
           <div className="table-wrapper">
@@ -940,7 +940,7 @@ export default function TurnosView({ data, puedeEditar, children }: { data: Turn
           <div className="mon-empty">
             <Users size={36} strokeWidth={1} opacity={0.2} />
             <p>{!hoy ? 'Cargando…'
-              : patrones.length === 0 ? 'Crea un turno y mete a su gente para ver el calendario.'
+              : patrones.length === 0 ? 'Sin turnos con equipo asignado: el calendario aparece al crearlos.'
               : busqueda ? 'Ningún trabajador coincide con la búsqueda.'
               : 'No hay trabajadores activos en esta empresa.'}</p>
           </div>
@@ -948,7 +948,7 @@ export default function TurnosView({ data, puedeEditar, children }: { data: Turn
           franjasCobertura.length === 0 ? (
             <div className="mon-empty">
               <Clock size={36} strokeWidth={1} opacity={0.2} />
-              <p>Ningún turno activo con horario que mostrar. Crea un turno con horario y métele gente.</p>
+              <p>Ningún turno activo con horario que mostrar.</p>
             </div>
           ) : (
             <div className={`turno-cal turno-cal-${horizonte}`}>
@@ -1044,7 +1044,7 @@ export default function TurnosView({ data, puedeEditar, children }: { data: Turn
                           {conflicto && (
                             <span className="turno-preview-warn">
                               <FormHelp tone="warning" size={13} label="Turnos solapados"
-                                text={`Se solapan en horario: ${frs.map(x => x.nombre).join(' y ')}. Una persona no puede cubrir dos turnos a la vez; revísalo.`} />
+                                text={`Se solapan en horario: ${frs.map(x => x.nombre).join(' y ')}. Una persona no puede cubrir dos turnos a la vez.`} />
                             </span>
                           )}
                         </td>
@@ -1090,7 +1090,7 @@ export default function TurnosView({ data, puedeEditar, children }: { data: Turn
             <div className="modal-body">
               <p className="modal-body-text">
                 ¿Eliminar el turno <strong>{delTurno.nombre}</strong>? Se quita su horario, su calendario y su
-                equipo. Si solo quieres pausarlo, <strong>desactívalo</strong>.
+                equipo. Para pausarlo sin perderlo, <strong>desactivarlo</strong>.
               </p>
             </div>
             <div className="modal-footer">

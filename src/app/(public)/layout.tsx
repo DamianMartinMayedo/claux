@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   // `absolute` para saltarse el «%s | CLAUX» del layout raíz: sin eso el
   // respaldo sale como «CLAUX | CLAUX».
   title: { absolute: 'CLAUX' },
-  description: 'CLAUX — la plataforma para digitalizar tu negocio.',
+  description: 'CLAUX — la plataforma para digitalizar el negocio.',
   // Favicon para TODAS las rutas públicas (no hay app/favicon.ico y estas rutas
   // están aisladas del portal): sin esto el enlace compartido no muestra icono.
   icons: {

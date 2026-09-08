@@ -56,8 +56,8 @@ function PopupResumen() {
         <p className="ntf-popup-titulo">Tienes {total} avisos sin leer</p>
         <p className="ntf-popup-texto">
           {urgentes > 0
-            ? `Al menos ${urgentes} ${urgentes === 1 ? 'necesita' : 'necesitan'} tu atención.`
-            : 'Revísalos cuando puedas.'}
+            ? `Al menos ${urgentes} ${urgentes === 1 ? 'necesita' : 'necesitan'} atención.`
+            : 'Ninguno es urgente.'}
         </p>
         <button
           type="button"

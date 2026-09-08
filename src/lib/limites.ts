@@ -266,18 +266,18 @@ export async function contarActivos(
 
 export function mensajeLimiteCrear(dim: Exclude<Dimension, 'ia_conversaciones'>, limite: number, nivelNombre: string): string {
   const d = DIMENSIONES[dim]
-  return `Has llegado a ${limite} ${d.varios}, el máximo de tu nivel ${nivelNombre}.`
+  return `Se ha llegado a ${limite} ${d.varios}, el máximo del nivel ${nivelNombre}.`
 }
 
 export function mensajeLimiteDesarchivar(dim: Exclude<Dimension, 'ia_conversaciones'>, usado: number, limite: number): string {
   const d = DIMENSIONES[dim]
-  return `Estás en ${usado} de ${limite} ${d.varios}. Archiva ${d.genero === 'f' ? 'otra' : 'otro'} o sube de nivel.`
+  return `Hay ${usado} de ${limite} ${d.varios}. Para añadir, hay que archivar ${d.genero === 'f' ? 'otra' : 'otro'} o ampliar el nivel.`
 }
 
 /** Sirve igual para una selección de la tabla y para un fichero del importador. */
 export function mensajeLimiteLote(dim: Exclude<Dimension, 'ia_conversaciones'>, cabian: number, pedidos: number): string {
   const d = DIMENSIONES[dim]
-  return `Tu nivel permite ${cabian} ${d.varios} más y aquí hay ${pedidos}.`
+  return `El nivel permite ${cabian} ${d.varios} más y aquí hay ${pedidos}.`
 }
 
 // ── La comprobación ─────────────────────────────────────────────────────────

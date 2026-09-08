@@ -115,7 +115,7 @@ export default function PasoRelato({
       if (!res.ok) { toastError(res.error); return }
       setTexto(prev => ({ ...prev, [clave]: res.cuerpo }))
       setDeIa(prev => new Set(prev).add(clave))
-      toastSuccess(semilla ? 'Lo desarrollé a partir de lo tuyo: revísalo y ajústalo' : 'Borrador listo: revísalo y ajústalo a tu manera')
+      toastSuccess(semilla ? 'Borrador desarrollado a partir del texto original' : 'Borrador listo')
     } finally {
       setRedactando(null)
     }
@@ -127,7 +127,7 @@ export default function PasoRelato({
   const hayVacias = tieneIa && SECCIONES_RELATO.some(s => s.clave !== 'equipo' && !cuerpoDe(s.clave).trim())
   function redactarTodo() {
     if (redactandoTodo) return
-    const ld = toastLoading('Escribiendo tu relato…')
+    const ld = toastLoading('Escribiendo el relato…')
     startTodo(async () => {
       const res = await redactarRelatoCompleto(dossier.dossier_id)
       await ld.dismiss()
@@ -140,7 +140,7 @@ export default function PasoRelato({
         return next
       })
       setDeIa(prev => { const s = new Set(prev); for (const [clave] of vacias) s.add(clave); return s })
-      toastSuccess('Borrador listo: revísalo y ajústalo a tu manera')
+      toastSuccess('Borrador listo')
     })
   }
 

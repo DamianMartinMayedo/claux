@@ -390,7 +390,7 @@ export default function AlmacenDetalle(
           {movimientos.length === 0 ? (
             <div className="mon-empty">
               <Package size={40} strokeWidth={1} opacity={0.2} />
-              <p>Aún no hay movimientos registrados en este almacén.</p>
+              <p>Sin movimientos registrados en este almacén.</p>
             </div>
           ) : (
             <div className="table-wrapper">

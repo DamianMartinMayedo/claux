@@ -70,7 +70,7 @@ export default function EditarPagoModal({
     setLoading(true)
     const res = await editarPago(new FormData(formRef.current!))
     setLoading(false)
-    if (!res.ok) { toastError(res.error ?? 'Error al guardar'); return }
+    if (!res.ok) { toastError(res.error ?? 'No se ha podido guardar'); return }
     toastSuccess(res.esUltimo
       ? 'Pago actualizado · Expiración sincronizada'
       : 'Pago actualizado')

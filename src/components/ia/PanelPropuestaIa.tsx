@@ -151,7 +151,7 @@ export default function PanelPropuestaIa<T>({
             )}
 
           <div className="iap-pie">
-            <span className="iap-disclaimer">Generado por IA a partir de tus datos · revísalo antes de aplicar.</span>
+            <span className="iap-disclaimer">Generado por IA a partir de los datos del negocio · conviene revisarlo antes de aplicar.</span>
             <span className="iap-pie-actions">
               <button type="button" className="btn btn-secondary btn-sm" onClick={onCerrar} disabled={aplicando}>
                 Descartar

@@ -117,8 +117,8 @@ export default function PasoNumeros({
       await ld.dismiss()
       // Refresca la rejilla con lo traído y se queda: es el momento de revisarlo,
       // no de darlo por bueno. Avanza cuando el dueño pulse Guardar.
-      if (res.ok) { toastSuccess('Números traídos: revísalos y guarda'); setPreview(null); onCambio?.() }
-      else toastError(res.error || 'No se pudo actualizar')
+      if (res.ok) { toastSuccess('Números traídos. Falta revisarlos y guardar'); setPreview(null); onCambio?.() }
+      else toastError(res.error || 'No se ha podido actualizar')
     })
   }
 
@@ -140,8 +140,8 @@ export default function PasoNumeros({
             <h2 className="dos-section-title">Los números</h2>
             <p className="dos-section-hint">
               {tieneBase
-                ? 'Revísalos. Puedes traerlos de tu Contabilidad y ajustar lo que haga falta a mano.'
-                : 'Escribe tus ingresos, coste de ventas y gastos de cada mes. El margen se calcula solo.'}
+                ? 'Se pueden traer de Contabilidad y ajustar manualmente lo que sea necesario.'
+                : 'Faltan los ingresos, el coste de ventas y los gastos de cada mes. El margen se calcula solo.'}
             </p>
           </div>
           {tieneBase && (
@@ -157,7 +157,7 @@ export default function PasoNumeros({
             intención de compra de todo el producto, y hasta ahora no decía nada. */}
         {!tieneBase && (
           <AvisoContabilidad
-            texto="Estás escribiendo estos números a mano. Con Contabilidad, CLAUX los saca de tus ventas y gastos y rellena esta tabla sola — y lo que ya escribiste se conserva."
+            texto="Estos números se están introduciendo manualmente. Con Contabilidad, CLAUX los saca de las ventas y gastos y rellena esta tabla sola — y lo ya introducido se conserva."
           />
         )}
 
@@ -165,8 +165,8 @@ export default function PasoNumeros({
           <div className="dos-novedad" role="status">
             <Sparkles size={15} strokeWidth={2} />
             <p className="dos-novedad-texto">
-              <strong>Ahora tienes Contabilidad:</strong> puedes traer estos números automáticamente en vez de teclearlos.
-              Lo que ya escribiste a mano se conserva — te enseñamos qué cambia antes de tocar nada.
+              <strong>Contabilidad ya está activa:</strong> estos números se pueden traer automáticamente en lugar de teclearlos.
+              Lo introducido manualmente se conserva, y los cambios se muestran antes de aplicarlos.
             </p>
           </div>
         )}
@@ -187,7 +187,7 @@ export default function PasoNumeros({
               <div key={m} className="dos-grid-row">
                 <span className="dos-grid-mes">
                   {etiquetaMes(m)}
-                  {f.origen === 'BASE' && <span className="dos-origen" title="Traído de tu Contabilidad">auto</span>}
+                  {f.origen === 'BASE' && <span className="dos-origen" title="Traído de Contabilidad">auto</span>}
                 </span>
                 <label className="dos-grid-cell" data-label="Ingresos">
                   <span className="dos-cell-simbolo">{simbolo}</span>
@@ -247,7 +247,7 @@ export default function PasoNumeros({
 
             <div className="modal-body">
               {sinCambios ? (
-                <p className="dos-preview-vacio">Tus números ya están al día con tu Contabilidad.</p>
+                <p className="dos-preview-vacio">Los números ya están al día con Contabilidad.</p>
               ) : (
                 <>
                   {preview.nuevos.length > 0 && (
@@ -269,13 +269,13 @@ export default function PasoNumeros({
                   {preview.conservados.length > 0 && (
                     <div className="dos-preview-grupo">
                       <h3 className="dos-preview-titulo dos-t-conserva">{preview.conservados.length} {preview.conservados.length === 1 ? 'mes escrito a mano se conserva' : 'meses escritos a mano se conservan'}</h3>
-                      <p className="dos-preview-detalle">Tu Contabilidad no tiene datos de: {preview.conservados.map(f => etiquetaMes(f.mes)).join(' · ')}</p>
+                      <p className="dos-preview-detalle">Contabilidad no tiene datos de: {preview.conservados.map(f => etiquetaMes(f.mes)).join(' · ')}</p>
                     </div>
                   )}
                   {preview.conflictos.length > 0 && (
                     <div className="dos-preview-grupo">
                       <h3 className="dos-preview-titulo dos-t-conflicto">{preview.conflictos.length} {preview.conflictos.length === 1 ? 'mes en conflicto' : 'meses en conflicto'}</h3>
-                      <p className="dos-preview-detalle">Escribiste estos meses a mano y tu Contabilidad ahora tiene datos distintos. Marca los que quieras reemplazar; el resto se conserva.</p>
+                      <p className="dos-preview-detalle">Estos meses se escribieron manualmente y Contabilidad ahora tiene datos distintos. Los marcados se reemplazan; el resto se conserva.</p>
                       <ul className="dos-preview-lista">
                         {preview.conflictos.map(c => (
                           <li key={c.mes} className="dos-conflicto">
@@ -294,7 +294,7 @@ export default function PasoNumeros({
                     </div>
                   )}
                   {preview.desgloseSeReemplaza && (
-                    <p className="dos-preview-aviso dos-preview-aviso-warn"><AlertTriangle size={14} strokeWidth={2} /> Tu desglose por concepto se reemplazará por el que CLAUX calcule de tu Contabilidad. Si lo habías ajustado a mano, revísalo después en «El desglose».</p>
+                    <p className="dos-preview-aviso dos-preview-aviso-warn"><AlertTriangle size={14} strokeWidth={2} /> El desglose por concepto se reemplazará por el que CLAUX calcule de Contabilidad. Si estaba ajustado manualmente, conviene repasarlo después en «El desglose».</p>
                   )}
                   {preview.monedasFaltantes.length > 0 && (
                     <p className="dos-preview-aviso"><AlertTriangle size={14} strokeWidth={2} /> No se incluyen importes en {preview.monedasFaltantes.join(', ')} (sin tasa hacia {dossier.moneda_presentacion}).</p>
@@ -305,9 +305,9 @@ export default function PasoNumeros({
                       congelar ya. En el deck no aparece nada de esto. */}
                   {gaveta.n > 0 && (
                     <p className="dos-preview-aviso dos-preview-aviso-warn">
-                      <AlertTriangle size={14} strokeWidth={2} /> Tu punto de venta registró{' '}
+                      <AlertTriangle size={14} strokeWidth={2} /> El punto de venta registró{' '}
                       {textoAvisoGaveta(gaveta)}. Esos gastos <strong>no entran</strong> en estos
-                      números: clasifícalos en Tesorería si quieres que cuenten.
+                      números: para que cuenten hay que clasificarlos en Tesorería.
                     </p>
                   )}
                   {dossier.estado === 'PUBLICADO' && (

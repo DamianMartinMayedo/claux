@@ -315,7 +315,7 @@ function TabCuentasPorPagar({ cxp }: { cxp: TerceroCxP }) {
         <div className="det-empty">
           <div className="det-empty-icon"><CreditCard size={40} strokeWidth={1} opacity={0.2} /></div>
           <div className="det-empty-title">Sin saldos pendientes</div>
-          <div className="det-empty-text">No le debes nada a este proveedor ahora mismo.</div>
+          <div className="det-empty-text">Sin deuda pendiente con este proveedor.</div>
         </div>
       </div>
     )

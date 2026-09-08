@@ -74,7 +74,7 @@ export default function MonedaModal({
     startTransition(async () => {
       const result = await guardarMoneda(fd)
       await ld.dismiss()
-      if (!result.ok) { toastError(result.error ?? 'Error inesperado.'); return }
+      if (!result.ok) { toastError(result.error ?? 'No se ha podido completar la operación.'); return }
       onSaved()
     })
   }

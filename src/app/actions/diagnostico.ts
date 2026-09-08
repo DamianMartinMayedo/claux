@@ -174,7 +174,7 @@ export async function guardarDiagnostico(
   // usan las públicas del portal: honeypot + ventana por IP.
   if (input.hp?.trim()) return { ok: true }
   if (!await rateLimitOk('diagnostico_guardar', 5, 600)) {
-    return { ok: false, error: 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.' }
+    return { ok: false, error: 'Demasiados intentos seguidos. El acceso se reabre en unos minutos.' }
   }
 
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -251,7 +251,7 @@ export async function solicitarContactoDiagnostico(
   // impide recorrerlos: forzar el envío a un lead ajeno pasa a costar diez intentos por
   // ventana en vez de todos los que quepan en un bucle.
   if (!await rateLimitOk('diagnostico_contacto', 10, 600)) {
-    return { ok: false, error: 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.' }
+    return { ok: false, error: 'Demasiados intentos seguidos. El acceso se reabre en unos minutos.' }
   }
 
   const db = createAdminClient()
@@ -266,7 +266,7 @@ export async function solicitarContactoDiagnostico(
     .eq('id', id)
     .single()
 
-  if (error || !lead) return { ok: false, error: 'No encontramos tu diagnóstico.' }
+  if (error || !lead) return { ok: false, error: 'No se ha encontrado el diagnóstico.' }
   // Ya lo pidió: se responde ok (para él está hecho) pero no se reenvía nada.
   if (lead.contacto_solicitado_at) return { ok: true }
 
@@ -276,7 +276,7 @@ export async function solicitarContactoDiagnostico(
     .eq('id', id)
     .is('contacto_solicitado_at', null)   // el candado se cierra en la propia condición
 
-  if (errUpd) return { ok: false, error: 'No pudimos registrar tu solicitud. Inténtalo de nuevo.' }
+  if (errUpd) return { ok: false, error: 'No se ha podido registrar la solicitud.' }
 
   const nombre = lead.nombre as string
   const email = (lead.email as string | null) ?? ''
@@ -391,7 +391,7 @@ async function motivoBloqueo(
     return 'Esta persona pidió que la llamemos, así que no se borra desde aquí.'
   }
   if (codigo === 'contactado') {
-    return 'Está marcada como contactada: alguien ya la trabajó. Si era una prueba, márcala como nueva y vuelve a intentarlo.'
+    return 'Está marcada como contactada: alguien ya la trabajó. Si era una prueba, hay que devolverla a «nueva».'
   }
   if (codigo === 'presupuesto') {
     const { data } = await db
@@ -406,9 +406,9 @@ async function motivoBloqueo(
     const cliente = ps.find((p) => p.client_id)?.client_id
     return cliente
       ? `Tiene ${cual}, que ya es del cliente ${cliente}. Esta solicitud no es de prueba.`
-      : `Tiene ${cual}. Bórralo primero si también es de prueba.`
+      : `Tiene ${cual}, que debe borrarse antes si también es de prueba.`
   }
-  return 'No se pudo eliminar.'
+  return 'No se ha podido eliminar.'
 }
 
 export async function eliminarDiagnostico(

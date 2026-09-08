@@ -91,7 +91,7 @@ export async function registrarInteresModulo(
   if (!nombre || !modulo) return { ok: false, error: 'Falta el módulo.' }
 
   const asunto  = `Interés en ${nombre}`
-  const mensaje = `Estoy interesado en ${nombre}. ¿Podemos agendar una cita para verlo?`
+  const mensaje = `Interés en ${nombre}. Se solicita una cita para verlo.`
 
   const db = createAdminClient()
   // `modulo_clave` es lo que hace que el pedido sobreviva a la recarga: el widget
@@ -106,7 +106,7 @@ export async function registrarInteresModulo(
     estado:       'NUEVO',
     modulo_clave: modulo,
   })
-  if (error) return { ok: false, error: 'No se pudo enviar. Inténtalo de nuevo.' }
+  if (error) return { ok: false, error: 'No se ha podido enviar.' }
 
   // Constancia en la campana del portal: el widget puede quedar detrás de un
   // filtro o de una recarga, y el dueño necesita poder comprobar que lo pidió.
@@ -114,8 +114,8 @@ export async function registrarInteresModulo(
   await crearNotificacion({
     clientId:    session.client_id,
     tipo:        'contratacion_solicitada',
-    titulo:      `Pediste activar ${nombre}`,
-    cuerpo:      'Recibimos tu solicitud. Te contactamos para activarlo.',
+    titulo:      `Solicitud de activación: ${nombre}`,
+    cuerpo:      'Solicitud registrada. El equipo de CLAUX contactará para activarlo.',
     enlace:      '/portal/soporte',
     entidadTipo: 'modulo',
     entidadId:   modulo,
@@ -201,7 +201,7 @@ export async function pedirReactivacion(): Promise<{ ok: boolean; yaPedido?: boo
     estado:       'NUEVO',
     modulo_clave: 'reactivacion',
   }).select('id').single()
-  if (error) return { ok: false, error: 'No se pudo enviar. Inténtalo de nuevo.' }
+  if (error) return { ok: false, error: 'No se ha podido enviar.' }
 
   const { data: cliente } = await db
     .from('clients').select('nombre_empresa, estado').eq('client_id', session.client_id).maybeSingle()
@@ -263,7 +263,7 @@ export async function enviarMensajeSoporte(
     estado:    'NUEVO',
   }).select('id').single()
 
-  if (error) return { ok: false, error: 'No se pudo enviar el mensaje. Inténtalo de nuevo.' }
+  if (error) return { ok: false, error: 'No se ha podido enviar el mensaje.' }
 
   const { data: cliente } = await db
     .from('clients').select('nombre_empresa').eq('client_id', session.client_id).maybeSingle()

@@ -659,7 +659,7 @@ export default function PuntoVentaApp() {
     // turno anónimo la deja sin respuesta para siempre. Se pide una vez al día, no en
     // cada venta: no es lo que hace cola en un mostrador.
     if (!abreNombre.trim()) {
-      setMsg({ t: 'err', x: hayOperadores && abiertaPor !== OTRA_PERSONA ? 'Elige quién lleva el turno.' : 'Pon quién lleva el turno.' })
+      setMsg({ t: 'err', x: hayOperadores && abiertaPor !== OTRA_PERSONA ? 'Falta quién lleva el turno.' : 'Falta el nombre de quién lleva el turno.' })
       return
     }
     setBusy(true); setCargando('Abriendo el turno…')
@@ -686,7 +686,7 @@ export default function PuntoVentaApp() {
   async function registrarSalida() {
     if (!sesion || busy) return
     const importe = num(salida.importe)
-    if (importe <= 0)          { setMsg({ t: 'err', x: 'Pon un importe.' }); return }
+    if (importe <= 0)          { setMsg({ t: 'err', x: 'Falta el importe.' }); return }
     if (!salida.motivo.trim()) { setMsg({ t: 'err', x: 'Di para qué salió el dinero.' }); return }
     setBusy(true); setCargando('Registrando la salida…')
     try {
@@ -706,7 +706,7 @@ export default function PuntoVentaApp() {
     // Mismo criterio que al abrir: el arqueo lo firma alguien. Sin lista viene en blanco
     // (no hay a quién heredar) y se teclea; con lista llega preseleccionado quien abrió.
     if (!cierraNombre.trim()) {
-      setMsg({ t: 'err', x: hayOperadores && cierraSel !== OTRA_PERSONA ? 'Elige quién cierra el turno.' : 'Pon quién cuenta el dinero.' })
+      setMsg({ t: 'err', x: hayOperadores && cierraSel !== OTRA_PERSONA ? 'Falta quién cierra el turno.' : 'Falta el nombre de quién cuenta el dinero.' })
       return
     }
     setConfirmarCierre(false)
@@ -726,7 +726,7 @@ export default function PuntoVentaApp() {
       await reload(); setContado({}); setCerradaPor(''); setCerradaOtro(''); limpiarTicket(); setVista('sync')
       setMsg(navigator.onLine
         ? { t: 'ok', x: 'Turno cerrado. Sincronizando…' }
-        : { t: 'warn', x: 'Turno cerrado. Sincronízalo cuando tengas conexión.' })
+        : { t: 'warn', x: 'Turno cerrado. Queda pendiente de sincronizar.' })
     } finally { setBusy(false); setCargando(null) }
     // **El único envío automático que queda.** Cerrar es el momento en que la venta puede
     // llegar a la contabilidad, y hay una persona delante mirando la pantalla — así que va
@@ -778,7 +778,7 @@ export default function PuntoVentaApp() {
   }
   function addLibre() {
     const precio = parseFloat(librePre)
-    if (!libreNom.trim() || isNaN(precio) || precio < 0) { setMsg({ t: 'err', x: 'Pon nombre y precio válidos.' }); return }
+    if (!libreNom.trim() || isNaN(precio) || precio < 0) { setMsg({ t: 'err', x: 'El nombre y el precio no son válidos.' }); return }
     setCart(prev => [...prev, { key: uid(), producto_id: null, descripcion: libreNom.trim(), cantidad: 1, precio_unitario: round2(precio),
       ...dtoDeCampania(null) }])
     setLibreNom(''); setLibrePre(''); setLibre(false)
@@ -941,7 +941,7 @@ export default function PuntoVentaApp() {
       const hayPendiente = tks.length > 0 || sess.length > 0 || mvs.length > 0
       if (!navigator.onLine) {
         if (hayPendiente) await anotarFallo()
-        aviso({ t: 'warn', x: 'Sin conexión. Vuelve a intentarlo cuando tengas señal.' })
+        aviso({ t: 'warn', x: 'Sin conexión.' })
         return
       }
       if (!hayPendiente) { aviso({ t: 'ok', x: 'Todo sincronizado.' }); return }
@@ -1000,13 +1000,13 @@ export default function PuntoVentaApp() {
         const porRed = j.resultado?.rechazo_motivo === 'CONEXION'
         await metaSet('sync_rechazo', porRed ? null : { at: ahora, n: rechazados.size })
         setRechazo(porRed ? null : { at: ahora, n: rechazados.size })
-        if (porRed) { await anotarFallo(); aviso({ t: 'warn', x: 'No se pudo completar. Vuelve a intentarlo.' }) }
-        else setMsg({ t: 'warn', x: `${rechazados.size} ${rechazados.size === 1 ? 'venta no se pudo registrar' : 'ventas no se pudieron registrar'}. Revísalo en Claux.` })
+        if (porRed) { await anotarFallo(); aviso({ t: 'warn', x: 'No se ha podido completar.' }) }
+        else setMsg({ t: 'warn', x: `${rechazados.size} ${rechazados.size === 1 ? 'venta no se ha podido registrar' : 'ventas no se han podido registrar'}. Quedan por revisar en Claux.` })
       } else {
         await metaSet('sync_rechazo', null); setRechazo(null)
         aviso({ t: 'ok', x: `Sincronizado: ${j.resultado?.tickets_nuevos ?? okTks.length} ventas, ${j.resultado?.cierres_posteados ?? cerradosEnviados} cierres.` })
       }
-    } catch { await anotarFallo(); aviso({ t: 'err', x: 'No se pudo sincronizar. Inténtalo de nuevo.' }) }
+    } catch { await anotarFallo(); aviso({ t: 'err', x: 'No se ha podido sincronizar.' }) }
     finally { enviandoRef.current = false; if (!silencioso) setBusy(false); setCargando(null) }
   }
   // El puente se refresca tras cada render (sin lista de dependencias a propósito): los
@@ -1033,11 +1033,11 @@ export default function PuntoVentaApp() {
     const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }))
     const a = document.createElement('a'); a.href = url; a.download = `caja-${config?.caja.caja_id ?? 'export'}-${hoyEnTz()}.json`; a.click(); URL.revokeObjectURL(url)
     const ahora = new Date().toISOString(); await metaSet('export_at', ahora); setExportAt(ahora)
-    setMsg({ t: 'ok', x: 'Archivo descargado. Súbelo en Claux → Punto de venta → Sincronizar.' })
+    setMsg({ t: 'ok', x: 'Archivo descargado. Se sube en Claux → Punto de venta → Sincronizar.' })
   }
   async function actualizarProductos() {
     if (!token) return
-    if (!navigator.onLine) { setMsg({ t: 'warn', x: 'Necesitas conexión para actualizar productos.' }); return }
+    if (!navigator.onLine) { setMsg({ t: 'warn', x: 'Actualizar productos requiere conexión.' }); return }
     setBusy(true); setCargando('Bajando productos y precios…')
     try {
       const s = await fetchSeed(token)
@@ -1056,7 +1056,7 @@ export default function PuntoVentaApp() {
   // Fuerza la última versión: quita el service worker y sus cachés y recarga. Las
   // ventas y la config (IndexedDB) NO se tocan. Solo online (si no, se perdería el offline).
   async function actualizarApp() {
-    if (!navigator.onLine) { setMsg({ t: 'warn', x: 'Necesitas conexión para actualizar la app.' }); return }
+    if (!navigator.onLine) { setMsg({ t: 'warn', x: 'Actualizar la app requiere conexión.' }); return }
     setBusy(true); setCargando('Actualizando la app…')
     try {
       if ('serviceWorker' in navigator) {
@@ -1130,7 +1130,7 @@ export default function PuntoVentaApp() {
       <div className="ca-gate">
         <div className="ca-gate-card">
           <div className="ca-gate-title">Punto de venta sin configurar</div>
-          <p className="ca-gate-text">Abre este punto de venta desde el enlace de instalación que te dio Claux (Portal → Puntos de venta → Configurar → «Instalar en un dispositivo»). Una vez abierto con conexión, funcionará sin internet.</p>
+          <p className="ca-gate-text">Este punto de venta se abre desde el enlace de instalación de Claux (Portal → Puntos de venta → Configurar → «Instalar en un dispositivo»). Una vez abierto con conexión, funciona sin internet.</p>
         </div>
       </div>
     )
@@ -1251,7 +1251,7 @@ export default function PuntoVentaApp() {
   // en una pantalla de cobro no se leen, se ignoran.
   const alerta =
     diasTurno >= 1
-      ? `Turno abierto ${cuantosDias(diasTurno)}. Ciérralo para que la venta llegue a Claux.`
+      ? `Turno abierto ${cuantosDias(diasTurno)}. La venta no llega a Claux hasta que se cierre.`
       : diasSinEnviar >= 1
         ? `${pend.tickets} ${pend.tickets === 1 ? 'venta' : 'ventas'} sin enviar ${cuantosDias(diasSinEnviar)}. Pulsa Sincronizar.`
         : null
@@ -1365,7 +1365,7 @@ export default function PuntoVentaApp() {
             <strong>Hay pendientes de sincronizar</strong>
             <span className="ca-seed">
               {fechaMasAntigua ? `Desde el ${fechaLarga(fechaMasAntigua)}. ` : ''}
-              {online ? 'Todavía no está en Claux.' : 'Sin conexión: puedes abrir el turno igual.'}
+              {online ? 'Sin sincronizar con Claux.' : 'Sin conexión: el turno se puede abrir igual.'}
             </span>
           </div>
           {online && (
@@ -1386,8 +1386,8 @@ export default function PuntoVentaApp() {
       )}
       <div className="ca-gate-card">
         <div className="ca-gate-step">Paso 1</div>
-        <div className="ca-gate-title">Abre el turno</div>
-        <p className="ca-gate-text">Para empezar a cobrar necesitas abrir el turno. Al final del día lo cierras y sincronizas.</p>
+        <div className="ca-gate-title">Turno cerrado</div>
+        <p className="ca-gate-text">Cobrar exige un turno abierto. Al final de la jornada, el turno se cierra y se sincroniza.</p>
         {/* Quién lleva el turno. Con lista es un DESPLEGABLE —el dueño manda al punto de
             venta quién puede llevarlo y baja con la semilla, así que funciona sin conexión—
             y sin lista, un campo libre. Con lista queda además «Otra persona»: el que cubre
@@ -1402,7 +1402,7 @@ export default function PuntoVentaApp() {
             <>
               <select id="abierta-por" className="ca-input" value={abiertaPor}
                 onChange={e => setAbiertaPor(e.target.value)}>
-                <option value="">— Elige —</option>
+                <option value="">— Seleccionar —</option>
                 {operadores.map(o => <option key={o.operador_id} value={o.operador_id}>{o.nombre}</option>)}
                 <option value={OTRA_PERSONA}>Otra persona…</option>
               </select>
@@ -1431,7 +1431,7 @@ export default function PuntoVentaApp() {
         </div>
         <button className="ca-btn ca-btn-primary ca-btn-lg ca-btn-block" disabled={busy} onClick={abrirTurno}>Abrir turno</button>
         <div className="ca-steps">
-          <div className="ca-step-row"><span className="ca-step-num">1</span> Abre el turno</div>
+          <div className="ca-step-row"><span className="ca-step-num">1</span> Abrir el turno</div>
           <div className="ca-step-row"><span className="ca-step-num">2</span> Cobra las ventas (funciona sin internet)</div>
           <div className="ca-step-row"><span className="ca-step-num">3</span> Cierra el turno y sincroniza</div>
         </div>
@@ -1678,7 +1678,7 @@ export default function PuntoVentaApp() {
       <div className="ca-card">
         <div className="ca-muted">Abierto {new Date(sesion.abierta_at).toLocaleString('es-ES')}</div>
         {ventasTurno.size === 0
-          ? <div className="ca-muted">Aún no hay ventas en este turno.</div>
+          ? <div className="ca-muted">Sin ventas en este turno.</div>
           : [...ventasTurno.entries()].map(([m, v]) => (
             <div key={m} className="ca-stat-row"><span className="ca-muted">{v.count} ventas en {m}</span><span className="ca-stat-big">{simbolo(m)} {money(v.total)}</span></div>
           ))}
@@ -1789,7 +1789,7 @@ export default function PuntoVentaApp() {
     <div className="ca-panel">
       <div className="ca-panel-title">Ventas del día</div>
       {ventasDia.length === 0 ? (
-        <div className="ca-card"><div className="ca-muted">Aún no hay ventas hoy.</div></div>
+        <div className="ca-card"><div className="ca-muted">Sin ventas hoy.</div></div>
       ) : ventasPorTurno.map(g => (
         <div className="ca-card ca-turno-bloque" key={g.sesion_uuid}>
           {/* La cabecera del bloque es la que explica por qué hay o no botones. */}
@@ -1927,8 +1927,8 @@ export default function PuntoVentaApp() {
                 <span>{yaEnviado.ventas > 0 ? 'Falta cerrar el turno' : 'El turno sigue abierto'}</span>
                 <span className="ca-seed">
                   {yaEnviado.ventas > 0
-                    ? 'hasta que lo cierres, estas ventas salen en Claux como «sin contabilizar»: es el cierre lo que lleva el dinero a Tesorería'
-                    : 'ciérralo al terminar la jornada'}
+                    ? 'hasta que se cierre, estas ventas salen en Claux como «sin contabilizar»: es el cierre lo que lleva el dinero a Tesorería'
+                    : 'se cierra al terminar la jornada'}
                 </span>
               </li>
             )}
@@ -1949,7 +1949,7 @@ export default function PuntoVentaApp() {
             {pend.cierres > 0 && (
               <li>
                 <span>{pend.cierres} {pend.cierres === 1 ? 'cierre de turno' : 'cierres de turno'}</span>
-                <span className="ca-seed">es lo que lleva el dinero a tu contabilidad</span>
+                <span className="ca-seed">es lo que lleva el dinero a la contabilidad</span>
               </li>
             )}
             {pend.movs > 0 && (
@@ -1975,7 +1975,7 @@ export default function PuntoVentaApp() {
         <p className="ca-seed">
           {syncAt
             ? `Última vez: ${fechaCorta(syncAt)} a las ${new Date(syncAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: TZ_NEGOCIO })}`
-            : 'Todavía no has sincronizado nada desde este punto de venta.'}
+            : 'Sin sincronizaciones desde este punto de venta.'}
         </p>
       </div>
 
@@ -2003,8 +2003,8 @@ export default function PuntoVentaApp() {
         <div className="ca-card">
           <div className="ca-panel-title">Sin conseguir conexión</div>
           <p className="ca-muted">
-            Puedes descargar las ventas en un archivo —no hace falta conexión para esto— y subirlo en
-            Claux → Punto de venta → Sincronizar desde cualquier otro dispositivo que sí tenga.
+            Las ventas se pueden descargar en un archivo —esto no requiere conexión— y subirlo en
+            Claux → Punto de venta → Sincronizar desde cualquier otro dispositivo que sí la tenga.
           </p>
           <button className="ca-btn ca-btn-block" onClick={exportar}>Descargar archivo (.json)</button>
         </div>
@@ -2024,7 +2024,7 @@ export default function PuntoVentaApp() {
         <button className="ca-btn" disabled={busy || !online} onClick={actualizarApp}>Actualizar la app</button>
       </div>
       <p className="ca-seed">
-        ¿Cambiaste productos, precios o monedas en Claux? «Actualizar productos». ¿No ves los últimos cambios de la caja? «Actualizar la app».
+        Tras cambiar productos, precios o monedas en Claux: «Actualizar productos». Si faltan los últimos cambios de la caja: «Actualizar la app».
       </p>
 
       {!standalone && (
@@ -2038,7 +2038,7 @@ export default function PuntoVentaApp() {
               <div className="ca-step-row"><span className="ca-step-num">2</span> Elige «Añadir a pantalla de inicio»</div>
             </div>
           ) : (
-            <p className="ca-muted">En el menú del navegador (⋮) elige «Instalar app» o «Añadir a pantalla de inicio». No hace falta otro navegador.</p>
+            <p className="ca-muted">En el menú del navegador (⋮), «Instalar app» o «Añadir a pantalla de inicio». No se necesita otro navegador.</p>
           )}
         </div>
       )}
@@ -2057,7 +2057,7 @@ export default function PuntoVentaApp() {
           <div className="ca-steps">
             <div className="ca-step-row"><span className="ca-step-num">1</span> Toca Compartir en Safari (el cuadro con la flecha ↑)</div>
             <div className="ca-step-row"><span className="ca-step-num">2</span> Elige «Añadir a pantalla de inicio»</div>
-            <div className="ca-step-row"><span className="ca-step-num">3</span> Abre la caja desde su icono</div>
+            <div className="ca-step-row"><span className="ca-step-num">3</span> Abrir la caja desde su icono</div>
           </div>
         ) : (
           <p className="ca-gate-text">En el menú del navegador (⋮) elige «Instalar app» o «Añadir a pantalla de inicio».</p>
@@ -2169,7 +2169,7 @@ export default function PuntoVentaApp() {
                 <>
                   <select id="cerrada-por" className="ca-input" value={cierraSel}
                     onChange={e => setCerradaPor(e.target.value)}>
-                    <option value="">— Elige —</option>
+                    <option value="">— Seleccionar —</option>
                     {operadores.map(o => <option key={o.operador_id} value={o.operador_id}>{o.nombre}</option>)}
                     {/* Quien abrió el turno pero ya no está en la lista (le dieron de baja a
                         media jornada) tiene que poder seguir cerrándolo. */}

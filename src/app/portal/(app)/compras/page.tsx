@@ -38,7 +38,7 @@ export default async function ComprasPage({
         {!puedeEditar && <SolicitarAcceso modulo="inventario" />}
       </ComprasView>
       {/* Aquí y no en Movimientos: confirmar una compra es lo que crea el gasto. */}
-      <ContabilidadHint genera="tus compras" />
+      <ContabilidadHint genera="las compras" />
     </>
   )
 }

@@ -353,7 +353,7 @@ export function armarPropuesta(e: EntradaArmado): PropuestaResuelta {
   const paginas = Math.ceil(bloques.length / MODULOS_POR_PAGINA)
   for (let i = 0; i < paginas; i++) {
     slides.push({
-      clave: `pensado:${i + 1}`, tipo: 'pensado', titulo: 'Pensado para tu negocio',
+      clave: `pensado:${i + 1}`, tipo: 'pensado', titulo: 'Pensado para este negocio',
       modulos: bloques.slice(i * MODULOS_POR_PAGINA, (i + 1) * MODULOS_POR_PAGINA),
       pagina: i + 1, paginas,
     })
@@ -422,7 +422,7 @@ export function armarPropuesta(e: EntradaArmado): PropuestaResuelta {
     const cuotaMensual = num(presupuesto.cuota_mensual)
     const pct = ajustes.descuentoAnualPct
     slides.push({
-      clave: 'tu_propuesta', tipo: 'tu_propuesta', titulo: 'Tu propuesta', moneda,
+      clave: 'tu_propuesta', tipo: 'tu_propuesta', titulo: 'La propuesta', moneda,
       fases, horasTotal: num(presupuesto.horas_total), tarifaHora: num(presupuesto.tarifa_hora),
       costeInstalacion: num(presupuesto.coste_instalacion),
       descuentoPct: num(presupuesto.descuento_pct),

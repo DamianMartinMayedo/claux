@@ -104,7 +104,7 @@ export default function FacturaDetalle({ data, cobros, tienePermiso }: Props) {
         const res = await duplicarFactura(factura.factura_id)
         await ld.dismiss()
         setDuplicating(false)
-        if (!res.ok) { toastError(res.error ?? 'Error al duplicar.'); return }
+        if (!res.ok) { toastError(res.error ?? 'No se ha podido duplicar.'); return }
         router.push(`/portal/ventas/facturas/${res.factura_id}`)
       },
     })
@@ -119,7 +119,7 @@ export default function FacturaDetalle({ data, cobros, tienePermiso }: Props) {
     startTransition(async () => {
       const res = await cambiarEstadoFactura(factura.factura_id, nuevo)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error al cambiar estado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido cambiar estado.'); return }
       toastSuccess(`Factura ${ESTADO_FACTURA_LABEL[nuevo].toLowerCase()}.`)
       router.refresh()
     })
@@ -129,7 +129,7 @@ export default function FacturaDetalle({ data, cobros, tienePermiso }: Props) {
     if (nuevo === 'ANULADA' && factura.estado === 'COBRADA') {
       setDialog({
         title: 'Anular factura cobrada',
-        body: 'Estás a punto de anular una factura COBRADA. Esto deja registro pero invalida el documento fiscal. Esta acción no se puede deshacer.',
+        body: 'Anular una factura COBRADA deja registro, pero invalida el documento fiscal. Esta acción no se puede deshacer.',
         danger: true,
         confirmLabel: 'Sí, anular de todos modos',
         onConfirm: () => ejecutarCambioEstado(nuevo),
@@ -146,8 +146,8 @@ export default function FacturaDetalle({ data, cobros, tienePermiso }: Props) {
       setDialog({
         title: '¿Emitir esta factura?',
         body: esNumeroProvisional(factura.numero)
-          ? 'Al emitirla se le asignará su número fiscal definitivo (siguiente de la serie) y ya no podrás editarla. El documento queda como referencia fiscal.'
-          : 'Una vez emitida no podrás editarla. El documento queda como referencia fiscal.',
+          ? 'Al emitirla se le asignará su número fiscal definitivo (siguiente de la serie) y dejará de ser editable. El documento queda como referencia fiscal.'
+          : 'Una vez emitida deja de ser editable. El documento queda como referencia fiscal.',
         confirmLabel: 'Sí, emitir',
         onConfirm: () => ejecutarCambioEstado(nuevo),
       })
@@ -453,7 +453,7 @@ function CobrosFacturaCard({ cobros, numero, tienePermiso }: { cobros: CobrosFac
     startTransition(async () => {
       const res = await registrarPagoDoc(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess('Cobro registrado.')
       setModalOpen(false); router.refresh()
     })
@@ -467,7 +467,7 @@ function CobrosFacturaCard({ cobros, numero, tienePermiso }: { cobros: CobrosFac
     startTransition(async () => {
       const res = await anularPagoDoc(movimiento_id)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess('Cobro anulado.')
       router.refresh()
     })
@@ -525,7 +525,7 @@ function CobrosFacturaCard({ cobros, numero, tienePermiso }: { cobros: CobrosFac
             <div className="modal-body">
               {cobros.cuentas.length === 0 ? (
                 <div className="alert alert-warning">
-                  No tienes cajas disponibles. Crea una en Tesorería para registrar el cobro.
+                  Sin cajas disponibles: para registrar el cobro se necesita una en Tesorería.
                 </div>
               ) : (
                 <form id="cobro-form" onSubmit={handleSubmit} className="gc-liq-form">

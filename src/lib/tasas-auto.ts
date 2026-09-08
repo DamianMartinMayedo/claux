@@ -84,7 +84,7 @@ async function ultimasTasas(db: Db, clientId: string): Promise<Map<string, Previ
  * y ahí lo único útil es «vuelve a intentarlo en un rato».
  */
 function errorFuente(fuente: string, status: number): string {
-  if (status === 429) return `${fuente} limita las consultas: inténtalo de nuevo en unos minutos.`
+  if (status === 429) return `${fuente} limita las consultas: se puede reintentar en unos minutos.`
   if (status === 401 || status === 403) return `${fuente} rechazó el acceso: revisa la clave de la fuente.`
   return `${fuente} no responde ahora mismo (error ${status}).`
 }
@@ -194,7 +194,7 @@ export async function actualizarTasasCliente(db: Db, clientId: string): Promise<
         }
       } catch {
         // Caída de red: el mensaje del fetch («fetch failed») no dice nada al dueño.
-        errores.push('No se pudo conectar con El Toque. Revisa la conexión.')
+        errores.push('No se ha podido conectar con El Toque.')
       }
     }
   }
@@ -238,7 +238,7 @@ export async function actualizarTasasCliente(db: Db, clientId: string): Promise<
         else anotar(pendientes)
       } catch {
         // Caída de red: el mensaje del fetch («fetch failed») no dice nada al dueño.
-        errores.push('No se pudo conectar con Frankfurter. Revisa la conexión.')
+        errores.push('No se ha podido conectar con Frankfurter.')
       }
     }
   }

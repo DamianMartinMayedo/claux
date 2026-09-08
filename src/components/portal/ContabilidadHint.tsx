@@ -67,7 +67,7 @@ export default async function ContabilidadHint({ genera }: { genera: string }) {
         <Calculator size={18} strokeWidth={2} className="modulo-sugerencia-icono" />
         <p>
           Los gastos y pagos que generan {genera} se quedan aquí. Con el módulo de{' '}
-          <strong>Contabilidad</strong> aparecerían también en tus cuentas y en tesorería.
+          <strong>Contabilidad</strong> aparecerían también en las cuentas y en tesorería.
         </p>
         <ContabilidadHintAccion pedidoEl={fechaCorta(previo?.created_at)} />
       </aside>

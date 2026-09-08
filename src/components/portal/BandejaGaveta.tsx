@@ -131,7 +131,7 @@ export default function BandejaGaveta({
     startTransition(async () => {
       const res = await clasificarGaveta(ops)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       const omit = res.omitidos
         ? ` ${res.omitidos} ya estaban clasificadas.`
         : ''
@@ -154,9 +154,9 @@ export default function BandejaGaveta({
 
         <div className="modal-body modal-body-wide">
           <p className="gav-intro">
-            Tu punto de venta registró estas operaciones. Dinos qué fue cada una para que
-            aparezcan donde tienen que aparecer — y si alguna ya la anotaste con su
-            factura, márcala como «no es un gasto nuevo» para no contarla dos veces.
+            El punto de venta registró estas operaciones. Indicar qué fue cada una las coloca donde
+            corresponde. Las ya anotadas con su factura se marcan como «no es un gasto nuevo» para
+            no contarlas dos veces.
           </p>
 
           {puedeEditar && pendientes.length > 2 && (
@@ -169,7 +169,7 @@ export default function BandejaGaveta({
                 <label className="sr-only" htmlFor="gav-lote">Aplicar a las que faltan</label>
                 <select id="gav-lote" className="input gav-lote-select"
                   value={lote} onChange={e => setLote(e.target.value)}>
-                  <option value={SIN_DECIDIR}>Elige qué fueron…</option>
+                  <option value={SIN_DECIDIR}>— Seleccionar qué fueron —</option>
                   <option value={SOLO_MUEVE}>No es un gasto nuevo (traslado, cambio o ya lo registré)</option>
                   {gruposLote.map(g => (
                     <optgroup key={g.rol} label={ROL_PL_LABEL[g.rol]}>

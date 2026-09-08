@@ -47,7 +47,7 @@ export default function DocumentosFirmaCard({ estado }: { estado: EstadoDocument
         <h3 className="doc-datos-titulo">Documentos</h3>
         {!estado.datosCompletos ? (
           <p className="doc-firma-legal">
-            <Lock size={13} /> Completa tus datos de firma para poder ver y firmar los documentos.
+            <Lock size={13} /> Los documentos se ven y se firman al completar los datos de firma.
           </p>
         ) : (
           <ul className="doc-firma-list">

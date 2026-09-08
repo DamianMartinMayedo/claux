@@ -49,7 +49,7 @@ export const adaptadorPersonal: Adaptador = {
     // promedio (`importe ÷ días`).
     { campo: 'vacaciones_apertura', etiqueta: 'Vacaciones acumuladas (importe)', obligatorio: false,
       alias: ['vacaciones acumuladas', 'vacaciones', 'saldo vacaciones', 'vacaciones pendientes', 'vacaciones importe'],
-      ayuda: 'Importe ya acumulado antes de usar CLAUX. Si el trabajador empieza de cero, déjalo vacío.',
+      ayuda: 'Importe ya acumulado antes de usar CLAUX. Vacío si el trabajador empieza de cero.',
       ejemplo: '1363.50' },
     { campo: 'vacaciones_apertura_dias', etiqueta: 'Vacaciones acumuladas (días)', obligatorio: false,
       alias: ['vacaciones dias', 'vacaciones días', 'saldo vacaciones dias', 'saldo vacaciones días', 'dias vacaciones'],
@@ -64,7 +64,7 @@ export const adaptadorPersonal: Adaptador = {
     { campo: 'dias_laborables', etiqueta: 'Días laborables', obligatorio: false,
       alias: ['dias laborables', 'días laborables', 'jornada', 'dias mes'],
       ayuda: 'Su jornada del mes. En blanco, los de su empresa.', ejemplo: '24' },
-    { campo: 'notas',        etiqueta: 'Notas',         obligatorio: false, alias: ['notas', 'observaciones', 'comentarios'], ejemplo: 'Fila de ejemplo: puedes dejarla, no se importa' },
+    { campo: 'notas',        etiqueta: 'Notas',         obligatorio: false, alias: ['notas', 'observaciones', 'comentarios'], ejemplo: 'Fila de ejemplo: no se importa' },
   ],
 
   async preparar(valores, ctx, deColumna): Promise<Preparado> {

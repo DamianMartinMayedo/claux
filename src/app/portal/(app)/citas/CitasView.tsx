@@ -148,7 +148,7 @@ function ServicioModal({ servicio, etiqueta, data, onClose, onSaved }: {
     startTransition(async () => {
       const res = await guardarServicio(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       if (res.aviso) toastError(res.aviso)
       else toastSuccess(isEdit ? `${etiqueta} actualizado.` : `${etiqueta} creado.`)
       onSaved()
@@ -197,12 +197,12 @@ function ServicioModal({ servicio, etiqueta, data, onClose, onSaved }: {
               <div className="input-group ter-col-span-2">
                 <div className="form-label-with-help">
                   <label htmlFor="srv-moneda">Moneda {precio !== '' && <span className="required">*</span>}</label>
-                  <FormHelp text="En la que cobras esta cita." label="Qué es la moneda de la cita" />
+                  <FormHelp text="La moneda en que se cobra esta cita." label="Qué es la moneda de la cita" />
                 </div>
                 {opcionesMoneda.length === 0 ? (
                   <>
                     <input className="input input-static" readOnly value="Sin monedas activas" />
-                    <span className="input-hint">Crea una moneda en Monedas y Tasas primero.</span>
+                    <span className="input-hint">Se requiere una moneda activa en Monedas y tasas.</span>
                   </>
                 ) : (
                   <>
@@ -317,7 +317,7 @@ function ImportarServiciosModal({ catalogo, etiquetaPlural, onClose, onSaved }: 
     startTransition(async () => {
       const res = await importarServiciosCatalogo(items)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess(`${res.importados ?? 0} ${etiquetaPlural.toLowerCase()} importado(s) del catálogo.`)
       onSaved()
     })
@@ -426,7 +426,7 @@ function RecursoModal({ recurso, servicios, etiquetaRec, etiquetaSrv, onClose, o
     startTransition(async () => {
       const res = await guardarRecurso(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess(isEdit ? `${etiquetaRec} actualizado.` : `${etiquetaRec} creado.`)
       onSaved()
     })
@@ -460,7 +460,7 @@ function RecursoModal({ recurso, servicios, etiquetaRec, etiquetaSrv, onClose, o
                   <FormHelp text="Sin selección = atiende todos los servicios." label="Cómo funciona la selección de servicios" />
                 </div>
                 {servicios.length === 0 ? (
-                  <span className="input-hint">Aún no hay servicios. Créalos en la pestaña «Servicios» (si solo das un tipo de cita, basta con uno).</span>
+                  <span className="input-hint">Sin servicios. Se crean en la pestaña «Servicios»; con un solo tipo de cita basta con uno.</span>
                 ) : (
                   <div className="cita-chk-list">
                     {servicios.map(s => (
@@ -477,7 +477,7 @@ function RecursoModal({ recurso, servicios, etiquetaRec, etiquetaSrv, onClose, o
               <div className="input-group ter-col-full">
                 <div className="form-label-with-help">
                   <label>Horario semanal</label>
-                  <FormHelp text="Deja un día en blanco si no atiende. El segundo tramo es para jornada partida (mañana y tarde); si trabajas seguido, déjalo vacío." label="Cómo rellenar el horario semanal" />
+                  <FormHelp text="Un día en blanco significa que no atiende. El segundo tramo es para jornada partida (mañana y tarde); con jornada seguida, se deja vacío." label="Cómo rellenar el horario semanal" />
                 </div>
                 <div className="cita-hor-grid">
                   {[1, 2, 3, 4, 5, 6, 7].map(d => (
@@ -559,7 +559,7 @@ function AusenciasRecurso({ recurso, etiquetaRec, onCambio }: {
     startTransition(async () => {
       const res = await guardarAusencia(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess('Ausencia guardada.')
       form.reset()
       onCambio()
@@ -572,7 +572,7 @@ function AusenciasRecurso({ recurso, etiquetaRec, onCambio }: {
     startTransition(async () => {
       const res = await eliminarAusencia(borrar.ausencia_id)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setBorrar(null); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); setBorrar(null); return }
       toastSuccess('Ausencia eliminada.')
       setBorrar(null); onCambio()
     })
@@ -736,7 +736,7 @@ function NuevaCitaModal({ data, cita, onClose, onSaved }: {
       if (!res.ok) {
         // El sistema avisa, no bloquea: lo que decide el dueño se le pregunta.
         if (res.forzable) { setForzar({ motivo: res.error ?? '', datos: fd }); return }
-        toastError(res.error ?? 'Error inesperado.'); return
+        toastError(res.error ?? 'No se ha podido completar la operación.'); return
       }
       const hecho = editando ? 'Cita actualizada' : 'Cita creada'
       toastSuccess(res.avisos?.length ? `${hecho} — ${res.avisos.join(' ')}` : `${hecho}.`)
@@ -746,7 +746,7 @@ function NuevaCitaModal({ data, cita, onClose, onSaved }: {
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (!hora) { toastError('Selecciona una hora disponible.'); return }
+    if (!hora) { toastError('Falta la hora disponible.'); return }
     enviar(new FormData(e.currentTarget), false)
   }
 
@@ -757,8 +757,8 @@ function NuevaCitaModal({ data, cita, onClose, onSaved }: {
       <div className="modal modal-md" role="dialog" aria-modal>
         {forzar && (
           <ConfirmDialog
-            title={editando ? '¿La guardas igualmente?' : '¿La añades igualmente?'}
-            body={`${forzar.motivo} Es tu negocio: puedes ${editando ? 'guardarla' : 'meterla'} de todas formas y quedará marcada como forzada.`}
+            title={editando ? '¿Guardar igualmente?' : '¿Añadir igualmente?'}
+            body={`${forzar.motivo} La decisión es del negocio: se puede ${editando ? 'guardar' : 'añadir'} de todas formas y quedará marcada como forzada.`}
             confirmLabel={editando ? 'Guardar igualmente' : 'Añadir igualmente'}
             onCancel={() => setForzar(null)}
             onConfirm={() => { const fd = forzar.datos; setForzar(null); enviar(fd, true) }}
@@ -830,7 +830,7 @@ function NuevaCitaModal({ data, cita, onClose, onSaved }: {
                   </select>
                   {!loadingSlots && recursoId && horasLibres.length === 0 && (
                     <span className="input-hint input-hint-danger">
-                      Sin huecos ese día.{dias.length > 0 ? ` Prueba el ${fechaChip(dias[0].fecha)}.` : ` Revisa el horario del ${data.etiquetas.recurso.toLowerCase()}.`}
+                      Sin huecos ese día.{dias.length > 0 ? ` El siguiente con hueco es el ${fechaChip(dias[0].fecha)}.` : ` El horario del ${data.etiquetas.recurso.toLowerCase()} no cubre ese día.`}
                     </span>
                   )}
                 </div>
@@ -1153,7 +1153,7 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
     startTransition(async () => {
       const res = await cambiarEstadoCita(cambioEstado.cita.reserva_id, cambioEstado.a)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setCambioEstado(null); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); setCambioEstado(null); return }
       toastSuccess(`Cita ${ESTADO_LABEL[cambioEstado.a].toLowerCase()}.`)
       setCambioEstado(null); router.refresh()
     })
@@ -1164,7 +1164,7 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
     startTransition(async () => {
       const res = await eliminarServicio(delServicio.servicio_id)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setDelServicio(null); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); setDelServicio(null); return }
       toastSuccess('Servicio eliminado.'); setDelServicio(null); router.refresh()
     })
   }
@@ -1174,7 +1174,7 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
     startTransition(async () => {
       const res = await eliminarRecurso(delRecurso.recurso_id)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); setDelRecurso(null); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); setDelRecurso(null); return }
       toastSuccess(`${et.recurso} eliminado.`); setDelRecurso(null); router.refresh()
     })
   }
@@ -1183,7 +1183,7 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
     startTransition(async () => {
       const res = await importarPersonalRRHH()
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess(res.importados ? `${res.importados} importado${res.importados !== 1 ? 's' : ''} de RRHH.` : 'No hay personal nuevo que importar.')
       router.refresh()
     })
@@ -1195,7 +1195,7 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
     startTransition(async () => {
       const res = await guardarSlug(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess('Enlace guardado.'); setEditandoSlug(false); router.refresh()
     })
   }
@@ -1220,7 +1220,7 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
   function handleBotSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!botForm.token.trim() && !botForm.nombre.trim()) {
-      toastError('Introduce al menos el token del bot para guardar la configuración.')
+      toastError('Falta el token del bot.')
       return
     }
     const fd = new FormData(e.currentTarget)
@@ -1229,7 +1229,7 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
     startTransition(async () => {
       const res = await guardarBotConfigCitas(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess('Configuración guardada.'); router.refresh()
     })
   }
@@ -1238,7 +1238,7 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
     startTransition(async () => {
       const res = await eliminarBotConfigCitas()
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess('Bot eliminado.'); router.refresh()
     })
   }
@@ -1247,7 +1247,7 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
     startTransition(async () => {
       const res = await toggleActivoBotCitas(activo)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess(activo ? 'Bot activado.' : 'Bot desactivado.'); router.refresh()
     })
   }
@@ -1257,7 +1257,7 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
     startTransition(async () => {
       const res = await toggleIaBotCitas(activa)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess(activa ? 'La IA gestionará el bot.' : 'La IA ya no gestiona el bot.'); router.refresh()
     })
   }
@@ -1274,12 +1274,12 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
             {/* Estaba a fuego: un gimnasio que llama «Clases» a sus citas veía
                 «Citas» en la página y «Clases» en el menú. */}
             <h1 className="page-title">{data.etiquetas.reservas}</h1>
-            <IaTouchpoint tipo="citas" descripcion="un análisis de tu agenda" />
+            <IaTouchpoint tipo="citas" descripcion="un análisis de la agenda" />
           </div>
           <p className="page-subtitle">
             {activeTab === 'agenda' && totalHoy > 0
               ? `Hoy: ${pendientesHoy} pendientes · ${confirmadasHoy} confirmadas · Total ${totalHoy} citas`
-              : `Gestiona las citas de tu negocio.`}
+              : `Gestiona las citas de el negocio.`}
           </p>
         </div>
         <div className="tes-header-actions">
@@ -1381,7 +1381,7 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
           <div className="mon-empty">
             <CalendarDays size={40} strokeWidth={1} opacity={0.2} />
             <p>{data.citas.length === 0
-              ? 'Aún no hay citas. Crea la primera o comparte tu enlace de reservas.'
+              ? 'Sin citas. Se crean aquí o desde el enlace público.'
               : 'No hay citas para los filtros seleccionados.'}</p>
           </div>
         ) : (
@@ -1616,7 +1616,7 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
         <div className="card-header"><h2 className="card-title">Confirmación automática</h2></div>
         {data.tieneAmbas && (
           <span className="text-xs-muted res-ambito">
-            Solo para citas. Tus reservas tienen la suya.
+            Solo para citas. Las reservas tienen la suya.
           </span>
         )}
       <div className="res-conf-item">
@@ -1629,7 +1629,7 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
                   : 'La IA creará las citas pendientes para que tú las confirmes.')
               : (confirmAuto
                   ? 'Las citas se confirman solas al crearse; el cliente lo ve al instante.'
-                  : 'Tú confirmas cada cita; el cliente queda pendiente hasta que la revises.')}
+                  : 'Cada cita se confirma manualmente; hasta entonces el cliente queda pendiente.')}
           </span>
         </div>
         <label className="switch">
@@ -1647,7 +1647,7 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
         {data.tieneAmbas && (
           <span className="text-xs-muted res-ambito">
             La ruta <code>/citas</code> es solo de Citas, pero <strong>la dirección es del
-            negocio</strong>: si la cambias aquí, cambia también en Reservas y en tu catálogo.
+            negocio</strong>: si la cambias aquí, cambia también en Reservas y en el catálogo.
           </span>
         )}
         {data.slug && !editandoSlug ? (
@@ -1658,7 +1658,7 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
                 <tr>
                   <td data-label="Enlace">
                     <strong>{host}/{data.slug}/citas</strong>
-                    <div className="text-xs-muted">Compártelo para que tus clientes pidan cita en línea.</div>
+                    <div className="text-xs-muted">Este es el enlace público de citas.</div>
                   </td>
                   <td className="col-actions">
                     <RowActions>
@@ -1677,12 +1677,12 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
             <div className="ter-form-grid res-conf-pad-top">
               <div className="input-group ter-col-full">
                 <div className="form-label-with-help">
-                  <label>{data.slug ? 'Modificar tu enlace' : 'Tu dirección web para compartir'}</label>
+                  <label>{data.slug ? 'Modificar el enlace' : 'La dirección web para compartir'}</label>
                   <FormHelp text="Solo letras, números y guiones." label="Qué puede llevar el enlace" />
                 </div>
                 <div className="res-slug-wrap">
                   <span className="res-slug-prefix">{host}/</span>
-                  <input className="input" name="slug" placeholder="tu-negocio" value={slugForm} onChange={e => setSlugForm(e.target.value)} />
+                  <input className="input" name="slug" placeholder="nombre-del-negocio" value={slugForm} onChange={e => setSlugForm(e.target.value)} />
                   <span className="res-slug-suffix">/citas</span>
                 </div>
               </div>
@@ -1708,7 +1708,7 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
         <div className="card-header"><h2 className="card-title">Bot de Telegram · Citas</h2></div>
         {data.tieneAmbas && (
           <span className="text-xs-muted res-ambito">
-            Solo para Citas. Tus Reservas tienen su propio bot, con otro token y otro
+            Solo para Citas. Reservas tiene su propio bot, con otro token y otro
             código de vínculo, en <strong>Reservas › Configuración</strong>.
           </span>
         )}
@@ -1748,17 +1748,17 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
 
             {!data.bot_config.notificar_owner_chat_id ? (
               <div className="info-box">
-                <strong className="info-box-title">Vincula tu chat para recibir avisos</strong>
+                <strong className="info-box-title">Chat sin vincular</strong>
                 <span className="text-xs-muted">
-                  Abre tu bot de <strong>Citas</strong> en Telegram y envía <code>/start {data.bot_config.codigo_vinculo ?? '—'}</code>.
-                  Es un código distinto del de Reservas. Recibirás ahí cada cita nueva, con botones para confirmarla o rechazarla.
+                  En el bot de <strong>Citas</strong> de Telegram, el comando <code>/start {data.bot_config.codigo_vinculo ?? '—'}</code> vincula el chat.
+                  Es un código distinto del de Reservas. A partir de ahí llega cada cita nueva, con botones para confirmarla o rechazarla.
                 </span>
               </div>
             ) : (
               <div className="info-box">
                 <span className="text-xs-muted">
-                  ✓ Chat del dueño vinculado · recibes los avisos de citas nuevas. Si cambias de móvil
-                  o de cuenta de Telegram, vuelve a enviar <code>/start {data.bot_config.codigo_vinculo ?? '—'}</code>.
+                  Chat del dueño vinculado · los avisos de citas nuevas llegan ahí. Al cambiar de móvil
+                  o de cuenta de Telegram, hay que enviar de nuevo <code>/start {data.bot_config.codigo_vinculo ?? '—'}</code>.
                 </span>
               </div>
             )}
@@ -1770,8 +1770,8 @@ export default function CitasView({ data, puedeEditar, children }: { data: Citas
             <div className="info-box">
               <strong className="info-box-title">Cómo configurarlo</strong>
               <span className="text-xs-muted">
-                Este bot es independiente del de Reservas. Abre <strong>@BotFather</strong> en Telegram, crea un bot con <code>/newbot</code> y pega aquí el token.
-                Tras guardar verás un código para vincular tu chat y recibir los avisos de citas.
+                Este bot es independiente del de Reservas. En <strong>@BotFather</strong> de Telegram, <code>/newbot</code> crea un bot y devuelve el token.
+                Al guardar aparece el código con el que se vincula el chat que recibirá los avisos.
               </span>
             </div>
 

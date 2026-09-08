@@ -60,7 +60,7 @@ export default function CierresView({ data, pendientes, puedeEditar }: Props) {
       <div className="page-header">
         <div>
           <h1 className="page-title">Cierres</h1>
-          <p className="page-subtitle">Cierres de caja de tus puntos de venta, con el resumen de cada día.</p>
+          <p className="page-subtitle">Cierres de caja de los puntos de venta, con el resumen de cada día.</p>
         </div>
         <div className="tes-header-actions">
           <ExportarMenu clave="cierres_caja" />
@@ -127,7 +127,7 @@ function PendientesTabla({ items, cajaNombre, puedeEditar }: {
             lo que falta es el CIERRE, que es otra cosa. */}
         <span>
           Estas ventas ya llegaron a Claux —<strong>no es un problema de sincronización</strong>—, pero
-          todavía <strong>no están en tu contabilidad</strong>: su turno no se cerró, y es el cierre lo que
+          todavía <strong>no están en la contabilidad</strong>: su turno no se cerró, y es el cierre lo que
           lleva el dinero a Tesorería y descuenta el stock. Ciérralos desde aquí y se registrarán con
           <strong> la fecha en que se vendieron</strong>, no con la de hoy.
         </span>

@@ -71,7 +71,7 @@ export default function ContratarMasBanner({
       setEnviando(null)
       if (!r.ok) { toastError(r.error ?? 'No se pudo enviar.'); return }
       setPedidos(prev => ({ ...prev, [clave]: 'ahora' }))
-      toastSuccess('Recibido. Te contactamos enseguida.')
+      toastSuccess('Solicitud recibida.')
       void notificaciones?.refrescar()
     })
   }
@@ -110,7 +110,7 @@ export default function ContratarMasBanner({
             ? <><span className="spinner spinner-sm" /> Enviando…</>
             : pedido
               ? <><Check size={13} aria-hidden="true" />
-                  {pedido === 'ahora' ? 'Te contactamos' : `Pedido el ${pedido} · te contactamos`}</>
+                  {pedido === 'ahora' ? 'Solicitud registrada' : `Pedido el ${pedido}`}</>
               : <>Me interesa <ArrowRight size={13} aria-hidden="true" /></>}
         </span>
       </button>
@@ -120,10 +120,10 @@ export default function ContratarMasBanner({
   return (
     <section className="dash-cta">
       <div className="dash-cta-head">
-        <span className="dash-cta-badge"><Sparkles size={13} aria-hidden="true" /> Amplía tu CLAUX</span>
-        <h2 className="dash-cta-titulo">Tu negocio puede hacer más</h2>
+        <span className="dash-cta-badge"><Sparkles size={13} aria-hidden="true" /> Ampliar CLAUX</span>
+        <h2 className="dash-cta-titulo">Módulos disponibles</h2>
         <p className="dash-cta-sub">
-          Esto es lo que puedes activar. Lo dejamos funcionando y con tus datos dentro.
+          Se entregan configurados y con los datos del negocio dentro.
         </p>
       </div>
 

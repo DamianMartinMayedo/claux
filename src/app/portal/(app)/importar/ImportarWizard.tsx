@@ -229,9 +229,9 @@ function BuscarFicha({
         type="text"
         autoComplete="off"
         disabled={cargando}
-        aria-label={`Buscar entre tus ${etiquetaTipo.toLowerCase()}s`}
+        aria-label={`Buscar entre los ${etiquetaTipo.toLowerCase()}s`}
         placeholder={opciones.length > 6
-          ? `Busca entre tus ${opciones.length} fichas…`
+          ? `Buscar entre ${opciones.length} fichas…`
           : 'Busca la ficha que es…'}
         value={texto || elegida?.etiqueta || ''}
         onChange={e => { setTexto(e.target.value); setAbierto(true); setActivo(0) }}
@@ -987,7 +987,7 @@ export default function ImportarWizard({ entidadesPermitidas, iaOn }: {
     setCargando(true)
     try {
       const res = await obtenerCamposEntidad(lote.entidad)
-      if (!res.ok || !res.campos) { setCargando(false); toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok || !res.campos) { setCargando(false); toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       const ds = (res.defaults ?? []) as Default[]
       const gl = { ...valoresDe(ds), ...globales }
       const en = ENTIDADES.find(e => e.id === lote.entidad)
@@ -1015,11 +1015,11 @@ export default function ImportarWizard({ entidadesPermitidas, iaOn }: {
       const res = await plantillaFacturasLiangApp(mig.migracion_id)
       await ld.dismiss()
       setBajandoFacturas(false)
-      if (!res.ok || !res.base64) { toastError(res.error ?? 'No se pudo generar la plantilla.'); return }
+      if (!res.ok || !res.base64) { toastError(res.error ?? 'No se ha podido generar la plantilla.'); return }
       for (const a of res.avisos ?? []) toastError(a)
       descargarBase64(res.nombre ?? 'facturas.xlsx', res.base64, XLSX_MIME)
     } catch {
-      toastError('No se ha podido generar la plantilla. Vuelve a intentarlo.')
+      toastError('No se ha podido generar la plantilla.')
     } finally {
       await ld.dismiss()
       setBajandoFacturas(false)
@@ -1033,7 +1033,7 @@ export default function ImportarWizard({ entidadesPermitidas, iaOn }: {
       const res = await obtenerCamposEntidad(en.id)
       await ld.dismiss()
       setCargando(false)
-      if (!res.ok || !res.campos) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok || !res.campos) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       // El archivo pertenece a la entidad con la que se subió: al elegir entidad se
       // suelta, o se acabaría mapeando las columnas de un archivo a los campos de otra.
       setLoteId(''); setCabeceras([]); setTotal(0); setColumnas({}); setAvisos([]); setResultado(null)
@@ -1207,10 +1207,10 @@ export default function ImportarWizard({ entidadesPermitidas, iaOn }: {
       const res = await plantillaImport(entidad)
       await ld.dismiss()
       setBajandoPlantilla(false)
-      if (!res.ok || !res.base64) { toastError(res.error ?? 'No se pudo generar la plantilla.'); return }
+      if (!res.ok || !res.base64) { toastError(res.error ?? 'No se ha podido generar la plantilla.'); return }
       descargarBase64(res.nombre ?? `plantilla-${entidad}.xlsx`, res.base64, XLSX_MIME)
     } catch {
-      toastError('No se ha podido generar la plantilla. Vuelve a intentarlo.')
+      toastError('No se ha podido generar la plantilla.')
     } finally {
       await ld.dismiss()
       setBajandoPlantilla(false)
@@ -1671,7 +1671,7 @@ export default function ImportarWizard({ entidadesPermitidas, iaOn }: {
     // a aplicar sin él (D2), y descubrirlo dos pasos después es trabajo tirado.
     : !conEstado(mig)    ? 'Falta el Estado de rendimiento financiero. Vuelve a subir archivos y añádelo: sin él la migración no se aplica.'
     : !enCuadre.length   ? 'No queda ninguna cuenta dentro de la migración. Vuelve a incluir al menos una.'
-    : enCuadre.some(f => !f.cuadra) ? 'Hay cuentas que no cuadran con tu Estado de rendimiento financiero. Apártalas o corrige sus archivos.'
+    : enCuadre.some(f => !f.cuadra) ? 'Hay cuentas que no cuadran con el Estado de rendimiento financiero: hay que apartarlas o corregir sus archivos.'
     : faltaDef           ? `Indica ${faltaDef.etiqueta.toLowerCase()} en «Dónde entra».`
     : sinClasificar > 0  ? `Elige la categoría de ${sinClasificar} ${sinClasificar === 1 ? 'grupo' : 'grupos'} de gasto.`
     : ''
@@ -1687,7 +1687,7 @@ export default function ImportarWizard({ entidadesPermitidas, iaOn }: {
       <div className="page-header">
         <div>
           <h1 className="page-title">Importar datos</h1>
-          <p className="page-subtitle">Carga masiva de tus datos desde un archivo CSV o Excel.</p>
+          <p className="page-subtitle">Carga masiva de datos desde un archivo CSV o Excel.</p>
         </div>
       </div>
 
@@ -2221,7 +2221,7 @@ export default function ImportarWizard({ entidadesPermitidas, iaOn }: {
                   cargando={diagPensando}
                   error={diagError}
                   cargandoTexto="Leyendo los errores…"
-                  descargo="Generado por IA a partir de tus datos · compruébalo en el archivo."
+                  descargo="Generado por IA a partir de los datos cargados · conviene contrastarlo con el archivo."
                   onReintentar={diagReintento ? () => explicarConIa(agruparParaIa(erroresAgrupados)) : undefined}
                   onCerrar={() => { setDiag(null); setDiagError(null) }}
                 />
@@ -2350,7 +2350,7 @@ export default function ImportarWizard({ entidadesPermitidas, iaOn }: {
                 <button type="button" className="btn btn-primary" onClick={() => validar()} disabled={cargando}>
                   {cargando
                     ? <><span className="spinner spinner-sm" /> Comprobando {etiquetaProgreso}…</>
-                    : <>Recalcular con tus decisiones <ArrowRight size={15} strokeWidth={2} /></>}
+                    : <>Recalcular con las decisiones <ArrowRight size={15} strokeWidth={2} /></>}
                 </button>
               ) : (
                 <button type="button" className="btn btn-primary" onClick={aplicar}

@@ -60,25 +60,25 @@ export const CATALOGO = {
   // ── Suscripción / plataforma (siempre activa, no depende de módulo) ─────────
   suscripcion_por_vencer: {
     categoria: 'suscripcion', modulo: null, severidad: 'aviso', implementado: true,
-    etiqueta: 'Tu suscripción está por vencer',
-    descripcion: 'Aviso antes de que caduque tu suscripción a CLAUX.',
+    etiqueta: 'La suscripción está por vencer',
+    descripcion: 'Aviso previo a la caducidad de la suscripción a CLAUX.',
     umbrales: ['15d', '5d', '1d'], porUmbral: { '1d': 'urgente' },
   },
   suscripcion_vencida: {
     categoria: 'suscripcion', modulo: null, severidad: 'urgente', implementado: true,
-    etiqueta: 'Tu suscripción ha vencido',
-    descripcion: 'Tu suscripción caducó y el acceso puede cortarse.',
+    etiqueta: 'Suscripción vencida',
+    descripcion: 'La suscripción ha caducado y el acceso puede interrumpirse.',
     umbrales: ['vencido'],
   },
   periodo_gracia_activado: {
     categoria: 'suscripcion', modulo: null, severidad: 'aviso', implementado: true,
-    etiqueta: 'Se activó tu período especial',
-    descripcion: 'Te avisamos cuando te damos más tiempo para ponerte al día sin perder el acceso.',
+    etiqueta: 'Período especial activado',
+    descripcion: 'Aviso de la ampliación de plazo concedida para regularizar el pago sin perder el acceso.',
   },
   pago_confirmado: {
     categoria: 'suscripcion', modulo: null, severidad: 'info', implementado: true,
     etiqueta: 'Pago confirmado',
-    descripcion: 'Confirmamos la recepción de tu pago.',
+    descripcion: 'Acuse de recibo del pago.',
   },
   // Acuse de recibo de «Me interesa» (banner de captación del dashboard). Va en
   // la campana y NO como popup: el dueño acaba de pulsarlo, saltarle un aviso
@@ -86,33 +86,33 @@ export const CATALOGO = {
   // que se pidió, y cuándo, fuera del propio widget.
   contratacion_solicitada: {
     categoria: 'suscripcion', modulo: null, severidad: 'info', implementado: true,
-    etiqueta: 'Pediste activar algo nuevo',
-    descripcion: 'Confirmación de que recibimos tu solicitud de activar un módulo.',
+    etiqueta: 'Solicitud de activación enviada',
+    descripcion: 'Acuse de recibo de la solicitud de activar un módulo.',
   },
   ia_cupo_cerca: {
     categoria: 'suscripcion', modulo: 'asistente_ia', severidad: 'aviso', implementado: true,
     etiqueta: 'Cupo de IA cerca del tope',
-    descripcion: 'Tu consumo mensual del asistente se acerca al límite.',
+    descripcion: 'El consumo mensual del asistente se acerca al límite.',
   },
   // Capacidad del nivel contratado (productos, trabajadores, empresas…). `modulo:
   // null` = plataforma: el tope existe tenga los módulos que tenga, y el aviso ha
   // de llegar igual al que solo tiene RRHH que al que lo tiene todo.
   limite_cerca: {
     categoria: 'suscripcion', modulo: null, severidad: 'aviso', implementado: true,
-    etiqueta: 'Cerca del tope de tu nivel',
-    descripcion: 'Te quedan pocos huecos en algo que tu nivel limita (productos, trabajadores, empresas…).',
+    etiqueta: 'Cerca del tope del nivel',
+    descripcion: 'Quedan pocos huecos en algo que el nivel limita (productos, trabajadores, empresas…).',
   },
   limite_alcanzado: {
     categoria: 'suscripcion', modulo: null, severidad: 'urgente', implementado: true,
-    etiqueta: 'Llegaste al tope de tu nivel',
-    descripcion: 'Se llenó algo que tu nivel limita. No se corta nada, pero no puedes añadir más.',
+    etiqueta: 'Tope del nivel alcanzado',
+    descripcion: 'Se ha llenado algo que el nivel limita. No se interrumpe nada, pero no admite más altas.',
   },
   // Documentos legales del alta sin firmar. `modulo: null` = plataforma: aplica a
   // todo cliente, tenga los módulos que tenga. La lanza el admin como recordatorio.
   documentos_firma_pendiente: {
     categoria: 'suscripcion', modulo: null, severidad: 'aviso', implementado: true,
     etiqueta: 'Documentos pendientes de firma',
-    descripcion: 'Tienes el NDA, el contrato o el presupuesto sin firmar en tu perfil.',
+    descripcion: 'El NDA, el contrato o el presupuesto siguen sin firmar en el perfil.',
   },
 
   // ── Reservas y Citas ───────────────────────────────────────────────────────
@@ -142,7 +142,7 @@ export const CATALOGO = {
   reservas_hoy: {
     categoria: 'reservas', modulo: ['reservas_citas', 'agenda'], severidad: 'info', implementado: true,
     etiqueta: 'Resumen de hoy',
-    descripcion: 'Cuántas reservas y citas tienes para hoy.',
+    descripcion: 'Reservas y citas previstas para hoy.',
   },
   reserva_pendiente_confirmar: {
     categoria: 'reservas', modulo: ['reservas_citas', 'agenda'], severidad: 'aviso', implementado: true,
@@ -154,7 +154,7 @@ export const CATALOGO = {
   bot_sin_vincular: {
     categoria: 'reservas', modulo: ['reservas_citas', 'agenda'], severidad: 'aviso', implementado: true,
     etiqueta: 'Bot sin vincular',
-    descripcion: 'Tu bot está activo pero no has vinculado tu chat: no te llega ningún aviso.',
+    descripcion: 'El bot está activo pero el chat no está vinculado: los avisos no llegan.',
   },
   telegram_no_entregado: {
     categoria: 'reservas', modulo: ['reservas_citas', 'agenda'], severidad: 'aviso', implementado: true,
@@ -164,7 +164,7 @@ export const CATALOGO = {
   agenda_sin_configurar: {
     categoria: 'reservas', modulo: ['reservas_citas', 'agenda'], severidad: 'aviso', implementado: true,
     etiqueta: 'Web publicada sin configurar',
-    descripcion: 'Tu enlace público está activo pero no hay nada que ofrecer todavía.',
+    descripcion: 'El enlace público está activo pero todavía no hay nada que ofrecer.',
   },
 
   // ── Finanzas (base contable) ───────────────────────────────────────────────
@@ -182,7 +182,7 @@ export const CATALOGO = {
   cxp_vencida: {
     categoria: 'finanzas', modulo: 'base', severidad: 'urgente', implementado: true,
     etiqueta: 'Pago vencido',
-    descripcion: 'Le debes dinero a un proveedor y ya pasó la fecha.',
+    descripcion: 'Una deuda con un proveedor ha pasado su fecha de pago.',
     umbrales: ['vencido'],
   },
   // ⚠️ Este tipo NACIÓ de una premisa que resultó falsa: «antes del vencimiento no hay
@@ -239,7 +239,7 @@ export const CATALOGO = {
   caja_venta_sin_contabilizar: {
     categoria: 'finanzas', modulo: 'caja', severidad: 'urgente', implementado: true,
     etiqueta: 'Ventas de caja sin contabilizar',
-    descripcion: 'Hay ventas cuyo turno no se cerró, así que no están en tu contabilidad.',
+    descripcion: 'Hay ventas de turnos sin cerrar, y no están en la contabilidad.',
   },
   caja_cierre_sin_contabilizar: {
     categoria: 'finanzas', modulo: 'caja', severidad: 'urgente', implementado: true,
@@ -294,7 +294,7 @@ export const CATALOGO = {
   cumpleanos_empleado: {
     categoria: 'rrhh', modulo: 'rrhh', severidad: 'info', implementado: true,
     etiqueta: 'Cumpleaños de un empleado',
-    descripcion: 'El día que alguien de tu equipo cumple años.',
+    descripcion: 'El día del cumpleaños de una persona del equipo.',
   },
   documento_empleado_vence: {
     categoria: 'rrhh', modulo: 'rrhh', severidad: 'aviso', implementado: true,
@@ -373,7 +373,7 @@ export const CATALOGO = {
   dossier_snapshot_desactualizado: {
     categoria: 'dossier', modulo: 'dossier', severidad: 'info', implementado: true,
     etiqueta: 'Dossier desactualizado',
-    descripcion: 'Tu dossier publicado muestra números viejos.',
+    descripcion: 'El dossier publicado muestra cifras desactualizadas.',
   },
 
   // ── Equipo ─────────────────────────────────────────────────────────────────

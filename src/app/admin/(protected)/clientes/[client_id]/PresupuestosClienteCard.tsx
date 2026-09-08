@@ -51,7 +51,7 @@ export default async function PresupuestosClienteCard({
               /* Un cobro de instalación sin presupuesto detrás no se puede contrastar con
                  horas reales. No es un error —el alta manual es legítima— pero se dice. */
               ? `${nombreEmpresa} tiene un pago de configuración sin presupuesto detrás: no hay horas cotizadas con las que compararlo.`
-              : 'Sin presupuestos. Crea uno para cotizar una instalación o una ampliación.'}
+              : 'Sin presupuestos registrados.'}
           </p>
         </div>
       ) : (

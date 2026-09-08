@@ -131,9 +131,9 @@ export interface ResultadoGaveta {
 export async function clasificarGaveta(decisiones: DecisionGaveta[]): Promise<ResultadoGaveta> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (session.solo_lectura) return { ok: false, error: 'Tu cuenta es de solo lectura.' }
+  if (session.solo_lectura) return { ok: false, error: 'Cuenta de solo lectura.' }
   if (!(await puedeEditarModulo('base'))) {
-    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+    return { ok: false, error: 'Sin permiso para editar en este módulo.' }
   }
   if (!decisiones.length) return { ok: false, error: 'No has clasificado ninguna operación.' }
 

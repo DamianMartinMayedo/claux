@@ -47,7 +47,7 @@ export default function ContabilidadWidget({ data }: { data: ContabilidadResumen
             <Link href="/portal/ventas" className="btn-ghost-xs">Ver facturas</Link>
           </h3>
           {data.ultimasFacturas.length === 0 ? (
-            <p className="dash-muted">Aún no hay facturas emitidas.</p>
+            <p className="dash-muted">Sin facturas emitidas.</p>
           ) : (
             <ul className="dash-list">
               {data.ultimasFacturas.map(f => (

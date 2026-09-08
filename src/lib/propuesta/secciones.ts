@@ -6,7 +6,7 @@
 // MUEVE. Así que aquí no hay una lista de sitios, hay un orden por defecto y dos
 // listas que lo modifican (`secciones_ocultas`, `secciones_orden`).
 //
-// Dos de las secciones se REPITEN: «Pensado para tu negocio» sale una vez por
+// Dos de las secciones se REPITEN: «Pensado para su negocio» sale una vez por
 // cada tres módulos (Fangio la lleva dos veces, con seis módulos) y las capturas
 // una por imagen. Sus claves llevan sufijo —`pensado:1`, `captura:12`— para que
 // se puedan ocultar y mover una a una, que es lo que hizo AUGE al meter la
@@ -27,10 +27,10 @@ export const SECCIONES = [
   { clave: 'entendimos',        etiqueta: 'Lo que entendimos',       fija: false },
   { clave: 'que_es',            etiqueta: '¿Qué es CLAUX?',          fija: false },
   { clave: 'problema',          etiqueta: 'El problema que resuelve', fija: false },
-  { clave: 'pensado',           etiqueta: 'Pensado para tu negocio', fija: false },
+  { clave: 'pensado',           etiqueta: 'Pensado para este negocio', fija: false },
   { clave: 'capturas',          etiqueta: 'Los módulos por dentro',  fija: false },
   { clave: 'precios',           etiqueta: 'Precios',                 fija: false },
-  { clave: 'tu_propuesta',      etiqueta: 'Tu propuesta',            fija: false },
+  { clave: 'tu_propuesta',      etiqueta: 'La propuesta',            fija: false },
   { clave: 'como_se_configura', etiqueta: 'Cómo se configura',       fija: false },
   { clave: 'confianza',         etiqueta: 'Por qué confiar en CLAUX', fija: false },
   { clave: 'empecemos',         etiqueta: 'Empecemos',               fija: true },
@@ -80,7 +80,7 @@ export function ordenar<T extends { clave: string }>(slides: T[], orden: readonl
     .map(x => x.s)
 }
 
-/** Cuántos módulos caben en una diapositiva de «Pensado para tu negocio». */
+/** Cuántos módulos caben en una diapositiva de «Pensado para su negocio». */
 /**
  * Las claves de `propuesta_textos` que el editor puede escribir, aparte de los
  * `modulo:<clave>` (que son tantos como módulos y se validan por el prefijo).

@@ -206,7 +206,7 @@ export async function actualizarUsuarioAdmin(email: string, args: {
 
   // No permitir que un super_admin se auto-desactive/degrade (evita quedarse fuera).
   if (clave === ctx.email && (rol !== 'super_admin' || !args.activo)) {
-    return { ok: false, error: 'No puedes cambiar tu propio rol ni desactivarte.' }
+    return { ok: false, error: 'El rol propio no se cambia ni se desactiva desde aquí.' }
   }
 
   const db = createAdminClient()
@@ -336,7 +336,7 @@ export async function resetPasswordUsuarioAdmin(email: string, nuevaPassword: st
 export async function eliminarUsuarioAdmin(email: string): Promise<Resp> {
   const ctx = await requireSuperAdmin()
   const clave = (email || '').trim().toLowerCase()
-  if (clave === ctx.email) return { ok: false, error: 'No puedes eliminar tu propio usuario.' }
+  if (clave === ctx.email) return { ok: false, error: 'La propia cuenta no se elimina desde aquí.' }
 
   const db = createAdminClient()
   const { data: fila } = await db.from('admin_users').select('auth_user_id').eq('email', clave).maybeSingle()

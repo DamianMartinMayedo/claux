@@ -109,7 +109,7 @@ export default function DossierWizard({
         <div>
           <h1 className="page-title">Dossier del negocio</h1>
           <p className="page-subtitle">
-            Prepara la presentación de tus números para un inversor. Se guarda solo a cada paso: puedes salir y volver.
+            Presentación de los números del negocio para un inversor. Se guarda solo a cada paso.
           </p>
         </div>
       </div>
@@ -188,10 +188,10 @@ export default function DossierWizard({
           <section className="card dos-listo">
             <div className="dos-body">
               <PartyPopper size={40} strokeWidth={1.5} className="dos-listo-icono" />
-              <h2 className="dos-section-title">Tu dossier está listo</h2>
+              <h2 className="dos-section-title">Dossier listo</h2>
               <p className="dos-section-hint">
-                Ya puedes ver tu estado de resultados y descargarlo en PDF. Todo lo que has escrito se edita
-                cuando quieras desde «Mi dossier», sin repetir este proceso.
+                El estado de resultados ya se puede consultar y descargar en PDF. Todo lo escrito se edita
+                después desde «Mi dossier», sin repetir este proceso.
               </p>
               <div className="dos-acciones">
                 <button className="btn btn-primary" onClick={onTerminar}>Ir a mi dossier</button>

@@ -146,7 +146,7 @@ export async function guardarBotConfigCol(
       })
       const whData = await whRes.json() as { ok?: boolean; description?: string }
       nuevaConfig.webhook_registrado = !!whData.ok
-      if (!whData.ok) return { ok: false, error: `Error al registrar el webhook: ${whData.description}` }
+      if (!whData.ok) return { ok: false, error: `No se ha podido registrar el webhook: ${whData.description}` }
     } catch {
       return { ok: false, error: 'No se pudo conectar con Telegram para registrar el webhook.' }
     }

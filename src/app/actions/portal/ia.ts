@@ -67,8 +67,8 @@ async function requireAddonIa(): Promise<{ clientId: string; nombreUsuario: stri
 }
 
 function mensajeError(e: unknown): string {
-  if (e instanceof IaNoConfigurada) return 'El asistente aún no está configurado. Inténtalo más tarde.'
-  return 'No pude generar la respuesta ahora mismo. Inténtalo de nuevo en un momento.'
+  if (e instanceof IaNoConfigurada) return 'El asistente aún no está configurado.'
+  return 'No se ha podido generar la respuesta.'
 }
 
 export type IaRespuesta = { ok: true; texto: string } | { ok: false; error: string }
@@ -91,7 +91,7 @@ export async function chatAgenteIa(historial: TurnoChat[], mensaje: string): Pro
   const guard = await requireAddonIa()
   if ('error' in guard) return { ok: false, error: guard.error }
   const texto0 = (mensaje ?? '').trim()
-  if (!texto0) return { ok: false, error: 'Escribe un mensaje.' }
+  if (!texto0) return { ok: false, error: 'Falta el mensaje.' }
   try {
     const hist = Array.isArray(historial) ? historial.slice(-8) : []
     const texto = await responderChat(guard.clientId, hist, texto0, guard.nombreUsuario, guard.cuenta)
@@ -208,7 +208,7 @@ export async function revisarNominaIa(nomina_id: string): Promise<IaTextoOpciona
   const texto = await revisarNomina(guard.clientId, {
     periodo: nomina.periodo, moneda: nomina.moneda, modelo, lineas: filasIa,
   })
-  if (!texto) return { ok: false, error: 'No pude revisar la nómina ahora mismo. Inténtalo de nuevo.' }
+  if (!texto) return { ok: false, error: 'No se ha podido revisar la nómina ahora mismo.' }
   return { ok: true, texto }
 }
 
@@ -263,7 +263,7 @@ export async function explicarReciboIa(
   }
 
   const texto = await explicarRecibo(guard.clientId, entrada)
-  if (!texto) return { ok: false, error: 'No pude preparar la explicación ahora mismo. Inténtalo de nuevo.' }
+  if (!texto) return { ok: false, error: 'No se ha podido preparar la explicación ahora mismo.' }
   return { ok: true, texto }
 }
 
@@ -274,7 +274,7 @@ export async function autocompletarItemCatalogo(nombre: string): Promise<IaSuger
   const guard = await requireAddonIa()
   if ('error' in guard) return { ok: false, error: guard.error }
   const nombre0 = (nombre ?? '').trim()
-  if (!nombre0) return { ok: false, error: 'Escribe primero el nombre del producto.' }
+  if (!nombre0) return { ok: false, error: 'Falta el nombre del producto.' }
 
   const db = createAdminClient()
   const { data: cli } = await db.from('clients').select('sector').eq('client_id', guard.clientId).single()
@@ -291,7 +291,7 @@ export async function autocompletarItemCatalogo(nombre: string): Promise<IaSuger
 
   try {
     const sugerencia = await sugerirDatosItem(guard.clientId, nombre0, etiquetas.catalogo, sector, esComida)
-    if (!sugerencia) return { ok: false, error: 'No pude generar sugerencias ahora mismo. Inténtalo de nuevo.' }
+    if (!sugerencia) return { ok: false, error: 'No se ha podido generar sugerencias ahora mismo.' }
     return { ok: true, sugerencia }
   } catch (e) {
     console.error('[ia] autocompletarItemCatalogo', e)
@@ -317,7 +317,7 @@ export async function autocompletarFichaProducto(
   const guard = await requireAddonIa()
   if ('error' in guard) return { ok: false, error: guard.error }
   const nombre0 = (nombre ?? '').trim()
-  if (!nombre0) return { ok: false, error: 'Escribe primero el nombre.' }
+  if (!nombre0) return { ok: false, error: 'Falta el nombre.' }
 
   const db = createAdminClient()
   const tipo = esServicio ? 'SERVICIO' : 'PRODUCTO'
@@ -335,7 +335,7 @@ export async function autocompletarFichaProducto(
       Array.isArray(unidades) ? unidades : [],
       ((cats ?? []) as { categoria_id: string; nombre: string }[]),
     )
-    if (!sugerencia) return { ok: false, error: 'No pude generar sugerencias ahora mismo. Inténtalo de nuevo.' }
+    if (!sugerencia) return { ok: false, error: 'No se ha podido generar sugerencias ahora mismo.' }
     return { ok: true, sugerencia }
   } catch (e) {
     console.error('[ia] autocompletarFichaProducto', e)
@@ -382,7 +382,7 @@ export async function interpretarConteo(conteo_id: string, dictado: string): Pro
 
   try {
     const items = await interpretarConteoDictado(guard.clientId, texto)
-    if (!items) return { ok: false, error: 'No pude interpretar lo que has dictado. Inténtalo de nuevo.' }
+    if (!items) return { ok: false, error: 'No se ha podido interpretar lo que has dictado.' }
     const { reconocidos, noReconocidos } = emparejarConteo(
       items, (prods ?? []) as { producto_id: string; nombre: string; codigo: string }[],
     )
@@ -413,7 +413,7 @@ export async function redactarSeccionDossier(clave: string, borrador?: string): 
     db.from('dossiers').select('dossier_id, moneda_presentacion')
       .eq('client_id', guard.clientId).order('created_at', { ascending: true }).limit(1).maybeSingle(),
   ])
-  if (!dos) return { ok: false, error: 'Crea primero tu dossier.' }
+  if (!dos) return { ok: false, error: 'Se requiere un dossier.' }
 
   const [{ data: serieRows }, { data: lineaRows }, { data: seccionRows }] = await Promise.all([
     db.from('dossier_serie').select('mes, ingresos, costo_ventas, gastos_operativos, moneda, origen')
@@ -453,7 +453,7 @@ export async function redactarSeccionDossier(clave: string, borrador?: string): 
       otras,
       borrador: (borrador ?? '').slice(0, 1200),
     })
-    if (!sug?.cuerpo) return { ok: false, error: 'No pude generar un borrador ahora mismo. Inténtalo de nuevo.' }
+    if (!sug?.cuerpo) return { ok: false, error: 'No se ha podido generar un borrador ahora mismo.' }
     return { ok: true, cuerpo: sug.cuerpo }
   } catch (e) {
     console.error('[ia] redactarSeccionDossier', e)
@@ -479,7 +479,7 @@ export async function redactarResumenPortada(dossierId?: string, borrador?: stri
       : dosQuery.order('created_at', { ascending: true }).limit(1)
     ).maybeSingle(),
   ])
-  if (!dos) return { ok: false, error: 'Crea primero tu dossier.' }
+  if (!dos) return { ok: false, error: 'Se requiere un dossier.' }
 
   const [{ data: serieRows }, { data: lineaRows }, { data: seccionRows }] = await Promise.all([
     db.from('dossier_serie').select('mes, ingresos, costo_ventas, gastos_operativos, moneda, origen')
@@ -518,7 +518,7 @@ export async function redactarResumenPortada(dossierId?: string, borrador?: stri
       otras,
       borrador: (borrador ?? '').slice(0, 300),
     })
-    if (!sug?.linea) return { ok: false, error: 'No pude generar un resumen ahora mismo. Inténtalo de nuevo.' }
+    if (!sug?.linea) return { ok: false, error: 'No se ha podido generar un resumen ahora mismo.' }
     return { ok: true, linea: sug.linea }
   } catch (e) {
     console.error('[ia] redactarResumenPortada', e)
@@ -572,7 +572,7 @@ export async function revisarDossierIa(dossierId?: string): Promise<IaRevisionDo
 
   const db = createAdminClient()
   const datos = await datosDossierIa(db, guard.clientId, dossierId)
-  if (!datos) return { ok: false, error: 'Crea primero tu dossier.' }
+  if (!datos) return { ok: false, error: 'Se requiere un dossier.' }
 
   const er = estadoDeResultados(datos.serie, datos.lineas)
   const cifras = datos.serie.length > 0
@@ -591,7 +591,7 @@ export async function revisarDossierIa(dossierId?: string): Promise<IaRevisionDo
       crecimientoPct: Number(datos.dos.crecimiento_mensual_pct) || 0,
       secciones,
     })
-    if (!rev || rev.observaciones.length === 0) return { ok: false, error: 'No pude revisarlo ahora mismo. Inténtalo de nuevo.' }
+    if (!rev || rev.observaciones.length === 0) return { ok: false, error: 'No se ha podido revisarlo ahora mismo.' }
     return { ok: true, observaciones: rev.observaciones }
   } catch (e) {
     console.error('[ia] revisarDossierIa', e)
@@ -612,7 +612,7 @@ export async function traducirDossierIa(dossierId?: string): Promise<IaTraduccio
 
   const db = createAdminClient()
   const datos = await datosDossierIa(db, guard.clientId, dossierId)
-  if (!datos) return { ok: false, error: 'Crea primero tu dossier.' }
+  if (!datos) return { ok: false, error: 'Se requiere un dossier.' }
 
   const conCuerpo = datos.secciones
     .filter(s => s.cuerpo.length > 0)
@@ -629,7 +629,7 @@ export async function traducirDossierIa(dossierId?: string): Promise<IaTraduccio
 
   try {
     const trad = await traducirDossier(guard.clientId, { resumen, secciones: conCuerpo, conceptos })
-    if (!trad) return { ok: false, error: 'No pude traducir ahora mismo. Inténtalo de nuevo.' }
+    if (!trad) return { ok: false, error: 'No se ha podido traducir ahora mismo.' }
     return {
       ok: true,
       resumenEn: trad.resumen,
@@ -653,7 +653,7 @@ export async function redactarRelatoCompleto(dossierId?: string): Promise<IaRela
 
   const db = createAdminClient()
   const datos = await datosDossierIa(db, guard.clientId, dossierId)
-  if (!datos) return { ok: false, error: 'Crea primero tu dossier.' }
+  if (!datos) return { ok: false, error: 'Se requiere un dossier.' }
 
   const er = estadoDeResultados(datos.serie, datos.lineas)
   const cifras = datos.serie.length > 0
@@ -663,7 +663,7 @@ export async function redactarRelatoCompleto(dossierId?: string): Promise<IaRela
   const conContenido = new Set(datos.secciones.filter(s => s.cuerpo.length > 0).map(s => s.clave))
   // Secciones a generar: las vacías y que no sean «equipo». Se generan en orden.
   const pendientes = SECCIONES_RELATO.filter(s => s.clave !== 'equipo' && !conContenido.has(s.clave))
-  if (pendientes.length === 0) return { ok: false, error: 'Ya tienes escritas todas las secciones. Genera una suelta con «Ayúdame a escribir».' }
+  if (pendientes.length === 0) return { ok: false, error: 'Todas las secciones están escritas. Para rehacer una, está «Ayúdame a escribir».' }
 
   const negocio = (datos.cli?.nombre_empresa as string) || 'Mi negocio'
   const sector = (datos.cli?.sector as string | null) ?? null
@@ -684,7 +684,7 @@ export async function redactarRelatoCompleto(dossierId?: string): Promise<IaRela
         otras.push({ etiqueta: espec.etiqueta, cuerpo: sug.cuerpo })
       }
     }
-    if (Object.keys(salida).length === 0) return { ok: false, error: 'No pude generar el borrador ahora mismo. Inténtalo de nuevo.' }
+    if (Object.keys(salida).length === 0) return { ok: false, error: 'No se ha podido generar el borrador ahora mismo.' }
     return { ok: true, secciones: salida }
   } catch (e) {
     console.error('[ia] redactarRelatoCompleto', e)

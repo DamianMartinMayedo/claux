@@ -291,8 +291,8 @@ export async function crearComprasDeReposicion(
 ): Promise<{ ok: boolean; error?: string; creadas?: number; compra_id?: string }> {
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
-  if (!almacen_id) return { ok: false, error: 'Elige el almacén que hay que reponer.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
+  if (!almacen_id) return { ok: false, error: 'Falta el almacén que hay que reponer.' }
   if (!producto_ids?.length) return { ok: false, error: 'No has marcado ningún producto.' }
 
   const db = createAdminClient()
@@ -350,7 +350,7 @@ export async function crearComprasDeReposicion(
       compra_id, numero, client_id: session.client_id,
       empresa_id: destino.empresa_id, almacen_id: destino.almacen_id,
       proveedor_id, fecha: hoy(), moneda, estado: 'BORRADOR', total,
-      notas: `Reposición sugerida para ${destino.nombre}. Revisa cantidades y costes antes de confirmar.`,
+      notas: `Reposición sugerida para ${destino.nombre}. Conviene revisar cantidades y costes antes de confirmar.`,
       updated_at: new Date().toISOString(),
     })
     if (eC) continue
@@ -445,7 +445,7 @@ export async function duplicarCompra(
 ): Promise<{ ok: boolean; error?: string; compra_id?: string }> {
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: orig } = await db.from('compras').select('*')
@@ -465,7 +465,7 @@ export async function duplicarCompra(
   try {
     numero = await siguienteNumeroCompra(db, session.client_id, orig.empresa_id as string, anioDeFecha(hoy))
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Error de numeración.' }
+    return { ok: false, error: e instanceof Error ? e.message : 'No se ha podido numerar el documento.' }
   }
 
   const { error: eC } = await db.from('compras').insert({
@@ -619,7 +619,7 @@ export async function guardarCompra(
 ): Promise<{ ok: boolean; error?: string; compra_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -631,9 +631,9 @@ export async function guardarCompra(
   const notas          = ((formData.get('notas')       as string) ?? '').trim() || null
   const lineas         = parseLineas(formData.get('lineas'))
 
-  if (!almacen_id) return { ok: false, error: 'Selecciona el almacén de entrada.' }
-  if (!moneda)     return { ok: false, error: 'Selecciona la moneda.' }
-  if (lineas.length === 0) return { ok: false, error: 'Añade al menos una línea con cantidad.' }
+  if (!almacen_id) return { ok: false, error: 'Falta el almacén de entrada.' }
+  if (!moneda)     return { ok: false, error: 'Falta la moneda.' }
+  if (lineas.length === 0) return { ok: false, error: 'Falta al menos una línea con cantidad.' }
 
   // El almacén determina la empresa
   const { data: alm } = await db.from('almacenes')
@@ -661,7 +661,7 @@ export async function guardarCompra(
       try {
         numero = await siguienteNumeroCompra(db, session.client_id, empresa_id, anioDeFecha(fecha))
       } catch (e) {
-        return { ok: false, error: e instanceof Error ? e.message : 'Error de numeración.' }
+        return { ok: false, error: e instanceof Error ? e.message : 'No se ha podido numerar el documento.' }
       }
     }
 
@@ -696,7 +696,7 @@ export async function guardarCompra(
   try {
     numero = await siguienteNumeroCompra(db, session.client_id, empresa_id, anioDeFecha(fecha))
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Error de numeración.' }
+    return { ok: false, error: e instanceof Error ? e.message : 'No se ha podido numerar el documento.' }
   }
 
   const { error: cErr } = await db.from('compras').insert({
@@ -731,7 +731,7 @@ export async function guardarCompra(
 export async function confirmarCompra(compra_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db.rpc('inv_confirmar_compra', {
@@ -754,7 +754,7 @@ export async function confirmarCompra(compra_id: string): Promise<{ ok: boolean;
 export async function anularCompra(compra_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db.rpc('inv_anular_compra', {
@@ -777,7 +777,7 @@ export async function anularCompra(compra_id: string): Promise<{ ok: boolean; er
 export async function eliminarCompra(compra_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: compra } = await db.from('compras')
@@ -834,7 +834,7 @@ function loteVacio(error?: string): ResultadoLote {
 export async function eliminarComprasEnLote(ids: string[]): Promise<ResultadoLote> {
   const session = await getPortalSession()
   if (!session)             return loteVacio('Sesión inválida.')
-  if (!(await puedeEditarModulo('inventario'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  if (!(await puedeEditarModulo('inventario'))) return loteVacio('Sin permiso para editar en este módulo.')
 
   const db = createAdminClient()
   const { data: docs } = await db.from('compras')
@@ -859,7 +859,7 @@ export async function eliminarComprasEnLote(ids: string[]): Promise<ResultadoLot
 export async function anularComprasEnLote(ids: string[]): Promise<ResultadoLote> {
   const session = await getPortalSession()
   if (!session)             return loteVacio('Sesión inválida.')
-  if (!(await puedeEditarModulo('inventario'))) return loteVacio('No tienes permiso para editar en este módulo.')
+  if (!(await puedeEditarModulo('inventario'))) return loteVacio('Sin permiso para editar en este módulo.')
 
   const db = createAdminClient()
   const { data: docs } = await db.from('compras')

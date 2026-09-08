@@ -281,7 +281,7 @@ export async function guardarAlmacen(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 
@@ -292,8 +292,8 @@ export async function guardarAlmacen(
   const tipo       = (formData.get('tipo')        as string)?.trim() as TipoAlmacen
 
   if (!nombre)     return { ok: false, error: 'El nombre del almacén es obligatorio.' }
-  if (!empresa_id) return { ok: false, error: 'Debes seleccionar una empresa.' }
-  if (!tipo)       return { ok: false, error: 'Debes seleccionar un tipo de almacén.' }
+  if (!empresa_id) return { ok: false, error: 'Falta la empresa.' }
+  if (!tipo)       return { ok: false, error: 'Falta el tipo de almacén.' }
 
   // Verificar que la empresa pertenece al cliente
   const empresas    = await obtenerEmpresas()
@@ -370,7 +370,7 @@ export async function archivarAlmacen(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const { error } = await createAdminClient()
     .from('almacenes')
@@ -388,7 +388,7 @@ export async function restaurarAlmacen(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
 

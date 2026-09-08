@@ -234,7 +234,7 @@ export async function construirPreview(
 ): Promise<{ ok: boolean; error?: string; preview?: FacturacionPreview }> {
   const [y, m] = periodo.split('-').map(Number)
   if (!y || !m || m < 1 || m > 12) return { ok: false, error: 'Período inválido.' }
-  if (!empresa_id) return { ok: false, error: 'Elige una empresa.' }
+  if (!empresa_id) return { ok: false, error: 'Falta la empresa.' }
 
   const { inicio, fin } = rangoPeriodo(periodo)
   const hoy = hoyStr()
@@ -362,7 +362,7 @@ export async function construirCalendario(
   db: Db, clientId: string, empresa_id: string,
   hoy = hoyStr(), mesesFuturo = 12,
 ): Promise<{ ok: boolean; error?: string; calendario?: CalendarioFacturacion }> {
-  if (!empresa_id) return { ok: false, error: 'Elige una empresa.' }
+  if (!empresa_id) return { ok: false, error: 'Falta la empresa.' }
 
   const mesActual = hoy.slice(0, 7)
   const mesHasta  = sumarMeses(mesActual, mesesFuturo)

@@ -331,7 +331,7 @@ export async function guardarProducto(
   // solo tipo, pero el candado real está aquí (la UI oculta no es control de
   // acceso): sin él, un POST a mano colaría un tipo del módulo que no se paga.
   if (!(await puedeEditarAlgunModulo(modulosDelTipo(tipo))))
-    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+    return { ok: false, error: 'Sin permiso para editar en este módulo.' }
   const moduloDelTipo = tipo === 'SERVICIO' ? 'servicios' : 'inventario'   // solo para revalidar
 
   const unidad = ((formData.get('unidad') as string) ?? '').trim()
@@ -377,7 +377,7 @@ export async function guardarProducto(
       const { count } = await db.from('almacenes')
         .select('*', { count: 'exact', head: true })
         .eq('client_id', session.client_id)
-      if (!count) return { ok: false, error: 'Crea un almacén antes de registrar productos físicos.' }
+      if (!count) return { ok: false, error: 'Registrar productos físicos requiere al menos un almacén.' }
     }
     // Productos y servicios viven en la misma tabla pero son cupos SEPARADOS: con
     // uno solo, contratar Servicios se comería el catálogo de Inventario, y cada
@@ -399,7 +399,7 @@ export async function guardarProducto(
     })
     if (error) {
       console.error('[productos] insert error:', error)
-      return { ok: false, error: `Error al crear: ${error.message}` }
+      return { ok: false, error: `No se ha podido crear: ${error.message}` }
     }
     revalidarFicha(moduloDelTipo)
     return { ok: true, producto_id }
@@ -426,7 +426,7 @@ export async function guardarProducto(
 
   if (error) {
     console.error('[productos] update error:', error)
-    return { ok: false, error: 'Error al actualizar.' }
+    return { ok: false, error: 'No se ha podido actualizar.' }
   }
 
   // Registrar cambios de precio/costo en el historial
@@ -500,7 +500,7 @@ export async function archivarProducto(
   const tipoProd = await tipoDeProducto(session.client_id, producto_id)
   if (!tipoProd) return { ok: false, error: 'Producto no encontrado.' }
   if (!(await puedeEditarAlgunModulo(modulosDelTipo(tipoProd))))
-    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+    return { ok: false, error: 'Sin permiso para editar en este módulo.' }
   const modulo = moduloDeTipo(tipoProd)
 
   const db = createAdminClient()
@@ -510,7 +510,7 @@ export async function archivarProducto(
     .eq('producto_id', producto_id)
     .eq('client_id', session.client_id)
 
-  if (error) return { ok: false, error: 'Error al archivar.' }
+  if (error) return { ok: false, error: 'No se ha podido archivar.' }
   revalidarFicha(modulo)
   return { ok: true }
 }
@@ -523,7 +523,7 @@ export async function restaurarProducto(
   const tipoProd = await tipoDeProducto(session.client_id, producto_id)
   if (!tipoProd) return { ok: false, error: 'Producto no encontrado.' }
   if (!(await puedeEditarAlgunModulo(modulosDelTipo(tipoProd))))
-    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+    return { ok: false, error: 'Sin permiso para editar en este módulo.' }
   const modulo = moduloDeTipo(tipoProd)
 
   const db = createAdminClient()
@@ -541,7 +541,7 @@ export async function restaurarProducto(
     .eq('producto_id', producto_id)
     .eq('client_id', session.client_id)
 
-  if (error) return { ok: false, error: 'Error al restaurar.' }
+  if (error) return { ok: false, error: 'No se ha podido restaurar.' }
   revalidarFicha(modulo)
   return { ok: true }
 }
@@ -559,7 +559,7 @@ export async function eliminarProducto(
   const tipoProd = await tipoDeProducto(session.client_id, producto_id)
   if (!tipoProd) return { ok: false, error: 'Producto no encontrado.' }
   if (!(await puedeEditarAlgunModulo(modulosDelTipo(tipoProd))))
-    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+    return { ok: false, error: 'Sin permiso para editar en este módulo.' }
   const modulo = moduloDeTipo(tipoProd)
 
   const db = createAdminClient()
@@ -581,14 +581,14 @@ export async function eliminarProducto(
     { tabla: 'documento_lineas',       etiqueta: 'ventas u ofertas',             conClientId: false },
     { tabla: 'compra_lineas',          etiqueta: 'compras',                      conClientId: true  },
     { tabla: 'movimientos_inventario', etiqueta: 'movimientos de inventario',    conClientId: true  },
-    { tabla: 'catalogo_items',         etiqueta: 'tu catálogo público',          conClientId: true  },
+    { tabla: 'catalogo_items',         etiqueta: 'el catálogo público',          conClientId: true  },
     { tabla: 'caja_ticket_lineas',     etiqueta: 'tickets de caja',              conClientId: true  },
     // Un servicio contratado no se borra: sin esta guarda se archivaba, se eliminaba y el
     // acuerdo seguía vivo facturando una línea llamada «—».
     { tabla: 'suscripcion_lineas',     etiqueta: 'suscripciones',                conClientId: true  },
     // El vínculo con Citas (mig. 119) es BLANDO y en una dirección, pero borrar el
     // producto deja el enlace colgando y la agenda enseñando un servicio sin catálogo.
-    { tabla: 'servicios',              etiqueta: 'servicios de tu agenda',       conClientId: true  },
+    { tabla: 'servicios',              etiqueta: 'servicios de la agenda',       conClientId: true  },
   ]
   for (const d of dependencias) {
     let q = db.from(d.tabla).select('*', { count: 'exact', head: true }).eq('producto_id', producto_id)
@@ -608,7 +608,7 @@ export async function eliminarProducto(
     .delete()
     .eq('producto_id', producto_id)
     .eq('client_id', session.client_id)
-  if (error) return { ok: false, error: 'Error al eliminar.' }
+  if (error) return { ok: false, error: 'No se ha podido eliminar.' }
 
   revalidarFicha(modulo)
   return { ok: true }
@@ -634,13 +634,13 @@ export async function guardarTarifaSiVacia(
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
   if (!(await puedeEditarModulo('servicios')))
-    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+    return { ok: false, error: 'Sin permiso para editar en este módulo.' }
   if (!moneda || !(precio > 0)) return { ok: false, error: 'Precio o moneda no válidos.' }
 
   const db = createAdminClient()
   // La moneda, siempre de las del negocio: una que no tiene no cotiza.
   if (!(await monedaValida(db, session.client_id, moneda)))
-    return { ok: false, error: 'Esa moneda no está activa en tu negocio.' }
+    return { ok: false, error: 'Esa moneda no está activa en el negocio.' }
 
   const { data: prod } = await db.from('products')
     .select('precios, costos, tipo').eq('producto_id', producto_id)
@@ -698,7 +698,7 @@ export async function archivarProductosEnLote(
 ): Promise<ResultadoLoteProductos> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, hechas: 0, omitidas: [], error: 'Sesión inválida.' }
-  if (!(await puedeEditarAlgunModulo(MODULOS_CATALOGO))) return { ok: false, hechas: 0, omitidas: [], error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarAlgunModulo(MODULOS_CATALOGO))) return { ok: false, hechas: 0, omitidas: [], error: 'Sin permiso para editar en este módulo.' }
   if (!ids.length) return { ok: true, hechas: 0, omitidas: [] }
 
   const db = createAdminClient()
@@ -717,7 +717,7 @@ export async function archivarProductosEnLote(
   const permitidos = filas.filter(p => puedeCon(p.tipo))
   const omitidas   = filas
     .filter(p => !puedeCon(p.tipo))
-    .map(p => ({ nombre: p.nombre, motivo: 'No tienes permiso para editar en este módulo.' }))
+    .map(p => ({ nombre: p.nombre, motivo: 'Sin permiso para editar en este módulo.' }))
   if (!permitidos.length) return { ok: true, hechas: 0, omitidas }
 
   const { data, error } = await db.from('products')
@@ -732,7 +732,7 @@ export async function archivarProductosEnLote(
 export async function eliminarProductosEnLote(ids: string[]): Promise<ResultadoLoteProductos> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, hechas: 0, omitidas: [], error: 'Sesión inválida.' }
-  if (!(await puedeEditarAlgunModulo(MODULOS_CATALOGO))) return { ok: false, hechas: 0, omitidas: [], error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarAlgunModulo(MODULOS_CATALOGO))) return { ok: false, hechas: 0, omitidas: [], error: 'Sin permiso para editar en este módulo.' }
   if (!ids.length) return { ok: true, hechas: 0, omitidas: [] }
 
   const db = createAdminClient()
@@ -790,8 +790,8 @@ export async function guardarStockMinimoAlmacen(
   // `inventario` a secas: el mínimo por almacén es del módulo de existencias, no
   // del catálogo compartido con Servicios.
   if (!(await puedeEditarModulo('inventario')))
-    return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
-  if (!almacen_id) return { ok: false, error: 'Selecciona un almacén.' }
+    return { ok: false, error: 'Sin permiso para editar en este módulo.' }
+  if (!almacen_id) return { ok: false, error: 'Falta el almacén.' }
   if (minimo != null && (!Number.isFinite(minimo) || minimo < 0))
     return { ok: false, error: 'El mínimo no puede ser negativo.' }
 
@@ -836,9 +836,9 @@ export async function ajustarStock(
   // la pieza Servicios no incluye. Con el gate compartido, un cliente de Servicios
   // podría ajustar stock desde la acción aunque la UI no le enseñe el botón — y la
   // UI oculta no es control de acceso.
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
-  if (!almacen_id) return { ok: false, error: 'Selecciona un almacén.' }
+  if (!almacen_id) return { ok: false, error: 'Falta el almacén.' }
   if (isNaN(cantidad) || cantidad === 0)
     return { ok: false, error: 'La cantidad debe ser un número distinto de cero.' }
   if (!motivo?.trim())
@@ -877,7 +877,7 @@ export async function ajustarStock(
     })
     stock_nuevo = res.stock_global
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Error al ajustar el stock.' }
+    return { ok: false, error: e instanceof Error ? e.message : 'No se ha podido ajustar el stock.' }
   }
 
   revalidatePath('/portal/productos')
@@ -893,7 +893,7 @@ export async function guardarCategoria(
 ): Promise<{ ok: boolean; error?: string; categoria_id?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarAlgunModulo(MODULOS_CATALOGO))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarAlgunModulo(MODULOS_CATALOGO))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const nombre = ((formData.get('nombre') as string) ?? '').trim()
   if (!nombre) return { ok: false, error: 'El nombre de la categoría es obligatorio.' }
@@ -919,7 +919,7 @@ export async function guardarCategoria(
       created_at:  new Date().toISOString(),
       updated_at:  new Date().toISOString(),
     })
-    if (error) return { ok: false, error: `Error al crear: ${error.message}` }
+    if (error) return { ok: false, error: `No se ha podido crear: ${error.message}` }
     revalidatePath('/portal/productos')
     revalidatePath('/portal/servicios')
     return { ok: true, categoria_id }
@@ -936,7 +936,7 @@ export async function guardarCategoria(
     .eq('categoria_id', categoria_id_form)
     .eq('client_id', session.client_id)
 
-  if (error) return { ok: false, error: 'Error al actualizar.' }
+  if (error) return { ok: false, error: 'No se ha podido actualizar.' }
   revalidatePath('/portal/productos')
   revalidatePath('/portal/servicios')
   return { ok: true, categoria_id: categoria_id_form }
@@ -949,7 +949,7 @@ export async function archivarCategoria(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarAlgunModulo(MODULOS_CATALOGO))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarAlgunModulo(MODULOS_CATALOGO))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db
@@ -958,7 +958,7 @@ export async function archivarCategoria(
     .eq('categoria_id', categoria_id)
     .eq('client_id', session.client_id)
 
-  if (error) return { ok: false, error: 'Error al archivar.' }
+  if (error) return { ok: false, error: 'No se ha podido archivar.' }
   revalidarFicha()   // una categoría puede ser de productos, de servicios o de ambas
   return { ok: true }
 }
@@ -968,7 +968,7 @@ export async function restaurarCategoria(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarAlgunModulo(MODULOS_CATALOGO))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarAlgunModulo(MODULOS_CATALOGO))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { error } = await db
@@ -977,7 +977,7 @@ export async function restaurarCategoria(
     .eq('categoria_id', categoria_id)
     .eq('client_id', session.client_id)
 
-  if (error) return { ok: false, error: 'Error al restaurar.' }
+  if (error) return { ok: false, error: 'No se ha podido restaurar.' }
   revalidarFicha()   // una categoría puede ser de productos, de servicios o de ambas
   return { ok: true }
 }

@@ -235,7 +235,7 @@ export default function PresupuestosView({
     const val = horasReales.trim() === '' ? null : parseFloat(horasReales)
     const r = await actualizarHorasReales(detalle.id, val)
     setGuardando(false)
-    if (!r.ok) { toastError(r.error ?? 'Error al guardar'); return }
+    if (!r.ok) { toastError(r.error ?? 'No se ha podido guardar'); return }
     toastSuccess('Horas reales guardadas')
     setDetalle(null)
     router.refresh()
@@ -256,7 +256,7 @@ export default function PresupuestosView({
     setAprobando(true)
     const r = await aprobarPresupuesto(id, aprobado)
     setAprobando(false)
-    if (!r.ok) { toastError(r.error ?? 'Error al guardar'); return }
+    if (!r.ok) { toastError(r.error ?? 'No se ha podido guardar'); return }
     toastSuccess(aprobado ? 'Presupuesto aprobado' : 'Aprobación retirada')
     // Aprobar mueve el cobro de configuración (crearlo, ajustarlo o retirarlo).
     // Si ya estaba confirmado no se toca y el aviso llega en tono de advertencia.

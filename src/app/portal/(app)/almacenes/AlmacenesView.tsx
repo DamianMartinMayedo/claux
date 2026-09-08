@@ -73,7 +73,7 @@ function AlmacenModal({
     startTransition(async () => {
       const res = await guardarAlmacen(fd)
       await ld.dismiss()
-      if (!res.ok) { toastError(res.error ?? 'Error inesperado.'); return }
+      if (!res.ok) { toastError(res.error ?? 'No se ha podido completar la operación.'); return }
       onSaved()
     })
   }
@@ -131,7 +131,7 @@ function AlmacenModal({
                   ) : (
                     <select className="input" name="empresa_id"
                       defaultValue={almacen?.empresa_id ?? ''} required>
-                      <option value="">Selecciona una empresa…</option>
+                      <option value="">— Seleccionar empresa —</option>
                       {empresas.map(e => (
                         <option key={e.empresa_id} value={e.empresa_id}>{e.nombre}</option>
                       ))}
@@ -189,8 +189,8 @@ function ConfirmArchivar({
         </div>
         <div className="modal-body">
           <p className="modal-body-text">
-            ¿Archivar <strong>{almacen.nombre}</strong>? No aparecerá en listas activas
-            pero podrás restaurarlo cuando lo necesites.
+            ¿Archivar <strong>{almacen.nombre}</strong>? Dejará de aparecer en las listas
+            activas y se puede restaurar en cualquier momento.
           </p>
           {/* Archivar un almacén con mercancía dentro no se prohíbe, pero tiene que
               decirse: sus existencias siguen sumando en el total de cada producto
@@ -347,7 +347,7 @@ export default function AlmacenesView({ data, puedeEditar, children }: { data: A
       <div className="page-header">
         <div>
           <h1 className="page-title">Almacenes</h1>
-          <p className="page-subtitle">Lugares donde guardas y controlas tus existencias.</p>
+          <p className="page-subtitle">Lugares donde se guardan y controlan las existencias.</p>
         </div>
         <div className="tes-header-actions">
           <ExportarMenu
@@ -366,7 +366,7 @@ export default function AlmacenesView({ data, puedeEditar, children }: { data: A
 
       {data.empresas.length === 0 && (
         <PrerequisitoAviso acciones={[{ label: 'Crear empresa', href: '/portal/empresas' }]}>
-          Para crear almacenes necesitas <strong>una empresa</strong>.
+          Para crear almacenes se necesita <strong>una empresa</strong>.
         </PrerequisitoAviso>
       )}
 
@@ -418,7 +418,7 @@ export default function AlmacenesView({ data, puedeEditar, children }: { data: A
             <Warehouse size={40} strokeWidth={1} opacity={0.2} />
             <p>
               {data.almacenes.length === 0
-                ? 'Aún no hay almacenes registrados. Crea el primero para gestionar tu inventario.'
+                ? 'Sin almacenes registrados.'
                 : 'No hay resultados para los filtros seleccionados.'}
             </p>
           </div>

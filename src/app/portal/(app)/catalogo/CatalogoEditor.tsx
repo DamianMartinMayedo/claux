@@ -70,7 +70,7 @@ export default function CatalogoEditor({ data, puedeEditar, children }: { data: 
     startReorder(async () => {
       const r = await accion(nuevo)
       await ld.dismiss()
-      if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
+      if (!r.ok) { toastError(r.error ?? 'No se ha podido completar la operación.'); return }
       onSaved()
     })
   }
@@ -84,7 +84,7 @@ export default function CatalogoEditor({ data, puedeEditar, children }: { data: 
     startDelete(async () => {
       const r = await eliminarItem(it.item_id)
       await ld.dismiss()
-      if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
+      if (!r.ok) { toastError(r.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess(`${art} eliminado.`)
       onSaved()
     })
@@ -94,7 +94,7 @@ export default function CatalogoEditor({ data, puedeEditar, children }: { data: 
     startDelete(async () => {
       const r = await duplicarItem(it.item_id)
       await ld.dismiss()
-      if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
+      if (!r.ok) { toastError(r.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess(`${art} duplicado.`)
       onSaved()
     })
@@ -105,7 +105,7 @@ export default function CatalogoEditor({ data, puedeEditar, children }: { data: 
     startDelete(async () => {
       const r = await eliminarCategoria(c.categoria_id)
       await ld.dismiss()
-      if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
+      if (!r.ok) { toastError(r.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess('Categoría eliminada.')
       onSaved()
     })
@@ -159,7 +159,7 @@ export default function CatalogoEditor({ data, puedeEditar, children }: { data: 
     startBulk(async () => {
       const r = await fn()
       await ld.dismiss()
-      if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
+      if (!r.ok) { toastError(r.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess(mensaje(r.hechas))
       sel.clear()
       onSaved()
@@ -177,9 +177,9 @@ export default function CatalogoEditor({ data, puedeEditar, children }: { data: 
         <div>
           <div className="page-title-ia">
             <h1 className="page-title">{data.etiquetas.catalogo}</h1>
-            <IaTouchpoint tipo="catalogo" descripcion="una revisión de tu catálogo" />
+            <IaTouchpoint tipo="catalogo" descripcion="una revisión de el catálogo" />
           </div>
-          <p className="page-subtitle">Gestiona lo que verán tus clientes al abrir tu {data.etiquetas.catalogo.toLowerCase()}.</p>
+          <p className="page-subtitle">Lo que ven los clientes al abrir el {data.etiquetas.catalogo.toLowerCase()}.</p>
         </div>
         {tab === 'items' && (
           <div className="tes-header-actions">
@@ -238,7 +238,7 @@ export default function CatalogoEditor({ data, puedeEditar, children }: { data: 
           {!hayItems ? (
             <div className="card cat-empty">
               <Package size={32} strokeWidth={1.5} />
-              <p>Aún no has añadido {artsL} a tu {data.etiquetas.catalogo.toLowerCase()}.</p>
+              <p>Aún no hay {artsL} en el {data.etiquetas.catalogo.toLowerCase()}.</p>
               {puedeEditar && (
                 <button className="btn btn-primary" onClick={() => setModalItem('nuevo')}>
                   <Plus size={16} strokeWidth={2} /> Añadir el primero
@@ -363,7 +363,7 @@ export default function CatalogoEditor({ data, puedeEditar, children }: { data: 
       {confirmarItem && (
         <ConfirmDialog
           title={`¿Eliminar "${confirmarItem.nombre}"?`}
-          body={`Se quitará de tu ${data.etiquetas.catalogo.toLowerCase()}. Esta acción no se puede deshacer.`}
+          body={`Se quitará del ${data.etiquetas.catalogo.toLowerCase()}. Esta acción no se puede deshacer.`}
           confirmLabel="Eliminar" danger
           onCancel={() => setConfirmarItem(null)}
           onConfirm={() => doEliminarItem(confirmarItem)}
@@ -383,7 +383,7 @@ export default function CatalogoEditor({ data, puedeEditar, children }: { data: 
       {confirmarLote && (
         <ConfirmDialog
           title={`¿Eliminar ${sel.count} ${artL}${plural(sel.count)}?`}
-          body={`Se quitará${plural(sel.count) ? 'n' : ''} de tu ${data.etiquetas.catalogo.toLowerCase()}. Esta acción no se puede deshacer.`}
+          body={`Se quitará${plural(sel.count) ? 'n' : ''} del ${data.etiquetas.catalogo.toLowerCase()}. Esta acción no se puede deshacer.`}
           confirmLabel="Eliminar" danger
           onCancel={() => setConfirmarLote(false)}
           onConfirm={doEliminarLote}
@@ -426,7 +426,7 @@ function ItemRow({ item, tieneInventario, articulo, puedeEditar, selected, onTog
     startTransition(async () => {
       const r = await marcarDisponible(item.item_id, !item.disponible)
       await ld.dismiss()
-      if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
+      if (!r.ok) { toastError(r.error ?? 'No se ha podido completar la operación.'); return }
       onSaved()
     })
   }
@@ -575,7 +575,7 @@ function CategoriaModal({ categoria, onClose, onSaved }: {
     const fd = new FormData(e.currentTarget)
     startTransition(async () => {
       const r = await guardarCategoria(fd)
-      if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
+      if (!r.ok) { toastError(r.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess('Categoría guardada.')
       onSaved()
     })
@@ -640,7 +640,7 @@ function ConfiguracionTab({ data, puedeEditar, onSaved }: { data: CatalogoData; 
     startTransition(async () => {
       const r = await guardarSlug(fd)
       await ld.dismiss()
-      if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
+      if (!r.ok) { toastError(r.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess('Enlace guardado.')
       onSaved()
     })
@@ -656,7 +656,7 @@ function ConfiguracionTab({ data, puedeEditar, onSaved }: { data: CatalogoData; 
     startImport(async () => {
       const r = await importarDesdeProductos(tipoImport)
       await ld.dismiss()
-      if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
+      if (!r.ok) { toastError(r.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess(r.creados ? `${r.creados} ítem(s) importado(s).` : 'No hay nada nuevo que importar.')
       onSaved()
     })
@@ -669,7 +669,7 @@ function ConfiguracionTab({ data, puedeEditar, onSaved }: { data: CatalogoData; 
     startMoneda(async () => {
       const r = await guardarMonedaCatalogo(val)
       await ld.dismiss()
-      if (!r.ok) { toastError(r.error ?? 'Error inesperado.'); return }
+      if (!r.ok) { toastError(r.error ?? 'No se ha podido completar la operación.'); return }
       toastSuccess(`Moneda del ${data.etiquetas.catalogo.toLowerCase()} actualizada.`)
       onSaved()
     })
@@ -686,7 +686,7 @@ function ConfiguracionTab({ data, puedeEditar, onSaved }: { data: CatalogoData; 
               Los precios se muestran en esta moneda
               {isSavingMoneda && <span className="cat-moneda-loading"><Loader2 size={13} strokeWidth={2} className="img-upload-spin" /> Actualizando…</span>}
             </label>
-            <FormHelp text={`Cada producto guarda su precio en su moneda; tu ${data.etiquetas.catalogo.toLowerCase()} los convierte a esta según la tasa de cambio vigente (Monedas y tasas). No cambia tu enlace público.`} label="Cómo se convierten los precios" />
+            <FormHelp text={`Cada producto guarda su precio en su moneda; el ${data.etiquetas.catalogo.toLowerCase()} los convierte a esta según la tasa de cambio vigente (Monedas y tasas). No cambia el enlace público.`} label="Cómo se convierten los precios" />
           </div>
           <select id="cat-moneda" className="input" value={data.monedaCatalogo} onChange={cambiarMoneda} disabled={isSavingMoneda || data.monedasActivas.length === 0}>
             {data.monedasActivas.length === 0
@@ -706,7 +706,7 @@ function ConfiguracionTab({ data, puedeEditar, onSaved }: { data: CatalogoData; 
         {puedeEditar && (
           <form onSubmit={guardar} className="cat-form-row-inline">
             <div className="input-group cat-input-grow">
-              <label htmlFor="cat-slug">Identificador (parte final de tu enlace)</label>
+              <label htmlFor="cat-slug">Identificador (parte final del enlace)</label>
               <input id="cat-slug" name="slug" className="input" value={slugInput}
                 onChange={e => setSlugInput(e.target.value)} placeholder="mi-negocio" />
             </div>
@@ -724,7 +724,7 @@ function ConfiguracionTab({ data, puedeEditar, onSaved }: { data: CatalogoData; 
             </button>
           </div>
         )}
-        {!data.slug && <p className="input-hint">Define un identificador para poder compartir tu {data.etiquetas.catalogo.toLowerCase()} y generar el QR.</p>}
+        {!data.slug && <p className="input-hint">Define un identificador para poder compartir el {data.etiquetas.catalogo.toLowerCase()} y generar el QR.</p>}
       </div>
 
       {/* El QR vive en `QrEnlace` desde que Reservas y Citas también lo necesitan. */}
@@ -732,9 +732,9 @@ function ConfiguracionTab({ data, puedeEditar, onSaved }: { data: CatalogoData; 
 
       {data.puedeImportar && puedeEditar && (
         <div className="card">
-          <div className="card-header"><h2 className="card-title">Importar de tu lista</h2></div>
+          <div className="card-header"><h2 className="card-title">Importar del catálogo interno</h2></div>
           <p className="input-hint">
-            Trae lo que ya tienes dado de alta como ítems del catálogo (no duplica lo ya vinculado).
+            Trae los artículos ya dados de alta como ítems del catálogo (no duplica lo ya vinculado).
           </p>
           {/* Elegir qué se trae: una peluquería querrá publicar sus tratamientos y no
               los tintes que gasta por dentro; una tienda, justo lo contrario. Sin

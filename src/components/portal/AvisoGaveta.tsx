@@ -61,7 +61,7 @@ export default function AvisoGaveta({
         <strong className="alert-titulo">
           Tu punto de venta registró {textoAvisoGaveta(resumen)}
         </strong>
-        {nota ?? 'Hasta que digas qué fue cada una, ese dinero no aparece en tu estado de resultados.'}
+        {nota ?? 'Hasta que digas qué fue cada una, ese dinero no aparece en el estado de resultados.'}
         {antiguo}
       </div>
       <button type="button" className="btn btn-aviso btn-sm" onClick={onAbrir} disabled={cargando}>

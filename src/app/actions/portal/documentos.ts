@@ -344,7 +344,7 @@ export async function guardarDatosFirma(formData: FormData): Promise<{ ok: boole
     representante_doc:    formData.get('representante_doc'),
   })
   if (!datosFirmaCompletos(datos)) {
-    return { ok: false, error: 'Completa todos los campos: razón social, NIF, domicilio fiscal, nombre y documento del representante.' }
+    return { ok: false, error: 'Faltan campos: razón social, NIF, domicilio fiscal, nombre y documento del representante.' }
   }
 
   const { error } = await db.from('clients').update({ datos_firma: datos }).eq('client_id', session.client_id)
@@ -381,8 +381,8 @@ export async function firmarDocumento(formData: FormData): Promise<FirmarResulta
   const tipo = String(formData.get('tipo') ?? '') as TipoDocumento
   if (!TIPOS.includes(tipo)) return { ok: false, error: 'Documento no válido.' }
   const nombre = String(formData.get('nombre') ?? '').trim()
-  if (nombre.length < 3) return { ok: false, error: 'Escribe tu nombre completo para firmar.' }
-  if (formData.get('acepto') !== 'true') return { ok: false, error: 'Debes marcar la casilla de aceptación.' }
+  if (nombre.length < 3) return { ok: false, error: 'Falta el nombre completo del firmante.' }
+  if (formData.get('acepto') !== 'true') return { ok: false, error: 'Falta marcar la casilla de aceptación.' }
 
   const db = createAdminClient()
   const resuelto = await resolverDocumentos(db, session.client_id)
@@ -391,7 +391,7 @@ export async function firmarDocumento(formData: FormData): Promise<FirmarResulta
   // No se firma sin los datos fiscales completos (defensa en servidor; la UI ya
   // bloquea el botón, pero el gate real vive aquí).
   if (!datosFirmaCompletos(resuelto.datosFirma)) {
-    return { ok: false, error: 'Antes de firmar debes completar tus datos fiscales.' }
+    return { ok: false, error: 'Antes de firmar hay que completar los datos fiscales.' }
   }
 
   const contenido = resuelto.docs[tipo]

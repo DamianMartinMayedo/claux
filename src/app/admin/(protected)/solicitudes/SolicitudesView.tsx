@@ -56,10 +56,10 @@ function bloqueoDe(l: DiagnosticoLead): string | null {
       : `${l.presupuestos.length} presupuestos`
     return cliente
       ? `Tiene ${cual}, que ya es del cliente ${cliente}`
-      : `Tiene ${cual}: bórralo primero si también es de prueba`
+      : `Tiene ${cual}: hay que borrarlo antes si también es de prueba`
   }
   if (l.contacto_solicitado_at) return 'Pidió que la llamemos'
-  if (l.estado === 'contactado') return 'Está marcada como contactada: márcala como nueva si era una prueba'
+  if (l.estado === 'contactado') return 'Está marcada como contactada: pasarla a nueva si era una prueba'
   return null
 }
 
@@ -178,7 +178,7 @@ export default function SolicitudesView({
     setSaving(true)
     const r = await actualizarEstadoDiagnostico(l.id, estado)
     setSaving(false)
-    if (!r.ok) { toastError(r.error ?? 'Error al guardar'); return }
+    if (!r.ok) { toastError(r.error ?? 'No se ha podido guardar'); return }
     toastSuccess(estado === 'contactado' ? 'Marcada como contactada' : 'Marcada como nueva')
     setDetalle({ ...l, estado })
     router.refresh()

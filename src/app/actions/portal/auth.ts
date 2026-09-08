@@ -46,7 +46,7 @@ export async function loginCliente(
   }
   if (!usuario) {
     if ((usuarios ?? []).length > 0 && activos.length === 0) {
-      return { error: 'Tu usuario está inactivo. Contacta con el administrador.' }
+      return { error: 'El usuario está inactivo. El administrador puede reactivarlo.' }
     }
     return { error: 'Credenciales incorrectas.' }
   }
@@ -108,7 +108,7 @@ export async function cambiarPasswordObligatorio(
   formData: FormData,
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
-  if (!session) return { ok: false, error: 'Sesión inválida. Vuelve a iniciar sesión.' }
+  if (!session) return { ok: false, error: 'Sesión inválida.' }
 
   const nueva   = ((formData.get('password_nueva')   as string) ?? '').trim()
   const confirm = ((formData.get('password_confirm') as string) ?? '').trim()

@@ -19,6 +19,7 @@
     "audit:css": "node scripts/audit-css-dominios.mjs",
     "audit:guards": "node scripts/audit-admin-guards.mjs",
     "audit:tablas": "node scripts/audit-tablas.mjs",
+    "audit:textos": "node scripts/audit-textos.mjs",
     "audit:constantes": "node scripts/audit-constantes.mjs",
     "audit": "node scripts/audit.mjs"
   },

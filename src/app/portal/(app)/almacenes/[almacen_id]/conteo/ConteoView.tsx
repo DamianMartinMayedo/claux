@@ -510,8 +510,8 @@ export default function ConteoView({ data, puedeEditar }: { data: ConteoDetalle;
     startTransition(async () => {
       const ok = await enviarPendientes(true)
       await ld.dismiss()
-      if (!ok) { toastError('No se pudo guardar lo último. Revisa la conexión antes de salir.'); return }
-      toastSuccess('Conteo guardado. Puedes retomarlo cuando quieras: las existencias no se han tocado.')
+      if (!ok) { toastError('No se ha podido guardar lo último. Conviene revisar la conexión antes de salir.'); return }
+      toastSuccess('Conteo guardado. Se puede retomar más adelante: las existencias no se han tocado.')
       router.push(`/portal/almacenes/${conteo.almacen_id}`)
     })
   }
@@ -555,7 +555,7 @@ export default function ConteoView({ data, puedeEditar }: { data: ConteoDetalle;
       vivo.current = { ...vivo.current, texto: next }
       setTexto(next)
       setNoReconocidos(r.noReconocidos)
-      toastSuccess(`${r.reconocidos.length} ${r.reconocidos.length === 1 ? 'línea rellenada' : 'líneas rellenadas'}. Revísalas antes de aplicar.`)
+      toastSuccess(`${r.reconocidos.length} ${r.reconocidos.length === 1 ? 'línea rellenada' : 'líneas rellenadas'}. Conviene revisarlas antes de aplicar.`)
       setDictado('')
       mandarAvance()
     })
@@ -601,7 +601,7 @@ export default function ConteoView({ data, puedeEditar }: { data: ConteoDetalle;
       setTexto(next)
       setGuardadoEn(ahoraEnTz())
       const n = r.lineas.length
-      toastSuccess(`${n} ${n === 1 ? 'línea cargada' : 'líneas cargadas'} del archivo. Revísalas y pon la causa de las diferencias.`)
+      toastSuccess(`${n} ${n === 1 ? 'línea cargada' : 'líneas cargadas'} del archivo. Falta revisarlas e indicar la causa de las diferencias.`)
     })
   }
 
@@ -614,7 +614,7 @@ export default function ConteoView({ data, puedeEditar }: { data: ConteoDetalle;
   }
 
   function intentarAplicar() {
-    if (contadas === 0) { toastWarning('Todavía no has contado ninguna línea.'); return }
+    if (contadas === 0) { toastWarning('Sin líneas contadas.'); return }
     // El aviso de causas que faltan aparece AQUÍ, al ir a hacer algo con el conteo, y
     // no como un cartel permanente mientras se cuenta: mientras cuentas es normal que
     // falten causas, y un aviso que sale siempre deja de leerse el segundo día.
@@ -631,7 +631,7 @@ export default function ConteoView({ data, puedeEditar }: { data: ConteoDetalle;
       // Va en silencio y el aviso lo da esta función, que sabe para qué se guardaba.
       if (!(await enviarPendientes(true))) {
         await ld.dismiss()
-        toastError('No se pudo guardar lo último antes de aplicar. Revisa la conexión e inténtalo otra vez.')
+        toastError('No se ha podido guardar lo último antes de aplicar. Conviene revisar la conexión.')
         return
       }
       // Aplicar mueve existencias: si la petición se cae a medio camino hay que decirlo
@@ -641,7 +641,7 @@ export default function ConteoView({ data, puedeEditar }: { data: ConteoDetalle;
         r = await aplicarConteo(conteo.conteo_id)
       } catch {
         await ld.dismiss()
-        toastError('Se perdió la conexión al aplicar. Comprueba en Movimientos si llegó a hacerse antes de repetirlo.')
+        toastError('Se perdió la conexión al aplicar. Antes de repetirlo, conviene comprobar en Movimientos si llegó a hacerse.')
         return
       }
       await ld.dismiss()
@@ -888,7 +888,7 @@ export default function ConteoView({ data, puedeEditar }: { data: ConteoDetalle;
       {!soloLectura && dictando && (
         <div className="card cnt-dictado">
           <label htmlFor="cnt-dictado-txt" className="prd-editor-label">
-            Escribe o dicta lo que has contado
+            Escribir o dictar el conteo
           </label>
           <textarea id="cnt-dictado-txt" className="input input-textarea" rows={3}
             value={dictado} onChange={e => setDictado(e.target.value)}
@@ -899,7 +899,7 @@ export default function ConteoView({ data, puedeEditar }: { data: ConteoDetalle;
               {pending ? 'Interpretando…' : 'Rellenar las casillas'}
             </button>
             <span className="text-xs-hint">
-              Rellena las casillas para que las revises. No se ajusta nada hasta que apliques el conteo.
+              Las casillas se rellenan para revisarlas. No se ajusta nada hasta aplicar el conteo.
             </span>
           </div>
           {noReconocidos.length > 0 && (
@@ -1027,7 +1027,7 @@ export default function ConteoView({ data, puedeEditar }: { data: ConteoDetalle;
           <div className="cnt-cierre-texto">
             <strong>
               {contadas === 0
-                ? 'Todavía no has contado nada'
+                ? 'Sin líneas contadas'
                 : difs.size === 0
                   ? `${contadas} ${contadas === 1 ? 'línea contada' : 'líneas contadas'}, todo cuadra`
                   : `${contadas} ${contadas === 1 ? 'línea contada' : 'líneas contadas'} · ${difs.size} con diferencia`}
@@ -1098,7 +1098,7 @@ export default function ConteoView({ data, puedeEditar }: { data: ConteoDetalle;
               <p>
                 {avisoCausas === 'aplicar'
                   ? 'No se puede aplicar el conteo hasta que cada diferencia diga por qué. Un ajuste sin motivo no se puede sumar después: dentro de un mes, una caja robada y un error de teclado son la misma línea.'
-                  : 'Puedes salir y seguir mañana: el conteo se guarda tal cual. Pero antes de aplicarlo habrá que decir por qué en estas líneas.'}
+                  : 'El conteo se guarda tal cual y se puede retomar más adelante. Antes de aplicarlo habrá que indicar el motivo en estas líneas.'}
               </p>
               <ul className="cnt-lista-faltan">
                 {sinCausa.slice(0, 6).map(id => {
@@ -1117,7 +1117,7 @@ export default function ConteoView({ data, puedeEditar }: { data: ConteoDetalle;
               </ul>
               {(hayFaltantesSinCausa || haySobrantesSinCausa) && (
                 <div className="cnt-lote">
-                  <span className="text-xs-muted">Si todas son por lo mismo, ponlo de una vez:</span>
+                  <span className="text-xs-muted">Si todas responden al mismo motivo, se aplica de una vez:</span>
                   {hayFaltantesSinCausa && (
                     <>
                       <label htmlFor="cnt-lote-falta">Los faltantes:</label>

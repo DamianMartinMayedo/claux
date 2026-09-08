@@ -212,7 +212,7 @@ export default function SoporteAdminView({
     setIaPensando(false)
     if (!res.ok || !res.texto) { toastErr(res.error ?? 'No se pudo redactar el borrador.'); return }
     setRespuestaTexto(res.texto)
-    toastOk('Borrador listo. Revísalo antes de enviarlo.')
+    toastOk('Borrador listo, pendiente de revisión antes del envío.')
   }
 
   // ── La clasificación: corregirla a mano o pedirla para uno viejo ──
@@ -265,7 +265,7 @@ export default function SoporteAdminView({
     setSaving(true)
     const res = await guardarFaq(new FormData(e.currentTarget))
     setSaving(false)
-    if (!res.ok) { toastErr(res.error ?? 'Error al guardar.'); return }
+    if (!res.ok) { toastErr(res.error ?? 'No se ha podido guardar.'); return }
     toastOk('Pregunta guardada')
     setFaqModal(null)
     router.refresh()
@@ -442,7 +442,7 @@ export default function SoporteAdminView({
           <div className="card card-table">
             {faqs.length === 0 ? (
               <div className="table-empty table-empty-sm">
-                <p>Aún no hay preguntas. Crea la primera.</p>
+                <p>Sin preguntas frecuentes.</p>
               </div>
             ) : (
               <div className="table-wrapper">
@@ -580,7 +580,7 @@ export default function SoporteAdminView({
 
             {verMsg.respuesta ? (
               <div className="input-group">
-                <label>Tu respuesta{verMsg.respuesta_at ? ` · ${fmtFecha(verMsg.respuesta_at)}` : ''}</label>
+                <label>Respuesta{verMsg.respuesta_at ? ` · ${fmtFecha(verMsg.respuesta_at)}` : ''}</label>
                 <p className="soporte-mensaje-texto soporte-respuesta-texto">{verMsg.respuesta}</p>
               </div>
             ) : verMsg.email && (
@@ -602,7 +602,7 @@ export default function SoporteAdminView({
                 <textarea
                   className="input"
                   rows={4}
-                  placeholder="Escribe tu respuesta…"
+                  placeholder="Falta la respuesta…"
                   value={respuestaTexto}
                   onChange={e => setRespuestaTexto(e.target.value)}
                 />

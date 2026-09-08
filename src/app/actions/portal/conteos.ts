@@ -119,7 +119,7 @@ export async function abrirConteo(
 ): Promise<{ ok: boolean; error?: string; conteo_id?: string }> {
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: alm } = await db.from('almacenes')
@@ -211,7 +211,7 @@ export async function empezarConteoNuevo(
 ): Promise<{ ok: boolean; error?: string; conteo_id?: string }> {
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: abierto } = await db.from('conteos')
@@ -413,7 +413,7 @@ export async function guardarCabeceraConteo(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: conteo } = await db.from('conteos').select('estado')
@@ -448,7 +448,7 @@ export async function guardarAvanceConteo(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
   if (!Array.isArray(lineas) || lineas.length === 0) return { ok: true }
 
   const db = createAdminClient()
@@ -525,7 +525,7 @@ export async function importarConteoContado(
 ): Promise<ResultadoImportConteo> {
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: conteo } = await db.from('conteos').select('estado')
@@ -607,7 +607,7 @@ export async function importarConteoContado(
     return {
       ok: false,
       error: sinEmparejar.length
-        ? 'Ninguna fila del archivo corresponde a un producto de esta hoja. Comprueba que es la hoja de este almacén.'
+        ? 'Ninguna fila del archivo corresponde a un producto de esta hoja: puede no ser la hoja de este almacén.'
         : 'El archivo no trae ninguna cantidad en la columna «Contado».',
       sinEmparejar, avisos,
     }
@@ -640,7 +640,7 @@ export async function anadirLineaConteo(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: conteo } = await db.from('conteos').select('estado, almacen_id')
@@ -691,7 +691,7 @@ export interface ResultadoConteo {
 export async function aplicarConteo(conteo_id: string): Promise<ResultadoConteo> {
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: conteo } = await db.from('conteos').select('*')
@@ -784,7 +784,7 @@ export async function aplicarConteo(conteo_id: string): Promise<ResultadoConteo>
       })
       ajustes++
     } catch (e) {
-      return { ok: false, error: e instanceof Error ? e.message : 'Error al aplicar el conteo.' }
+      return { ok: false, error: e instanceof Error ? e.message : 'No se ha podido aplicar el conteo.' }
     }
   }
 
@@ -805,7 +805,7 @@ export async function aplicarConteo(conteo_id: string): Promise<ResultadoConteo>
 export async function anularConteo(conteo_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session) return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('inventario'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   const { data: conteo } = await db.from('conteos').select('estado, almacen_id')

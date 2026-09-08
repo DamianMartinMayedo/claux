@@ -91,13 +91,13 @@ export default function FirmaDocumentoModal({
         await subirPdfFirma(fd)
       }
     } catch {
-      toastError('No se pudo generar el PDF, pero tu firma quedó registrada.')
+      toastError('No se ha podido generar el PDF, pero la firma ha quedado registrada.')
     }
   }
 
   function handleFirmar() {
-    if (!acepto)              { toastError('Marca la casilla para aceptar el documento.'); return }
-    if (nombre.trim().length < 3) { toastError('Escribe tu nombre completo.'); return }
+    if (!acepto)              { toastError('Falta marcar la casilla de aceptación del documento.'); return }
+    if (nombre.trim().length < 3) { toastError('Falta el nombre completo del firmante.'); return }
 
     const ld = toastLoading('Registrando firma…')
     startTransition(async () => {
@@ -175,13 +175,13 @@ export default function FirmaDocumentoModal({
                   className="input"
                   value={nombre}
                   onChange={e => setNombre(e.target.value)}
-                  placeholder="Tu nombre completo"
+                  placeholder="Nombre completo"
                   autoComplete="name"
                 />
               </div>
               <p className="doc-firma-legal">
-                Al firmar, se registra la fecha, tu IP y la versión del documento como firma
-                electrónica válida (eIDAS / Ley 6/2020).
+                Al firmar se registran la fecha, la dirección IP y la versión del documento como
+                firma electrónica válida (eIDAS / Ley 6/2020).
               </p>
             </div>
           ) : (

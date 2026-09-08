@@ -146,7 +146,7 @@ export default function ComprasView({ data, puedeEditar, children }: { data: Com
             <h1 className="page-title">Compras</h1>
             <IaTouchpoint tipo="compras" descripcion="una sugerencia de qué reponer" />
           </div>
-          <p className="page-subtitle">Compras a tus proveedores para reponer existencias.</p>
+          <p className="page-subtitle">Compras a proveedores para reponer existencias.</p>
         </div>
         <div className="tes-header-actions">
           <ExportarMenu
@@ -205,7 +205,7 @@ export default function ComprasView({ data, puedeEditar, children }: { data: Com
             <ShoppingCart size={40} strokeWidth={1} opacity={0.2} />
             <p>
               {data.compras.length === 0
-                ? 'Aún no hay compras registradas. Crea la primera para reponer stock.'
+                ? 'Sin compras registradas.'
                 : 'No hay compras con ese estado.'}
             </p>
           </div>

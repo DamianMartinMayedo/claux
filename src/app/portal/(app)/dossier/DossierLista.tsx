@@ -123,7 +123,7 @@ export default function DossierLista({
       await navigator.clipboard.writeText(`${window.location.origin}/d/${token}`)
       toastSuccess('Enlace copiado')
     } catch {
-      toastError('No se pudo copiar. Abre el dossier y cópialo desde «Presentación».')
+      toastError('No se ha podido copiar. El enlace está en el dossier, en «Presentación».')
     }
   }
 

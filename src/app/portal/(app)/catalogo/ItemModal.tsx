@@ -53,7 +53,7 @@ export default function ItemModal({ item, categorias, monedaCatalogo, monedasAct
     const ld = toastLoading('Guardando…')
     startTransition(async () => {
       const r = await guardarItem(fd)
-      if (!r.ok) { await ld.dismiss(); toastError(r.error ?? 'Error inesperado.'); return }
+      if (!r.ok) { await ld.dismiss(); toastError(r.error ?? 'No se ha podido completar la operación.'); return }
 
       const itemId = r.item_id!
       if (nuevaFoto) {
@@ -73,7 +73,7 @@ export default function ItemModal({ item, categorias, monedaCatalogo, monedasAct
   }
 
   function autocompletar() {
-    if (!nombre.trim()) { toastError('Escribe primero el nombre.'); return }
+    if (!nombre.trim()) { toastError('Falta el nombre.'); return }
     setSugiriendo(true)
     autocompletarItemCatalogo(nombre.trim()).then(r => {
       setSugiriendo(false)
@@ -82,7 +82,7 @@ export default function ItemModal({ item, categorias, monedaCatalogo, monedasAct
       if (r.sugerencia.ingredientes) setIngredientes(r.sugerencia.ingredientes)
       if (r.sugerencia.alergenos)    setAlergenos(r.sugerencia.alergenos)
       if (r.sugerencia.calorias != null) setCalorias(String(r.sugerencia.calorias))
-      toastSuccess('Sugerencias aplicadas. Revísalas antes de guardar.')
+      toastSuccess('Sugerencias aplicadas. Conviene revisarlas antes de guardar.')
     })
   }
 
@@ -121,7 +121,7 @@ export default function ItemModal({ item, categorias, monedaCatalogo, monedasAct
               <div className="input-group">
                 <div className="form-label-with-help">
                   <label htmlFor="item-precio">Precio</label>
-                  <FormHelp text={`Se mostrará convertido a ${monedaCatalogo} (la moneda que verá el cliente) según la tasa de cambio. Déjalo en blanco para que el cliente vea «Consultar precio» (sin importe).`} label="Información sobre el precio" />
+                  <FormHelp text={`Se mostrará convertido a ${monedaCatalogo} (la moneda que ve el cliente) según la tasa de cambio. En blanco, el cliente ve «Consultar precio» (sin importe).`} label="Información sobre el precio" />
                 </div>
                 <input id="item-precio" name="precio" type="number" step="any" min="0" className="input" defaultValue={item?.precio ?? ''} />
               </div>
@@ -150,7 +150,7 @@ export default function ItemModal({ item, categorias, monedaCatalogo, monedasAct
             <div className="input-group">
               <div className="form-label-with-help">
                 <label htmlFor="item-descuento">Descuento (%)</label>
-                <FormHelp text={`Si le pones un descuento al ${artL}, ese manda sobre el de la categoría.`} label="Información sobre el descuento" />
+                <FormHelp text={`El descuento del ${artL} prevalece sobre el de la categoría.`} label="Información sobre el descuento" />
               </div>
               <input id="item-descuento" name="descuento_pct" type="number" min="0" max="100" step="any"
                 className="input" defaultValue={item?.descuento_pct ? item.descuento_pct : ''} placeholder="0" />

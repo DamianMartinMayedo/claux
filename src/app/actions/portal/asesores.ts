@@ -66,7 +66,7 @@ export async function guardarAsesor(input: {
 }): Promise<{ ok: boolean; error?: string; asesor?: Asesor }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const nombre = input.nombre?.trim()
   const email  = input.email?.trim().toLowerCase()
@@ -90,7 +90,7 @@ export async function guardarAsesor(input: {
       .update({ nombre, email, empresa_id, updated_at: new Date().toISOString() })
       .eq('asesor_id', input.asesor_id).eq('client_id', session.client_id)
     if (error) {
-      if (error.code === '23505') return { ok: false, error: 'Ya tienes ese correo para ese ámbito.' }
+      if (error.code === '23505') return { ok: false, error: 'Ese correo ya está registrado para ese ámbito.' }
       return { ok: false, error: 'No se pudo guardar el asesor.' }
     }
     revalidatePath('/portal/reportes'); revalidatePath('/portal/perfil')
@@ -102,7 +102,7 @@ export async function guardarAsesor(input: {
     asesor_id, client_id: session.client_id, nombre, email, empresa_id,
   })
   if (error) {
-    if (error.code === '23505') return { ok: false, error: 'Ya tienes ese correo para ese ámbito.' }
+    if (error.code === '23505') return { ok: false, error: 'Ese correo ya está registrado para ese ámbito.' }
     return { ok: false, error: 'No se pudo crear el asesor.' }
   }
   revalidatePath('/portal/reportes'); revalidatePath('/portal/perfil')
@@ -114,7 +114,7 @@ export async function guardarAsesor(input: {
 export async function eliminarAsesor(asesor_id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await getPortalSession()
   if (!session)             return { ok: false, error: 'Sesión inválida.' }
-  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'No tienes permiso para editar en este módulo.' }
+  if (!(await puedeEditarModulo('base'))) return { ok: false, error: 'Sin permiso para editar en este módulo.' }
 
   const db = createAdminClient()
   if (!await tieneBase(db, session.client_id)) return { ok: false, error: 'El módulo de Contabilidad no está activo.' }

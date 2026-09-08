@@ -137,8 +137,8 @@ export default function UsuarioModal({
                 {avanzado ? 'Ocultar configuración avanzada' : 'Configuración avanzada de accesos'}
               </button>
               <span className="input-hint">
-                Por defecto: Solicitudes, Presupuestos y Clientes (solo lectura). Amplía solo
-                si hace falta, o quítalas todas para que solo lea el manual.
+                Por defecto: Solicitudes, Presupuestos y Clientes (solo lectura). Se amplía
+                cuando el puesto lo requiera, o se deja sin ninguna para dar solo el manual.
               </span>
               {avanzado && (
                 <div className="mod-list">

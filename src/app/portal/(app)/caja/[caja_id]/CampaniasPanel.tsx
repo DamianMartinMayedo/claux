@@ -187,7 +187,7 @@ export default function CampaniasPanel({
       <h2 className="mon-section-title">Campañas de descuento</h2>
       <p className="caja-section-sub">
         Descuentos que este punto de venta aplica por su cuenta, sin que quien cobra tenga que
-        acordarse. El precio que se cambie a mano en el dispositivo prevalece sobre la campaña,
+        acordarse. El precio que se cambie manualmente en el dispositivo prevalece sobre la campaña,
         y los cambios de aquí llegan con la próxima sincronización.
       </p>
 
@@ -347,7 +347,7 @@ export default function CampaniasPanel({
                     <label htmlFor="camp-prod">Producto <span className="required">*</span></label>
                     <select id="camp-prod" className="input" value={borrador.ambito_id}
                       onChange={e => onBorrador({ ...borrador, ambito_id: e.target.value })}>
-                      <option value="">— Elige el producto —</option>
+                      <option value="">— Seleccionar producto —</option>
                       {productos.map(p => (
                         <option key={p.producto_id} value={p.producto_id}>{p.nombre}</option>
                       ))}

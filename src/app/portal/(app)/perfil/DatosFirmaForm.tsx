@@ -87,8 +87,8 @@ export default function DatosFirmaForm({
   return (
     <form onSubmit={handleSubmit} className="doc-datos-form">
       <p className="doc-firma-legal">
-        Estos datos identifican oficialmente a tu empresa y a quien firma en el contrato y el NDA.
-        Complétalos con los datos reales antes de firmar.
+        Estos datos identifican oficialmente a la empresa y a quien firma el contrato y el NDA.
+        Deben ser los reales antes de firmar.
       </p>
       <div className="doc-datos-grid">
         {CAMPOS.map(c => (

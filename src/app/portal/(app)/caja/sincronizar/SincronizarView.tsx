@@ -111,7 +111,7 @@ export default function SincronizarView({ cajas, puedeEditar }: Props) {
       const delArchivo: string | null = typeof payload?.caja === 'string' && payload.caja ? payload.caja : null
 
       if (delArchivo && !cajas.some(c => c.caja_id === delArchivo)) {
-        toastError('El archivo es de un punto de venta que no existe o no es tuyo.')
+        toastError('El archivo es de un punto de venta que no existe o pertenece a otro negocio.')
         limpiarInput()
         return
       }
@@ -150,7 +150,7 @@ export default function SincronizarView({ cajas, puedeEditar }: Props) {
         <div>
           <h1 className="page-title">Sincronizar</h1>
           <p className="page-subtitle">
-            Sube el archivo exportado por un punto de venta sin conexión. Se registra por fecha, sin duplicar.
+            Carga del archivo exportado por un punto de venta sin conexión. Se registra por fecha, sin duplicar.
           </p>
         </div>
       </div>
@@ -162,7 +162,7 @@ export default function SincronizarView({ cajas, puedeEditar }: Props) {
             <Link href="/portal/caja" className="link-primary">crear un punto de venta</Link>.
           </p>
         ) : !puedeEditar ? (
-          <p className="caja-install-hint">Solo consulta: no tienes permiso para sincronizar archivos.</p>
+          <p className="caja-install-hint">Solo consulta: sin permiso para sincronizar archivos.</p>
         ) : (
           <div className="caja-install">
             <div className="input-group">
@@ -176,7 +176,7 @@ export default function SincronizarView({ cajas, puedeEditar }: Props) {
                 identificador. Con uno actual no se llega a usar. */}
             {cajas.length > 1 && !previo && (
               <details className="caja-sync-manual">
-                <summary>Elegir el punto de venta a mano</summary>
+                <summary>Seleccionar el punto de venta manualmente</summary>
                 <div className="input-group">
                   <label htmlFor="sync-caja">Punto de venta</label>
                   <select id="sync-caja" className="input" value={cajaId} onChange={e => setCajaId(e.target.value)}>
@@ -201,7 +201,7 @@ export default function SincronizarView({ cajas, puedeEditar }: Props) {
               {previo.delArchivo
                 ? <>Archivo de <strong>{nombreDe(previo.destino)}</strong>.</>
                 : <>El archivo no dice de qué punto de venta salió. Se registrará en{' '}
-                    <strong>{nombreDe(previo.destino)}</strong>, el que has elegido a mano.</>}
+                    <strong>{nombreDe(previo.destino)}</strong>, el seleccionado manualmente.</>}
               {previo.desde && (
                 <> Ventas del {dia(previo.desde)}{previo.hasta !== previo.desde ? ` al ${dia(previo.hasta!)}` : ''}.</>
               )}

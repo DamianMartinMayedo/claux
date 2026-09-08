@@ -344,13 +344,13 @@ const OFERTA: { clave: string; label: string; gancho: string; requiere?: string 
   { clave: 'base',           label: 'Contabilidad',   gancho: 'Factura, controla gastos y sabe si de verdad ganas dinero.' },
   { clave: 'inventario',     label: 'Inventario',     gancho: 'Sabe qué te queda y qué hay que reponer antes de quedarte sin.' },
   { clave: 'caja',           label: 'Punto de venta', gancho: 'Cobra en el mostrador y cuadra la caja al cerrar.' },
-  { clave: 'rrhh',           label: 'RRHH',           gancho: 'Personal, contratos, turnos y nóminas de tu equipo.' },
-  { clave: 'reservas_citas', label: 'Reservas',       gancho: 'Tus clientes reservan solos, sin llamadas ni libreta.' },
+  { clave: 'rrhh',           label: 'RRHH',           gancho: 'Personal, contratos, turnos y nóminas de el equipo.' },
+  { clave: 'reservas_citas', label: 'Reservas',       gancho: 'Los clientes reservan solos, sin llamadas ni libreta.' },
   { clave: 'agenda',         label: 'Citas',          gancho: 'Agenda por profesional, sin solapes ni huecos muertos.' },
   { clave: 'servicios',      label: 'Servicios',      gancho: 'Cobros que se repiten cada mes, controlados solos.' },
-  { clave: 'catalogo_qr',    label: 'Catálogo',       gancho: 'Tu carta con un QR, siempre al día y sin reimprimir.' },
-  { clave: 'dossier',        label: 'Dossier',        gancho: 'Presenta tus números a un banco o a un socio.' },
-  { clave: 'asistente_ia',   label: 'Asistente IA',   gancho: 'Pregúntale a tus datos en lenguaje normal.' },
+  { clave: 'catalogo_qr',    label: 'Catálogo',       gancho: 'La carta con un QR, siempre al día y sin reimprimir.' },
+  { clave: 'dossier',        label: 'Dossier',        gancho: 'Presenta los números a un banco o a un socio.' },
+  { clave: 'asistente_ia',   label: 'Asistente IA',   gancho: 'Pregúntale a los datos en lenguaje normal.' },
 ]
 
 // `OFERTA_NIVEL` (de `@/lib/limites`) es la oferta que NO es un módulo: subir de
@@ -1344,7 +1344,7 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
     // dice que ganó más de lo que ganó. No es «conviene mirarlo».
     pendiente.push({
       clave: 'gaveta', tono: 'alerta', ruta: '/portal/tesoreria',
-      texto: `${textoAvisoGaveta(gaveta)} en tu punto de venta`,
+      texto: `${textoAvisoGaveta(gaveta)} en el punto de venta`,
     })
   }
   if (dossier && dossier.desfasados > 0) {
@@ -1375,7 +1375,7 @@ export async function obtenerDashboard(): Promise<DashboardData | null> {
       if (catalogo.sinPrecio > 0) partes.push(`${catalogo.sinPrecio} sin precio`)
       pendiente.push({
         clave: 'catalogo', tono: 'aviso', ruta: '/portal/catalogo',
-        texto: `En tu ${etiquetas.catalogo.toLowerCase()}: ${partes.join(' y ')}`,
+        texto: `En el ${etiquetas.catalogo.toLowerCase()}: ${partes.join(' y ')}`,
       })
     }
   }
