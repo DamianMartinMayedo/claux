@@ -31,8 +31,8 @@ import { SlidersHorizontal, X } from 'lucide-react'
 import RangoBusqueda from './RangoBusqueda'
 import FilterPills from './FilterPills'
 import {
-  filtrosActivos, paramDe, vaAlServidor, PARAM_ESCALADA,
-  type Filtro,
+  filtrosActivos, paramDe, vaAlServidor, dondeVaAlServidor, PARAM_ESCALADA,
+  type DondeSeAplica, type Filtro,
 } from '@/lib/filtros'
 import { empresaColorVar } from './EmpresaTag'
 import type { PresetRango } from '@/lib/listados'
@@ -43,6 +43,22 @@ interface Props {
   rango?: { desde: string; hasta: string }
   /** Búsqueda aplicada. Omitir si la pantalla no busca por texto. */
   q?: string
+  /**
+   * Dónde se aplica la BÚSQUEDA, con la misma semántica que el `donde` de un filtro.
+   *
+   * Por defecto `servidor`: los listados cuya consulta busca por texto y devuelve `data.q`
+   * (Ventas, Gastos y cobros, Tesorería, Citas, Reservas). Ahí escribir SÍ es pedir.
+   *
+   * Se declara **`cliente`** cuando el texto lo filtra la vista en memoria y la consulta no
+   * lo mira: CxC/CxP, Terceros, Productos, Personal —que se traen enteros— y también
+   * Suscripciones y Operaciones de caja, que tienen techo. En los de techo la búsqueda ya
+   * miraba solo lo traído (su página nunca recibió `q`), con dos agravantes: el viaje no
+   * cambiaba una fila y, al recargar, `limite` volvía al techo — o sea que teclear
+   * DESHACÍA el «Traer más» y encogía justo el conjunto sobre el que se estaba buscando.
+   * Que el listado está recortado lo sigue diciendo el aviso del techo; buscar en TODO,
+   * ahí, necesita que la consulta sepa buscar por texto, que hoy no sabe.
+   */
+  qDonde?: DondeSeAplica
   placeholder?: string
   presets?: PresetRango[]
   /**
@@ -71,8 +87,8 @@ interface Props {
 }
 
 export default function Filtros({
-  filtros, rango, q, placeholder, presets, hayMas = false, visibles = 2, onCargando,
-  acciones,
+  filtros, rango, q, qDonde = 'servidor', placeholder, presets, hayMas = false, visibles = 2,
+  onCargando, acciones,
 }: Props) {
   const router = useRouter()
   const params = useSearchParams()
@@ -115,14 +131,44 @@ export default function Filtros({
   const enFila  = utiles.slice(0, visibles)
   const dentro  = utiles.slice(visibles)
 
+  /**
+   * ¿Este cambio necesita al servidor?
+   *
+   * Lo decide por los PARÁMETROS que toca: si todos son de filtros que aplica el navegador, no
+   * hay consulta que rehacer. Un parámetro que no sea de un filtro declarado —el `srv` de la
+   * escalada— cuenta como del servidor: no reconocerlo es razón para viajar, no para quedarse.
+   */
+  function soloNavegador(claves: string[]): boolean {
+    return claves.every(k => {
+      const f = filtros.find(x => paramDe(x) === k)
+      return !!f && !vaAlServidor(f, hayMas)
+    })
+  }
+
+  /**
+   * Pone los cambios en la URL, y recarga SOLO si hace falta.
+   *
+   * El estado de los filtros vive en la URL (esa regla no cambia), pero cambiar la URL con el
+   * router es pedirle la página de nuevo al servidor: en un listado que se trae entero y
+   * filtra en memoria, eso era repetir la consulta completa para pintar lo que ya estaba, con
+   * la tabla tapada por «Cargando…» hasta que llegara la respuesta. Cuando ninguno de los
+   * parámetros que cambian necesita al servidor, la History API actualiza la URL y
+   * `useSearchParams` sin viajar (Next la engancha al router): el filtro es instantáneo.
+   */
   function navegar(cambios: Record<string, string | null>) {
     const next = new URLSearchParams(params.toString())
     for (const [k, v] of Object.entries(cambios)) {
       if (v === null || v === '') next.delete(k)
       else                        next.set(k, v)
     }
+    if (soloNavegador(Object.keys(cambios))) {
+      const qs = next.toString()
+      window.history.replaceState(null, '', qs ? `${ruta}?${qs}` : ruta)
+      return
+    }
     // El techo vuelve al de su filtro: `limite` lo sube «Traer más» y, pegado en la URL,
-    // hacía que «Todo» dejara de significar todo.
+    // hacía que «Todo» dejara de significar todo. Solo al recargar: sin consulta nueva no hay
+    // techo que reponer.
     next.delete('limite')
     startTransition(() => router.replace(`${ruta}?${next.toString()}`, { scroll: false }))
   }
@@ -181,7 +227,9 @@ export default function Filtros({
   function limpiar() {
     const cambios: Record<string, string | null> = {}
     for (const f of utiles) cambios[paramDe(f)] = null
-    cambios[PARAM_ESCALADA] = null
+    // `srv` solo si está puesto: mandarlo siempre haría que «Limpiar» recargara la página
+    // también en las pantallas cuyos filtros aplica el navegador.
+    if (params.get(PARAM_ESCALADA)) cambios[PARAM_ESCALADA] = null
     navegar(cambios)
   }
 
@@ -266,6 +314,7 @@ export default function Filtros({
             desde={rango?.desde ?? ''} hasta={rango?.hasta ?? ''} q={q}
             placeholder={placeholder} presets={rango ? presets : []}
             sinBuscador={q === undefined}
+            qCliente={!dondeVaAlServidor(qDonde, hayMas)}
             onPendiente={setRangoPend}
           />
         )}

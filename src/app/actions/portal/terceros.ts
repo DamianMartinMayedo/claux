@@ -2,6 +2,7 @@
 
 import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { traerTodas }        from '@/lib/supabase/paginar'
 import { getPortalSession, accesoModulosSession, puedeEditarAlgunModulo }  from './auth'
 import { estadoEfectivo, calcularCobroAcuerdo, type TerceroSuscripcion, type DescuentoModo } from '@/lib/suscripciones'
 import { obtenerEmpresas }   from './empresas'
@@ -99,18 +100,21 @@ export async function obtenerTerceros(): Promise<TercerosPageData> {
 
   if (!empresa_ids.length) return { ...vacio, monedas, tasas }
 
-  const { data } = await db
+  // ⚠️ `traerTodas`: PostgREST corta a 1.000 filas sin avisar (ver `lib/supabase/paginar.ts`).
+  // Aquí eso son clientes y proveedores que DESAPARECEN de la pantalla —y del buscador, que
+  // filtra sobre lo que llegó— sin que nada lo diga. Se desempata por `id` porque hay
+  // nombres repetidos y un orden con empates rompe el paginado.
+  const { data } = await traerTodas<Tercero>(['nombre', 'id'], () => db
     .from('third_parties')
     .select('*')
     .eq('client_id', session.client_id)
-    .in('empresa_id', empresa_ids)
-    .order('nombre')
+    .in('empresa_id', empresa_ids))
 
   const empresa_nombres: Record<string, string> = {}
   for (const e of empresas) empresa_nombres[e.empresa_id] = e.nombre
 
   return {
-    terceros:        (data ?? []) as Tercero[],
+    terceros:        data,
     empresa_nombres,
     empresas:        empresas.map(e => ({
       empresa_id: e.empresa_id, nombre: e.nombre, moneda_funcional: e.moneda_funcional,
@@ -504,13 +508,18 @@ async function historialDeTercero(
   // Ventas (facturas) solo con Contabilidad; compras solo con Inventario. Sin el
   // módulo, esa mitad ni se consulta: no hay nada que enseñar y no debe contar.
   const [facRes, comRes] = await Promise.all([
+    // ⚠️ `traerTodas`: de estos documentos sale el TOTAL facturado al tercero y su
+    // consolidado. Un cliente con más de 1.000 facturas salía con menos volumen del que
+    // tiene, y la ficha lo enseñaba como un dato firme.
     mods.tieneBase
-      ? db.from('facturas').select('factura_id, numero, fecha_emision, total, moneda, estado')
-          .eq('client_id', clientId).eq('cliente_id', terceroId).in('empresa_id', scope)
+      ? traerTodas<Record<string, unknown>>('factura_id', () =>
+          db.from('facturas').select('factura_id, numero, fecha_emision, total, moneda, estado')
+            .eq('client_id', clientId).eq('cliente_id', terceroId).in('empresa_id', scope))
       : Promise.resolve({ data: [] as Record<string, unknown>[] }),
     mods.tieneInventario
-      ? db.from('compras').select('compra_id, numero, fecha, total, moneda, estado')
-          .eq('client_id', clientId).eq('proveedor_id', terceroId).in('empresa_id', scope)
+      ? traerTodas<Record<string, unknown>>('compra_id', () =>
+          db.from('compras').select('compra_id, numero, fecha, total, moneda, estado')
+            .eq('client_id', clientId).eq('proveedor_id', terceroId).in('empresa_id', scope))
       : Promise.resolve({ data: [] as Record<string, unknown>[] }),
   ])
 
@@ -614,11 +623,11 @@ function diasVencido(venc: string | null, hoy: string): number | null {
 async function productosDeProveedor(
   db: DbAdmin, clientId: string, terceroId: string,
 ): Promise<TerceroProducto[]> {
-  const { data } = await db.from('products')
-    .select('producto_id, codigo, nombre, unidad, stock_actual, estado')
-    .eq('client_id', clientId).eq('proveedor_id', terceroId)
-    .order('nombre')
-  return ((data ?? []) as Record<string, unknown>[]).map(p => ({
+  const { data } = await traerTodas<Record<string, unknown>>(['nombre', 'id'], () =>
+    db.from('products')
+      .select('producto_id, codigo, nombre, unidad, stock_actual, estado')
+      .eq('client_id', clientId).eq('proveedor_id', terceroId))
+  return data.map(p => ({
     producto_id: p.producto_id as string,
     codigo:      (p.codigo as string) ?? '',
     nombre:      (p.nombre as string) ?? '',
@@ -639,21 +648,23 @@ async function cuentasPorPagarDeTercero(
   db: DbAdmin, clientId: string, terceroId: string, empresaIds: string[],
 ): Promise<TerceroCxP> {
   const scope = empresaIds.length ? empresaIds : ['__none__']
-  const { data: gastos } = await db.from('gastos_cobros')
-    .select('registro_id, descripcion, fecha, vencimiento, moneda, monto')
-    .eq('client_id', clientId).eq('tercero_id', terceroId).eq('tipo', 'GASTO')
-    .in('empresa_id', scope)
-
-  const filas = (gastos ?? []) as Record<string, unknown>[]
+  const { data: filas } = await traerTodas<Record<string, unknown>>('registro_id', () =>
+    db.from('gastos_cobros')
+      .select('registro_id, descripcion, fecha, vencimiento, moneda, monto')
+      .eq('client_id', clientId).eq('tercero_id', terceroId).eq('tipo', 'GASTO')
+      .in('empresa_id', scope))
   if (!filas.length) return { porMoneda: [], docs: [] }
 
   const ids = filas.map(g => g.registro_id as string)
-  const { data: movs } = await db.from('movimientos_tesoreria')
-    .select('referencia_id, monto, monto_ref')
-    .eq('client_id', clientId).eq('origen', 'PAGO').in('referencia_id', ids)
+  // ⚠️ `traerTodas`: son 1..n pagos POR gasto, así que pasan del techo antes que los
+  // gastos. Truncados, la ficha del proveedor enseñaba como DEUDA lo que ya se le pagó.
+  const { data: movs } = await traerTodas<Record<string, unknown>>('movimiento_id', () =>
+    db.from('movimientos_tesoreria')
+      .select('referencia_id, monto, monto_ref')
+      .eq('client_id', clientId).eq('origen', 'PAGO').in('referencia_id', ids))
 
   const liquidado = new Map<string, number>()
-  for (const m of (movs ?? []) as Record<string, unknown>[]) {
+  for (const m of movs) {
     const ref = m.referencia_id as string
     liquidado.set(ref, (liquidado.get(ref) ?? 0) + Number(m.monto_ref ?? m.monto))
   }
@@ -702,7 +713,11 @@ async function suscripcionesDeCliente(
     .in('suscripcion_id', filas.map(f => f.suscripcion_id as string))
   const lineas = (lins ?? []) as { suscripcion_id: string; producto_id: string; precio_mensual: number | string; descuento_modo: string; descuento_valor: number | string }[]
 
+  // `client_id` obligatorio: `producto_id` (PRD-0001…) es único POR CLIENTE, no global
+  // (`uq_products_client_producto`), así que sin este filtro el nombre del servicio podía
+  // salir del catálogo de OTRO negocio con el mismo código.
   const { data: prods } = await db.from('products').select('producto_id, nombre')
+    .eq('client_id', client_id)
     .in('producto_id', [...new Set(lineas.map(l => l.producto_id))])
   const nombre = new Map(((prods ?? []) as { producto_id: string; nombre: string }[]).map(p => [p.producto_id, p.nombre]))
 

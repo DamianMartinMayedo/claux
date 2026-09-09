@@ -30,6 +30,7 @@ import {
 import type { OperacionEstructural } from '@/lib/pl/impacto'
 import { ROL_PL_LABEL, esRolPL } from '@/lib/pl/estado'
 import { X, Check, AlertTriangle } from 'lucide-react'
+import { formatMonto } from '@/lib/formato'
 
 type Paso = 'semilla' | 'fusiones' | 'raices' | 'conserva' | 'cruza' | 'depreciacion' | 'revision' | 'hecho'
 
@@ -52,9 +53,6 @@ function rolLabel(rol: string): string {
   return esRolPL(rol) ? ROL_PL_LABEL[rol] : rol
 }
 
-function formatMonto(n: number): string {
-  return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
 
 function plural(n: number, uno: string, varios: string): string {
   return `${n} ${n === 1 ? uno : varios}`

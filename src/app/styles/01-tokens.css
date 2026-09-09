@@ -165,6 +165,22 @@
      así que la fila se leía escalonada. Se fija aquí porque la comparten cuatro parciales. */
   --h-filtro: 2.25rem;
 
+  /* ── Densidad de la tabla ─────────────────────────────────────────────────────
+     La celda llevaba 12/16px de padding con texto de 15px: la fila medía ~48px y un
+     listado de veinte registros se iba de pantalla por el aire, no por los datos. Baja a
+     8/12 con texto de 14px —fila de ~38px, o sea una cuarta parte más de filas por
+     pantalla— que es lo que pidió el dueño de la plataforma al mirar Cuentas por pagar.
+
+     NO se toca `--text-sm` ni `--text-xs`: son la escala de TODA la plataforma (se
+     subieron a propósito) y bajarlas aquí encogería también botones, formularios y
+     tarjetas. Por eso la tabla tiene sus tres tokens propios.
+
+     Viven aquí y no en `03-components.css` porque los comparten dos parciales —la tabla
+     base y el bloque responsive—, igual que `--h-filtro`. */
+  --table-text:  0.875rem;   /* 14px, entre --text-xs (13) y --text-sm (15) */
+  --table-pad-y: var(--space-2);
+  --table-pad-x: var(--space-3);
+
   --radius-sm:   0.375rem;  --radius-md:   0.5rem;
   --radius-lg:   0.75rem;   --radius-xl:   1rem;
   --radius-2xl:  1.5rem;    --radius-full: 9999px;

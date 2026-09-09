@@ -3,11 +3,13 @@
 import { revalidatePath }    from 'next/cache'
 import { revalidarFinanzas } from './_finanzas-revalidar'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { traerTodas }        from '@/lib/supabase/paginar'
 import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { ORIGEN_CIERRE_CAJA, generaSaldo } from '@/lib/gastos-core'
 import { tramoDe, EPS_SALDO, type Tramo as TramoCore } from '@/lib/cobranza-core'
 import { hoyEnTz } from '@/lib/fecha-tz'
+import { formatMonto, formatTasa } from '@/lib/formato'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -84,12 +86,18 @@ async function cargarCuentas(modo: ModoCuentas): Promise<CuentasPageData | null>
   const hoy         = hoyISO()
 
   // Movimientos de liquidación (para saldos e historial) + terceros + cuentas
+  //
+  // ⚠️ `traerTodas` y no la consulta a secas: PostgREST corta a 1.000 filas sin avisar, y
+  // esta lectura es la que decide si un documento está pagado. Con 1.410 liquidaciones se
+  // veían 1.000, así que 410 documentos ya pagados aparecían aquí como deuda por su
+  // importe completo. Ver la cabecera de `lib/supabase/paginar.ts`.
   const [movRes, terRes, cuRes] = await Promise.all([
-    db.from('movimientos_tesoreria')
-      .select('movimiento_id, fecha, monto, monto_ref, cuenta_id, referencia_id')
-      .eq('client_id', session.client_id)
-      .in('origen', ['PAGO', 'COBRO'])
-      .not('referencia_id', 'is', null),
+    traerTodas<{ movimiento_id: string; fecha: string; monto: number; monto_ref: number | null; cuenta_id: string; referencia_id: string }>(
+      'movimiento_id', () => db.from('movimientos_tesoreria')
+        .select('movimiento_id, fecha, monto, monto_ref, cuenta_id, referencia_id')
+        .eq('client_id', session.client_id)
+        .in('origen', ['PAGO', 'COBRO'])
+        .not('referencia_id', 'is', null)),
     db.from('third_parties').select('tercero_id, nombre')
       .eq('client_id', session.client_id),
     // Todas (la de «Apertura» incluida) porque resuelven el nombre de cada
@@ -105,7 +113,7 @@ async function cargarCuentas(modo: ModoCuentas): Promise<CuentasPageData | null>
 
   const liquidadoPorDoc = new Map<string, number>()
   const liqsPorDoc      = new Map<string, LiquidacionDoc[]>()
-  for (const m of (movRes.data ?? []) as { movimiento_id: string; fecha: string; monto: number; monto_ref: number | null; cuenta_id: string; referencia_id: string }[]) {
+  for (const m of movRes.data) {
     // El saldo del documento se mide en su propia moneda → monto_ref (importe aplicado)
     const aplicado = Number(m.monto_ref ?? m.monto)
     liquidadoPorDoc.set(m.referencia_id, (liquidadoPorDoc.get(m.referencia_id) ?? 0) + aplicado)
@@ -120,12 +128,13 @@ async function cargarCuentas(modo: ModoCuentas): Promise<CuentasPageData | null>
 
   if (modo === 'COBRAR') {
     // Facturas emitidas (formalmente cobrables)
-    const { data: facturas } = await db.from('facturas')
-      .select('factura_id, numero, empresa_id, cliente_id, fecha_emision, fecha_vencimiento, moneda, total, estado')
-      .eq('client_id', session.client_id)
-      .in('empresa_id', idsFiltro)
-      .eq('estado', 'EMITIDA')
-    for (const f of (facturas ?? []) as Record<string, unknown>[]) {
+    const { data: facturas } = await traerTodas<Record<string, unknown>>('factura_id', () =>
+      db.from('facturas')
+        .select('factura_id, numero, empresa_id, cliente_id, fecha_emision, fecha_vencimiento, moneda, total, estado')
+        .eq('client_id', session.client_id)
+        .in('empresa_id', idsFiltro)
+        .eq('estado', 'EMITIDA'))
+    for (const f of facturas) {
       const monto     = Number(f.total)
       const liquidado = liquidadoPorDoc.get(f.factura_id as string) ?? 0
       const saldo     = monto - liquidado
@@ -156,13 +165,14 @@ async function cargarCuentas(modo: ModoCuentas): Promise<CuentasPageData | null>
   // Social y CxC es su único camino de cobro. Los dos son «un COBRO con origen» y
   // significan lo contrario — uno ya está cobrado, el otro está por cobrar.
   const tipoRegistro = modo === 'COBRAR' ? 'COBRO' : 'GASTO'
-  const { data: registros } = await db.from('gastos_cobros')
-    .select('registro_id, descripcion, empresa_id, tercero_id, fecha, vencimiento, moneda, monto, naturaleza')
-    .eq('client_id', session.client_id)
-    .in('empresa_id', idsFiltro)
-    .eq('tipo', tipoRegistro)
-    .or(`origen_tipo.is.null,origen_tipo.neq.${ORIGEN_CIERRE_CAJA}`)
-  for (const r of (registros ?? []) as Record<string, unknown>[]) {
+  const { data: registros } = await traerTodas<Record<string, unknown>>('registro_id', () =>
+    db.from('gastos_cobros')
+      .select('registro_id, descripcion, empresa_id, tercero_id, fecha, vencimiento, moneda, monto, naturaleza')
+      .eq('client_id', session.client_id)
+      .in('empresa_id', idsFiltro)
+      .eq('tipo', tipoRegistro)
+      .or(`origen_tipo.is.null,origen_tipo.neq.${ORIGEN_CIERRE_CAJA}`))
+  for (const r of registros) {
     // Una fila de solo COSTE no se le debe a nadie (mig. 166): el coste de una nómina
     // se reparte por categoría y su deuda va en filas aparte. Dejarla entrar aquí
     // duplicaría la deuda de cada nómina y pondría a pagar en Tesorería una fila que
@@ -370,7 +380,12 @@ export async function registrarPagoDoc(
     monto:         montoCaja,       // en la moneda de la caja
     moneda:        cuenta.moneda,
     monto_ref:     montoRaw,        // en la moneda del documento (reduce su saldo)
-    concepto:      cambiaMoneda ? `${concepto} (${montoRaw.toFixed(2)} ${moneda} a ${tasa} ${cuenta.moneda}/${moneda})` : concepto,
+    // El concepto se GUARDA, así que se escribe en el idioma de quien lo va a leer:
+    // `toFixed(2)` daba «20000.00» (punto decimal inglés, sin millares) y la tasa en crudo
+    // imprimía sus diecisiete decimales — «0.00130718954248366»— dentro de la lista.
+    concepto:      cambiaMoneda
+      ? `${concepto} (${formatMonto(montoRaw)} ${moneda} a ${formatTasa(tasa)} ${cuenta.moneda}/${moneda})`
+      : concepto,
     origen:        esIngreso ? 'COBRO' : 'PAGO',
     referencia_id: doc_id,
     notas,

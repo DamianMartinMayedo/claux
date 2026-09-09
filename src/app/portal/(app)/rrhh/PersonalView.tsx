@@ -42,6 +42,7 @@ import PrerequisitoAviso                 from '@/components/portal/PrerequisitoA
 import IaTouchpoint                    from '@/components/portal/ia/IaTouchpoint'
 import ExportarMenu from '@/components/portal/ExportarMenu'
 import { hoyEnTz } from '@/lib/fecha-tz'
+import { formatMonto } from '@/lib/formato'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -56,9 +57,6 @@ const PERIODICIDADES:  Periodicidad[] = ['MENSUAL', 'QUINCENAL', 'SEMANAL', 'POR
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatMonto(n: number): string {
-  return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
 // «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: a partir de las 20:00
 // `toISOString()` ya da la fecha de mañana, así que el defecto de un `type=date` se
 // adelantaba un día cada noche. Una sola fuente: `lib/fecha-tz.ts`.
@@ -653,6 +651,7 @@ export default function PersonalView({ data, puedeEditar, children }: { data: Pe
       <Filtros
         filtros={declaracion}
         q={search}
+        qDonde="cliente"
         placeholder="Buscar por nombre, documento, cargo…"
         onCargando={setCargando}
       />

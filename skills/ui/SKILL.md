@@ -81,6 +81,8 @@ Resumen de familias (nombres, no valores — mira `01-tokens.css`):
 
 Toda tabla usa el sistema base `.table` + `.table-wrapper` de `03-components.css`. **No crees clases propias** de alineación, ancho de columna de acciones ni de importes — ya existen. Referencias: `TercerosView.tsx` (con botones), `VentasView.tsx` (sin botones).
 
+**Densidad — tres tokens, y no se tocan a mano.** La celda sale de `--table-pad-y` / `--table-pad-x` y el texto de `--table-text` (8/12px y 14px; en `01-tokens.css`). Existen porque la tabla necesitaba ser más compacta que el resto de la interfaz sin arrastrarla: `--text-sm` y `--text-xs` son la escala de TODA la plataforma —se subieron a propósito— y bajarlas para apretar una tabla encoge también botones y formularios. Si una tabla necesita otra densidad, no le pongas padding propio: es señal de que el token está mal.
+
 **Alineación de columnas** — la MISMA clase modificadora va en el `<th>` y en el `<td>`:
 - Cifras/importes/cantidades → **`col-num`** (derecha + `tabular-nums`). No uses `text-right` ni `*-col-monto`.
 - Centrado → **`col-center`**. Acciones → **`col-actions`** (se ciñe al contenido, derecha).
@@ -102,8 +104,11 @@ Toda tabla usa el sistema base `.table` + `.table-wrapper` de `03-components.css
 | Una **entidad con ficha propia**, y entrar es la acción obvia | La **fila entera** (`table-row-clickable`) | clientes, presupuestos, propuestas, hilos de soporte |
 | Un **registro** de algo que pasó, sin ficha propia | **Solo el nombre**, enlazado a la ficha de su entidad; la fila no lleva a ningún sitio | pagos, actividad, solicitudes |
 | Una **fila de configuración** que se edita en sitio | **Nada**: manda `RowActions` | módulos, niveles, necesidades del diagnóstico |
+| Una fila con **detalle desplegable** (no hay otra página a la que ir) | La **fila entera** abre y cierra el detalle | tesorería, gastos, CxC/CxP, movimientos de inventario, operaciones de caja |
 
 Con dos condiciones: la fila clicable **no se traga** el clic de sus controles (checkbox, `RowActions`, enlaces — `stopPropagation` en la celda de acciones), y siempre hay una vía de teclado equivalente.
+
+**El desplegable de una fila lo abre la FILA, y la flecha se queda.** Es `<BotonDetalle>` (`src/components/portal/BotonDetalle.tsx`): la misma flecha en las cuatro listas que lo llevan, con `aria-expanded` y su propio `stopPropagation` —si el clic subiera a la fila, el detalle se abriría y se cerraría en el mismo gesto y no pasaría nada—. La flecha no se quita al hacer clicable la fila: es lo que ANUNCIA que hay algo debajo (una fila sin señal no se pincha) y es la vía de teclado. Lo que se arregló es que fuera la ÚNICA: acertar 15px con el dedo en 3G es la diferencia entre una tabla que responde y una que parece muerta.
 
 **Color de empresa** (tablas multi-empresa): `<tr className="… row-empresa-accent" style={empresaColorVar(colorOf(id))}>` (única excepción al no-inline: custom property de runtime). Acento lateral izquierdo; en tarjeta pasa a `border-left`. No añadas más color que ese acento.
 
@@ -156,6 +161,7 @@ Reglas:
 
 - **El estado vive en la URL, nunca en `useState`.** Refrescar —o que se caiga la conexión, que en Cuba es el caso normal— no puede tirar lo que el dueño acaba de poner, y volver del detalle de un documento tiene que devolverlo a lo que estaba mirando.
 - **Un filtro busca siempre en TODO.** Se declara `donde`: `servidor` (cambia qué se trae, como lo archivado), `escalado` (el navegador mientras el listado quepa entero, la consulta en cuanto haya filas sin traer) o `cliente` (**solo** si el conjunto nunca se trunca). Un filtro que mira las 500 filas más recientes miente sin decirlo.
+- **`donde` decide también si el cambio VIAJA.** Un cambio que solo aplica el navegador pone la URL con `history.replaceState` (Next la engancha al router, así que `useSearchParams` se entera sin pedir la página) y el filtro es instantáneo, sin velo de «Cargando…». Antes todo cambio era `router.replace`: en una pantalla que se trae el listado entero y filtra en memoria, eso repetía la consulta completa para pintar lo que ya estaba —y en una conexión que se cae, la tabla se quedaba tapada para siempre; así se colgó el buscador de Cuentas por pagar—. La búsqueda por texto declara lo suyo aparte, con `qDonde` (`servidor` por defecto: solo lo lleva la pantalla cuya CONSULTA busca por texto). **Antes de declarar `cliente`, comprueba que la `page.tsx` no lee ese parámetro**: si lo lee, dejar de navegar deja la consulta congelada sin que nada lo diga.
 - **La etiqueta vive junto al valor** (`opciones: [{ valor, label }]`), en las palabras del dueño: «Pendiente», nunca `PENDIENTE`.
 - Lo que la descarga **no puede** reproducir se marca `sinExportar` y el desplegable lo dice. Un filtro que no se puede aplicar **se dice, no se ignora**.
 - **Una fila**, no dos: rango + buscador + los dos filtros más usados; el resto en «Filtros (N)». Y chips de lo puesto con «×» y «Limpiar» — los pone `<Filtros>` solo.

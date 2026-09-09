@@ -19,6 +19,7 @@ import {
   type CalendarioFacturacion, type MesCalendario, type EstadoCobro, type TotalMes,
   type FacturaDeAcuerdo,
 } from '@/lib/suscripciones'
+import { traerTodas } from '@/lib/supabase/paginar'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = any
@@ -43,10 +44,12 @@ interface LineaFila {
 async function lineasDe(db: Db, clientId: string, suscripcionIds: string[]): Promise<Map<string, LineaFila[]>> {
   const mapa = new Map<string, LineaFila[]>()
   if (!suscripcionIds.length) return mapa
-  const { data } = await db.from('suscripcion_lineas')
+  // ⚠️ `traerTodas`: PostgREST corta a 1.000 filas sin avisar (ver `lib/supabase/paginar.ts`).
+  // Un acuerdo sin líneas no se cobra, así que truncar aquí es dejar de facturar.
+  const { data } = await traerTodas<LineaFila>('linea_id', () => db.from('suscripcion_lineas')
     .select('linea_id, suscripcion_id, producto_id, precio_mensual, descuento_modo, descuento_valor')
-    .eq('client_id', clientId).in('suscripcion_id', suscripcionIds)
-  for (const l of (data ?? []) as LineaFila[]) {
+    .eq('client_id', clientId).in('suscripcion_id', suscripcionIds))
+  for (const l of data) {
     const arr = mapa.get(l.suscripcion_id) ?? []
     arr.push(l)
     mapa.set(l.suscripcion_id, arr)
@@ -171,6 +174,11 @@ export async function facturadasPorCiclo(db: Db, opciones: {
   }
   if (!opciones.clientIds.length) return vacio
 
+  // ⚠️ `traerTodas` en las tres consultas de esta función: la idempotencia de la
+  // facturación se apoya en ellas —«este ciclo ya tiene factura»—, y esta barre VARIOS
+  // clientes a la vez, así que el techo de 1.000 filas llega enseguida. Truncadas, un
+  // ciclo ya facturado volvía a salir como pendiente y se cobraba dos veces.
+  const consultaFacturas = () => {
   let q = db.from('facturas')
     .select('factura_id, numero, estado, moneda, total, cliente_id, fecha_emision')
     .in('client_id', opciones.clientIds)
@@ -179,23 +187,28 @@ export async function facturadasPorCiclo(db: Db, opciones: {
     .neq('estado', 'ANULADA')
     .gte('fecha_emision', opciones.desde).lte('fecha_emision', opciones.hasta)
   if (opciones.empresaId) q = q.eq('empresa_id', opciones.empresaId)
-  const { data: facs, error: errFacs } = await q
-  if (errFacs) return { ...vacio, error: errFacs.message }
-
-  const facturas = (facs ?? []) as FacturaFila[]
+    return q
+  }
+  let facturas: FacturaFila[]
+  try {
+    facturas = (await traerTodas<FacturaFila>('factura_id', consultaFacturas)).data
+  } catch (e) {
+    return { ...vacio, error: e instanceof Error ? e.message : 'No se ha podido leer las facturas.' }
+  }
   if (!facturas.length) return vacio
 
   // Lo cobrado de cada factura, en la moneda del DOCUMENTO (`monto_ref`): pagar 100 USD
   // desde una caja en CUP baja el saldo en 100 USD. El saldo sale de `cobranza-core`, que
   // ya lo comparten CxC y el listado de Ventas — una segunda implementación acabaría
   // diciendo otra cosa que la pantalla de cobros.
-  const { data: movs } = await db.from('movimientos_tesoreria')
-    .select('referencia_id, monto, monto_ref')
-    .in('client_id', opciones.clientIds)
-    .eq('origen', 'COBRO')
-    .in('referencia_id', facturas.map(f => f.factura_id))
+  const { data: movs } = await traerTodas<{ referencia_id: string; monto: number; monto_ref: number | null }>(
+    'movimiento_id', () => db.from('movimientos_tesoreria')
+      .select('referencia_id, monto, monto_ref')
+      .in('client_id', opciones.clientIds)
+      .eq('origen', 'COBRO')
+      .in('referencia_id', facturas.map(f => f.factura_id)))
   const cobrado = new Map<string, number>()
-  for (const m of (movs ?? []) as { referencia_id: string; monto: number; monto_ref: number | null }[]) {
+  for (const m of movs) {
     cobrado.set(m.referencia_id, (cobrado.get(m.referencia_id) ?? 0) + Number(m.monto_ref ?? m.monto))
   }
   const saldoDe = new Map<string, number>()
@@ -207,18 +220,24 @@ export async function facturadasPorCiclo(db: Db, opciones: {
   }
 
   const periodoDe = new Map(facturas.map(f => [f.factura_id, f.fecha_emision.slice(0, 7)]))
-  let lq = db.from('documento_lineas')
-    .select('documento_id, suscripcion_id').eq('documento_tipo', 'FACTURA')
-    .not('suscripcion_id', 'is', null)
-  lq = opciones.suscripcionIds
-    ? lq.in('suscripcion_id', opciones.suscripcionIds)
-    : lq.in('documento_id', facturas.map(f => f.factura_id))
-  const { data: lins, error: errLins } = await lq
-  if (errLins) return { ...vacio, error: errLins.message }
+  const consultaLineas = () => {
+    const lq = db.from('documento_lineas')
+      .select('documento_id, suscripcion_id').eq('documento_tipo', 'FACTURA')
+      .not('suscripcion_id', 'is', null)
+    return opciones.suscripcionIds
+      ? lq.in('suscripcion_id', opciones.suscripcionIds)
+      : lq.in('documento_id', facturas.map(f => f.factura_id))
+  }
+  let lineas: { documento_id: string; suscripcion_id: string }[]
+  try {
+    lineas = (await traerTodas<{ documento_id: string; suscripcion_id: string }>('linea_id', consultaLineas)).data
+  } catch (e) {
+    return { ...vacio, error: e instanceof Error ? e.message : 'No se ha podido leer las líneas.' }
+  }
 
   const porFactura = new Map<string, number>()
   const porCiclo   = new Set<string>()
-  for (const l of (lins ?? []) as { documento_id: string; suscripcion_id: string }[]) {
+  for (const l of lineas) {
     const periodo = periodoDe.get(l.documento_id)
     // Filtrando por `suscripcion_id` entran líneas de facturas fuera de la ventana (o
     // anuladas): las que no están en el mapa no son de una factura viva de aquí.
@@ -242,21 +261,22 @@ export async function construirPreview(
   // Las dos consultas de partida van juntas: lo que TOCA cobrar y lo que YA se cobró en
   // el período. La segunda ya no se puede saltar cuando no queda nada pendiente — es
   // justo el caso «ya está todo facturado», el que hay que poder enseñar.
-  const [{ data, error: errSubs }, facturado] = await Promise.all([
+  const [{ data }, facturado] = await Promise.all([
     // Un período contiene SOLO sus cobros (`gte inicio`), no todo lo vencido hasta su
     // fin. Sin ese suelo, una suscripción atrasada desde mayo se colaba en la factura de
     // julio como si fuera de julio: se cobraba un ciclo, la fecha avanzaba uno, y los
     // otros dos meses de atraso seguían ahí sin que nada lo dijera. Ahora cada ciclo
     // pendiente se factura en SU mes, que es como lo enseña el calendario.
-    db.from('suscripciones')
+    // ⚠️ `traerTodas`: es la lista de lo que se va a cobrar. Un negocio de cuotas pasa de
+    // 1.000 acuerdos, y los que se quedaban fuera simplemente no se facturaban.
+    traerTodas<SubFila>('suscripcion_id', () => db.from('suscripciones')
       .select('suscripcion_id, cliente_id, moneda, periodicidad, fecha_fin, renovacion_automatica, estado, fecha_proximo_cobro, fecha_inicio, prorratear')
       .eq('client_id', clientId).eq('empresa_id', empresa_id).eq('estado', 'ACTIVA')
-      .gte('fecha_proximo_cobro', inicio).lte('fecha_proximo_cobro', fin),
+      .gte('fecha_proximo_cobro', inicio).lte('fecha_proximo_cobro', fin)),
     facturadasPorCiclo(db, { clientIds: [clientId], empresaId: empresa_id, desde: inicio, hasta: fin }),
   ])
   // Una consulta rota aquí NO puede pasar por «no hay nada que facturar»: esta es
   // la lista de lo que se va a cobrar, y quedarse callada es perder el cobro.
-  if (errSubs) return { ok: false, error: `No se pudieron leer las suscripciones: ${errSubs.message}` }
   if (facturado.error) return { ok: false, error: `No se pudieron leer las facturas del período: ${facturado.error}` }
 
   // Solo ACTIVAS efectivas: una vencida de fin fijo no se cobra. Y el CICLO tiene que
@@ -264,7 +284,7 @@ export async function construirPreview(
   // aunque hoy siga vivo (es lo que hace «Cancelar al final del período»). El calendario
   // ya lo comprobaba en su proyección y aquí faltaba, así que las dos pantallas del mismo
   // mes decían cosas distintas — y la que factura era la que se equivocaba.
-  let subs = ((data ?? []) as SubFila[]).filter(s =>
+  let subs = data.filter(s =>
     estadoEfectivo({ estado: s.estado as EstadoSub, fecha_fin: s.fecha_fin, renovacion_automatica: s.renovacion_automatica }, hoy) === 'ACTIVA'
     && cicloVigente(s, s.fecha_proximo_cobro))
 
@@ -279,8 +299,11 @@ export async function construirPreview(
   const cliIds  = [...new Set([...subs.map(s => s.cliente_id), ...conSuscripciones.map(f => f.cliente_id)])]
   const prodIds = [...new Set([...porSub.values()].flat().map(l => l.producto_id))]
   const [{ data: cli }, { data: prod }] = await Promise.all([
-    cliIds.length  ? db.from('third_parties').select('tercero_id, nombre').in('tercero_id', cliIds)  : Promise.resolve({ data: [] }),
-    prodIds.length ? db.from('products').select('producto_id, nombre').in('producto_id', prodIds) : Promise.resolve({ data: [] }),
+    // `client_id` obligatorio: `tercero_id` y `producto_id` (TER-0001, PRD-0001…) son
+    // únicos POR CLIENTE, no globales. Sin el filtro, el nombre podía venir del catálogo
+    // de OTRO negocio con el mismo código.
+    cliIds.length  ? db.from('third_parties').select('tercero_id, nombre').eq('client_id', clientId).in('tercero_id', cliIds)  : Promise.resolve({ data: [] }),
+    prodIds.length ? db.from('products').select('producto_id, nombre').eq('client_id', clientId).in('producto_id', prodIds) : Promise.resolve({ data: [] }),
   ])
   const nomCli  = new Map(((cli ?? []) as { tercero_id: string; nombre: string }[]).map(c => [c.tercero_id, c.nombre]))
   const nomProd = new Map(((prod ?? []) as { producto_id: string; nombre: string }[]).map(p => [p.producto_id, p.nombre]))
@@ -371,13 +394,20 @@ export async function construirCalendario(
   // esas columnas de `suscripciones`. Pedirlas aquí hacía fallar la consulta
   // entera y, como el error se tragaba, el calendario decía «no hay cobros» con
   // el negocio lleno de suscripciones activas. De ahí que el `error` se mire.
-  const { data: subsRaw, error: errSubs } = await db.from('suscripciones')
-    .select('suscripcion_id, cliente_id, moneda, periodicidad, fecha_fin, renovacion_automatica, estado, fecha_proximo_cobro')
-    .eq('client_id', clientId).eq('empresa_id', empresa_id).eq('estado', 'ACTIVA')
-  if (errSubs) return { ok: false, error: `No se pudieron leer las suscripciones: ${errSubs.message}` }
+  // ⚠️ `traerTodas`: aquí no hay filtro de fecha —son TODAS las activas—, así que es de
+  // las primeras consultas en pasar de 1.000 filas. Truncada, el calendario no enseñaba
+  // los cobros de los acuerdos que se quedaban fuera.
+  let subsRaw: SubFila[]
+  try {
+    subsRaw = (await traerTodas<SubFila>('suscripcion_id', () => db.from('suscripciones')
+      .select('suscripcion_id, cliente_id, moneda, periodicidad, fecha_fin, renovacion_automatica, estado, fecha_proximo_cobro')
+      .eq('client_id', clientId).eq('empresa_id', empresa_id).eq('estado', 'ACTIVA'))).data
+  } catch (e) {
+    return { ok: false, error: `No se pudieron leer las suscripciones: ${e instanceof Error ? e.message : e}` }
+  }
 
   // Solo ACTIVAS efectivas: una vencida de fin fijo no se proyecta.
-  const subs = ((subsRaw ?? []) as SubFila[]).filter(s =>
+  const subs = subsRaw.filter(s =>
     estadoEfectivo({ estado: s.estado as EstadoSub, fecha_fin: s.fecha_fin, renovacion_automatica: s.renovacion_automatica }, hoy) === 'ACTIVA')
 
   // La ventana arranca en el cobro pendiente más antiguo: si algo lleva tres meses sin
@@ -402,8 +432,10 @@ export async function construirCalendario(
   const cliIds  = [...new Set([...subs.map(s => s.cliente_id), ...conSuscripciones.map(f => f.cliente_id)])]
   const prodIds = [...new Set([...porSub.values()].flat().map(l => l.producto_id))]
   const [{ data: cli }, { data: prod }] = await Promise.all([
-    cliIds.length  ? db.from('third_parties').select('tercero_id, nombre').in('tercero_id', cliIds) : Promise.resolve({ data: [] }),
-    prodIds.length ? db.from('products').select('producto_id, nombre').in('producto_id', prodIds)   : Promise.resolve({ data: [] }),
+    // `client_id` obligatorio: esos códigos son únicos por cliente, no globales (ver
+    // `construirPreview`).
+    cliIds.length  ? db.from('third_parties').select('tercero_id, nombre').eq('client_id', clientId).in('tercero_id', cliIds) : Promise.resolve({ data: [] }),
+    prodIds.length ? db.from('products').select('producto_id, nombre').eq('client_id', clientId).in('producto_id', prodIds)   : Promise.resolve({ data: [] }),
   ])
   const nomCli  = new Map(((cli ?? []) as { tercero_id: string; nombre: string }[]).map(c => [c.tercero_id, c.nombre]))
   const nomProd = new Map(((prod ?? []) as { producto_id: string; nombre: string }[]).map(p => [p.producto_id, p.nombre]))
@@ -642,14 +674,16 @@ export async function facturarAutomatico(
   let generadas = 0
   for (const e of (empresas ?? []) as { empresa_id: string; client_id: string; letra_facturacion: string }[]) {
     // Qué períodos hay pendientes en esta empresa (normalmente uno).
-    const { data: pend } = await db.from('suscripciones')
-      .select('fecha_proximo_cobro')
-      .eq('client_id', e.client_id).eq('empresa_id', e.empresa_id)
-      .eq('estado', 'ACTIVA')
-      .lte('fecha_proximo_cobro', hoy)
+    // ⚠️ `traerTodas`: de aquí salen los PERÍODOS que el cron va a facturar. Con el techo
+    // de 1.000, un mes atrasado podía no aparecer y ese cobro no se generaba nunca.
+    const { data: pend } = await traerTodas<{ fecha_proximo_cobro: string }>(
+      'suscripcion_id', () => db.from('suscripciones')
+        .select('fecha_proximo_cobro')
+        .eq('client_id', e.client_id).eq('empresa_id', e.empresa_id)
+        .eq('estado', 'ACTIVA')
+        .lte('fecha_proximo_cobro', hoy))
 
-    const periodos = [...new Set(((pend ?? []) as { fecha_proximo_cobro: string }[])
-      .map(p => p.fecha_proximo_cobro.slice(0, 7)))].sort()
+    const periodos = [...new Set(pend.map(p => p.fecha_proximo_cobro.slice(0, 7)))].sort()
 
     for (const periodo of periodos) {
       const r = await generarFacturasPeriodo(db, e.client_id, e.empresa_id, e.letra_facturacion, periodo)
@@ -688,30 +722,33 @@ export async function historialPorAcuerdo(
   const out = new Map<string, FacturaDeAcuerdo[]>()
   if (!suscripcionIds.length) return out
 
-  const { data: lins } = await db.from('documento_lineas')
-    .select('documento_id, suscripcion_id').eq('documento_tipo', 'FACTURA')
-    .in('suscripcion_id', suscripcionIds)
-  const lineas = (lins ?? []) as { documento_id: string; suscripcion_id: string }[]
+  // ⚠️ `traerTodas` en las tres: de ellas sale «quién no ha pagado la mensualidad». Una
+  // cartera de acuerdos con historia pasa de 1.000 líneas sin esfuerzo, y truncadas el
+  // historial enseñaba menos facturas —o menos cobros, o sea deuda que no existe—.
+  const { data: lineas } = await traerTodas<{ documento_id: string; suscripcion_id: string }>(
+    'linea_id', () => db.from('documento_lineas')
+      .select('documento_id, suscripcion_id').eq('documento_tipo', 'FACTURA')
+      .in('suscripcion_id', suscripcionIds))
   if (!lineas.length) return out
 
   const facturaIds = [...new Set(lineas.map(l => l.documento_id))]
-  const { data: facs } = await db.from('facturas')
+  const { data: facturas } = await traerTodas<{
+    factura_id: string; numero: string; estado: string
+    moneda: string; total: number | string; fecha_emision: string
+  }>('factura_id', () => db.from('facturas')
     .select('factura_id, numero, estado, moneda, total, fecha_emision')
     .eq('client_id', clientId)
     .neq('estado', 'ANULADA')
-    .in('factura_id', facturaIds)
-  const facturas = (facs ?? []) as {
-    factura_id: string; numero: string; estado: string
-    moneda: string; total: number | string; fecha_emision: string
-  }[]
+    .in('factura_id', facturaIds))
   if (!facturas.length) return out
 
-  const { data: movs } = await db.from('movimientos_tesoreria')
-    .select('referencia_id, monto, monto_ref')
-    .eq('client_id', clientId).eq('origen', 'COBRO')
-    .in('referencia_id', facturas.map(f => f.factura_id))
+  const { data: movs } = await traerTodas<{ referencia_id: string; monto: number; monto_ref: number | null }>(
+    'movimiento_id', () => db.from('movimientos_tesoreria')
+      .select('referencia_id, monto, monto_ref')
+      .eq('client_id', clientId).eq('origen', 'COBRO')
+      .in('referencia_id', facturas.map(f => f.factura_id)))
   const cobrado = new Map<string, number>()
-  for (const m of (movs ?? []) as { referencia_id: string; monto: number; monto_ref: number | null }[]) {
+  for (const m of movs) {
     cobrado.set(m.referencia_id, (cobrado.get(m.referencia_id) ?? 0) + Number(m.monto_ref ?? m.monto))
   }
 

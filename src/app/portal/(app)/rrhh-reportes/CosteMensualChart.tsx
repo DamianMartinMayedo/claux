@@ -6,12 +6,10 @@
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
+import { formatMonto } from '@/lib/formato'
 
 interface Punto { mes: string; coste: number }
 
-function formatMonto(n: number): string {
-  return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
 
 export default function CosteMensualChart({ serie, moneda }: { serie: Punto[]; moneda: string }) {
   return (

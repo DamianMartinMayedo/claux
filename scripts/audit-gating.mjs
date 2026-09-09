@@ -61,6 +61,14 @@ const ALLOWLIST = {
   // de lecturas del portal. Lo que SÍ escribe (cerrarYContabilizar, reintentarContabilizar)
   // lleva `puedeEditarModulo('caja')`.
   'caja.ts':     ['listarSinContabilizar'],
+  // Lo mismo, y por lo mismo: LECTURA pura que el detector marca por el `.rpc(`.
+  // `tes_saldo_tras` (mig. 242) y `tes_saldos_a_fecha` (mig. 243) son funciones `stable`
+  // que solo agregan —el saldo que dejó cada movimiento y el saldo de cada cuenta a una
+  // fecha—, y viven en la base porque calcularlas desde Next obligaría a traerse la
+  // historia completa de la cuenta por la API. El candado lo pone la página con
+  // `requireAccesoModulo('base')`. Todo lo que escribe en este fichero (guardar/archivar
+  // cuenta, movimientos, transferencias) lleva `puedeEditarModulo('base')`.
+  'tesoreria.ts': ['obtenerTesoreria'],
 }
 
 const WRITE = /\.(insert|update|delete|upsert)\s*\(|\.rpc\s*\(/

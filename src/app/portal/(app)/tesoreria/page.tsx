@@ -17,8 +17,10 @@ export default async function TesoreriaPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const { puedeEditar } = await requireAccesoModulo('base')
-  // El rango acota el LISTADO de movimientos, no los saldos: un saldo es la suma de toda
-  // la historia de la cuenta y filtrarlo sería enseñar un saldo que no existe.
+  // El rango acota el listado por los dos extremos; a los SALDOS solo les llega `hasta`,
+  // que es su fecha de corte. Acotarlos también por `desde` sería enseñar un saldo que no
+  // existe —`saldo_inicial` + solo los movimientos de la ventana—; acotarlos por arriba es
+  // justo lo que da el saldo de ese día.
   const sp = await searchParams
   const { desde, hasta, q, limite } = sp
   // Los filtros de la barra se aplican EN LA CONSULTA solo cuando la vista los escala

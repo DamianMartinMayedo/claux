@@ -21,6 +21,7 @@ import { DIAS_DOSSIER_RANCIO } from '@/lib/dossier/frescura'
 import { cargarContextoLimites, contarActivos, DIMENSIONES, type Dimension } from '@/lib/limites'
 import { renderPlantilla } from '@/lib/email/render'
 import { enviarEmail, tipoEmailActivo } from '@/lib/email/enviar'
+import { traerTodas } from '@/lib/supabase/paginar'
 
 type Db = ReturnType<typeof createAdminClient>
 
@@ -127,22 +128,30 @@ export async function escanearContratosTerceros(
  * Hosting y 2 más»). Un acuerdo presta varios desde la mig. 124, y el aviso tiene que
  * nombrarlos sin convertirse en un párrafo.
  */
-async function serviciosDeAcuerdo(db: Db, suscripcionIds: string[]): Promise<Map<string, string>> {
+async function serviciosDeAcuerdo(
+  db: Db, clientIds: string[], suscripcionIds: string[],
+): Promise<Map<string, string>> {
   const out = new Map<string, string>()
   if (!suscripcionIds.length) return out
 
   const { data: lins } = await db.from('suscripcion_lineas')
-    .select('suscripcion_id, producto_id').in('suscripcion_id', suscripcionIds)
-  const lineas = (lins ?? []) as { suscripcion_id: string; producto_id: string }[]
+    .select('client_id, suscripcion_id, producto_id').in('suscripcion_id', suscripcionIds)
+  const lineas = (lins ?? []) as { client_id: string; suscripcion_id: string; producto_id: string }[]
   if (!lineas.length) return out
 
-  const { data: prod } = await db.from('products').select('producto_id, nombre')
+  // `client_id` en el filtro y en la CLAVE del mapa: `producto_id` (PRD-0001…) es único
+  // por cliente, no global (`uq_products_client_producto`), y este escáner recorre todos
+  // los tenants a la vez. Sin eso, el aviso de un negocio podía nombrar el servicio
+  // homónimo de otro.
+  const { data: prod } = await db.from('products').select('client_id, producto_id, nombre')
+    .in('client_id', clientIds)
     .in('producto_id', [...new Set(lineas.map(l => l.producto_id))])
-  const nom = new Map(((prod ?? []) as { producto_id: string; nombre: string }[]).map(p => [p.producto_id, p.nombre]))
+  const nom = new Map(((prod ?? []) as { client_id: string; producto_id: string; nombre: string }[])
+    .map(p => [`${p.client_id}:${p.producto_id}`, p.nombre]))
 
   const porSub = new Map<string, string[]>()
   for (const l of lineas) {
-    porSub.set(l.suscripcion_id, [...(porSub.get(l.suscripcion_id) ?? []), nom.get(l.producto_id) ?? 'un servicio'])
+    porSub.set(l.suscripcion_id, [...(porSub.get(l.suscripcion_id) ?? []), nom.get(`${l.client_id}:${l.producto_id}`) ?? 'un servicio'])
   }
   for (const [sid, nombres] of porSub) {
     const n = nombres.sort((a, b) => a.localeCompare(b))
@@ -179,10 +188,12 @@ export async function escanearServicios(
   if (filas.length) {
     const cliIds = [...new Set(filas.map(f => f.cliente_id as string))]
     const [{ data: cli }, srvs] = await Promise.all([
-      db.from('third_parties').select('tercero_id, nombre').in('tercero_id', cliIds),
-      serviciosDeAcuerdo(db, filas.map(f => f.suscripcion_id as string)),
+      // `client_id` obligatorio, y en la clave: `tercero_id` (TER-0001…) es único por
+      // cliente, no global, y aquí se leen varios tenants juntos.
+      db.from('third_parties').select('client_id, tercero_id, nombre').in('client_id', ids).in('tercero_id', cliIds),
+      serviciosDeAcuerdo(db, ids, filas.map(f => f.suscripcion_id as string)),
     ])
-    for (const c of (cli ?? []) as { tercero_id: string; nombre: string }[]) nomCli.set(c.tercero_id, c.nombre)
+    for (const c of (cli ?? []) as { client_id: string; tercero_id: string; nombre: string }[]) nomCli.set(`${c.client_id}:${c.tercero_id}`, c.nombre)
     servicioDe = srvs
   }
 
@@ -198,7 +209,7 @@ export async function escanearServicios(
     const umbral: Umbral | null = vencido ? 'vencido' : umbralParaFecha(tipo, dias)
     if (!umbral) continue
 
-    const cliente  = nomCli.get(s.cliente_id as string) ?? 'un cliente'
+    const cliente  = nomCli.get(`${s.client_id}:${s.cliente_id}`) ?? 'un cliente'
     const servicio = servicioDe.get(s.suscripcion_id as string) ?? 'un servicio'
     vivas.add(s.client_id as string, s.suscripcion_id as string)
     const ok = await crearNotificacion({
@@ -268,11 +279,13 @@ export async function reanudarProgramadas(
 
   const nomCli = new Map<string, string>()
   const [{ data: cli }, servicioDe] = await Promise.all([
-    db.from('third_parties').select('tercero_id, nombre')
+    // `client_id` obligatorio, y en la clave (ver `serviciosDeAcuerdo`).
+    db.from('third_parties').select('client_id, tercero_id, nombre')
+      .in('client_id', ids)
       .in('tercero_id', [...new Set(filas.map(f => f.cliente_id as string))]),
-    serviciosDeAcuerdo(db, filas.map(f => f.suscripcion_id as string)),
+    serviciosDeAcuerdo(db, ids, filas.map(f => f.suscripcion_id as string)),
   ])
-  for (const c of (cli ?? []) as { tercero_id: string; nombre: string }[]) nomCli.set(c.tercero_id, c.nombre)
+  for (const c of (cli ?? []) as { client_id: string; tercero_id: string; nombre: string }[]) nomCli.set(`${c.client_id}:${c.tercero_id}`, c.nombre)
 
   const ctxDe = new Map(tenants.map(t => [t.clientId, t]))
   let creadas = 0
@@ -292,7 +305,7 @@ export async function reanudarProgramadas(
       continue
     }
 
-    const cliente  = nomCli.get(s.cliente_id as string) ?? 'un cliente'
+    const cliente  = nomCli.get(`${s.client_id}:${s.cliente_id}`) ?? 'un cliente'
     const servicio = servicioDe.get(s.suscripcion_id as string) ?? 'un servicio'
     const ok = await crearNotificacion({
       clientId:  s.client_id as string,
@@ -367,11 +380,12 @@ export async function escanearRenovaciones(
     const sids   = filas.map(f => f.suscripcion_id as string)
     const cliIds = [...new Set(filas.map(f => f.cliente_id as string))]
     const [{ data: cli }, srvs, { data: lins }] = await Promise.all([
-      db.from('third_parties').select('tercero_id, nombre').in('tercero_id', cliIds),
-      serviciosDeAcuerdo(db, sids),
+      // `client_id` obligatorio, y en la clave (ver `serviciosDeAcuerdo`).
+      db.from('third_parties').select('client_id, tercero_id, nombre').in('client_id', ids).in('tercero_id', cliIds),
+      serviciosDeAcuerdo(db, ids, sids),
       db.from('suscripcion_lineas').select('suscripcion_id, precio_mensual, descuento_modo, descuento_valor').in('suscripcion_id', sids),
     ])
-    for (const c of (cli ?? []) as { tercero_id: string; nombre: string }[]) nomCli.set(c.tercero_id, c.nombre)
+    for (const c of (cli ?? []) as { client_id: string; tercero_id: string; nombre: string }[]) nomCli.set(`${c.client_id}:${c.tercero_id}`, c.nombre)
     servicioDe = srvs
     for (const l of (lins ?? []) as { suscripcion_id: string; precio_mensual: number | string; descuento_modo: string; descuento_valor: number | string }[]) {
       const arr = lineasPorSub.get(l.suscripcion_id) ?? []
@@ -422,7 +436,7 @@ export async function escanearRenovaciones(
     const umbral: Umbral | null = dias < 0 ? '1d' : umbralParaFecha('servicio_renovacion_proxima', dias)
     if (!umbral) continue
 
-    const cliente  = nomCli.get(s.cliente_id as string) ?? 'un cliente'
+    const cliente  = nomCli.get(`${s.client_id}:${s.cliente_id}`) ?? 'un cliente'
     const servicio = servicioDe.get(s.suscripcion_id as string) ?? 'un servicio'
     // Si la facturación automática ya dejó el borrador (corre antes que este escáner),
     // el aviso lo dice: pedirle que facture algo ya facturado es hacerle perder el viaje.
@@ -483,17 +497,26 @@ export async function escanearCuentas(
   if (ids.length === 0) return 0
 
   const [movRes, facRes, regRes, terRes] = await Promise.all([
-    db.from('movimientos_tesoreria').select('client_id, monto, monto_ref, referencia_id')
-      .in('client_id', ids).in('origen', ['PAGO', 'COBRO']).not('referencia_id', 'is', null),
-    db.from('facturas').select('factura_id, client_id, empresa_id, numero, cliente_id, fecha_vencimiento, moneda, total')
-      .in('client_id', ids).eq('estado', 'EMITIDA').not('fecha_vencimiento', 'is', null),
+    // ⚠️ `traerTodas`: este escáner barre TODOS los tenants de golpe y sin filtro de
+    // fecha, así que es la consulta que antes llegaba al techo de 1.000 filas de PostgREST
+    // (ver `lib/supabase/paginar.ts`). Truncada, faltaban liquidaciones y la campana
+    // avisaba de facturas y gastos que ya estaban pagados: el mismo fallo que se vio en
+    // Cuentas por pagar, pero mandado por notificación.
+    traerTodas<Record<string, unknown>>('movimiento_id', () =>
+      db.from('movimientos_tesoreria').select('client_id, monto, monto_ref, referencia_id')
+        .in('client_id', ids).in('origen', ['PAGO', 'COBRO']).not('referencia_id', 'is', null)),
+    traerTodas<Record<string, unknown>>('factura_id', () =>
+      db.from('facturas').select('factura_id, client_id, empresa_id, numero, cliente_id, fecha_vencimiento, moneda, total')
+        .in('client_id', ids).eq('estado', 'EMITIDA').not('fecha_vencimiento', 'is', null)),
     // `naturaleza != 'COSTE'` (mig. 166): una fila de solo coste no se le debe a nadie,
     // así que avisar de que «vence» sería mandarle al dueño una deuda que no existe y
     // que además no puede liquidar desde ninguna pantalla. Va en la QUERY y no al
     // filtrar en memoria porque este escáner recorre todos los tenants a la vez.
-    db.from('gastos_cobros').select('registro_id, client_id, empresa_id, tipo, descripcion, concepto, tercero_id, vencimiento, moneda, monto')
-      .in('client_id', ids).not('vencimiento', 'is', null).neq('naturaleza', 'COSTE'),
-    db.from('third_parties').select('tercero_id, client_id, nombre').in('client_id', ids),
+    traerTodas<Record<string, unknown>>('registro_id', () =>
+      db.from('gastos_cobros').select('registro_id, client_id, empresa_id, tipo, descripcion, concepto, tercero_id, vencimiento, moneda, monto')
+        .in('client_id', ids).not('vencimiento', 'is', null).neq('naturaleza', 'COSTE')),
+    traerTodas<Record<string, unknown>>('id', () =>
+      db.from('third_parties').select('tercero_id, client_id, nombre').in('client_id', ids)),
   ])
 
   // Liquidado por documento (la referencia es única en todo el tenant).
@@ -634,15 +657,18 @@ export async function escanearBorradoresEstancados(
   if (ids.length === 0) return 0
 
   const DIAS = 15
-  const { data } = await db.from('facturas')
-    .select('factura_id, client_id, empresa_id, numero, fecha_emision, moneda, total')
-    .in('client_id', ids).eq('estado', 'BORRADOR').eq('archivado', false)
+  // ⚠️ `traerTodas`: todos los tenants a la vez y sin rango — con el techo de 1.000, los
+  // borradores olvidados de unos clientes tapaban los de otros.
+  const { data } = await traerTodas<Record<string, unknown>>('factura_id', () =>
+    db.from('facturas')
+      .select('factura_id, client_id, empresa_id, numero, fecha_emision, moneda, total')
+      .in('client_id', ids).eq('estado', 'BORRADOR').eq('archivado', false))
 
   const ctxDe = new Map(tenants.map(t => [t.clientId, t]))
   const vivas = new Vivas()
   let creadas = 0
 
-  for (const f of data ?? []) {
+  for (const f of data) {
     // Antigüedad por la fecha de EMISIÓN del documento, que es la que el dueño ve y la
     // que decide en qué período entraría. `created_at` diría otra cosa en un borrador
     // fechado hacia atrás, que es lo normal al registrar trabajo ya hecho.
@@ -776,9 +802,12 @@ export async function escanearCajaContabilidad(db: Db, tenants: ContextoTenant[]
 
   const [cajasRes, sesRes] = await Promise.all([
     db.from('cajas').select('caja_id, client_id, empresa_id, nombre').in('client_id', ids),
-    db.from('caja_sesiones')
+    // ⚠️ `traerTodas`: son TODOS los cierres de TODOS los tenants desde siempre, o sea la
+    // consulta que más lejos queda del techo de 1.000. Truncada, un cierre cuyo dinero no
+    // llegó a Tesorería podía no avisar nunca.
+    traerTodas<Record<string, unknown>>('sesion_uuid', () => db.from('caja_sesiones')
       .select('sesion_uuid, client_id, empresa_id, caja_id, cerrada_at, total_por_moneda, tesoreria_movs')
-      .in('client_id', ids).eq('estado', 'CERRADA'),
+      .in('client_id', ids).eq('estado', 'CERRADA')),
   ])
   type Caja = { caja_id: string; client_id: string; empresa_id: string; nombre: string }
   const cajas = (cajasRes.data ?? []) as Caja[]
@@ -944,37 +973,48 @@ export async function escanearStock(db: Db, tenants: ContextoTenant[]): Promise<
 
   // Solo PRODUCTO: un SERVICIO no tiene existencias que reponer.
   const [{ data: productos }, { data: config }, { data: stock }, { data: almacenes }] = await Promise.all([
-    db.from('products')
+    // ⚠️ `traerTodas`: catálogos y existencias de TODOS los tenants a la vez, así que el
+    // techo de 1.000 filas de PostgREST (ver `lib/supabase/paginar.ts`) se pasa con unos
+    // pocos clientes. Y un producto que no llega en el lote no genera aviso: la campana
+    // se queda callada con el almacén vacío.
+    traerTodas<Record<string, unknown>>('id', () => db.from('products')
       .select('producto_id, client_id, nombre, unidad, stock_actual, stock_minimo')
-      .in('client_id', ids).eq('tipo', 'PRODUCTO').eq('estado', 'ACTIVO'),
-    db.from('producto_almacen_config')
-      .select('client_id, producto_id, almacen_id, stock_minimo')
-      .in('client_id', ids).not('stock_minimo', 'is', null),
-    db.from('stock_almacenes')
-      .select('client_id, producto_id, almacen_id, cantidad').in('client_id', ids),
+      .in('client_id', ids).eq('tipo', 'PRODUCTO').eq('estado', 'ACTIVO')),
+    traerTodas<Record<string, unknown>>(['producto_id', 'almacen_id'], () =>
+      db.from('producto_almacen_config')
+        .select('client_id, producto_id, almacen_id, stock_minimo')
+        .in('client_id', ids).not('stock_minimo', 'is', null)),
+    traerTodas<Record<string, unknown>>(['producto_id', 'almacen_id'], () =>
+      db.from('stock_almacenes')
+        .select('client_id, producto_id, almacen_id, cantidad').in('client_id', ids)),
     // `almacenes` archiva con `activo` boolean, NO con `estado` (no tiene esa
     // columna): pedirla haría fallar la consulta entera, no la ignoraría.
-    db.from('almacenes')
-      .select('almacen_id, client_id, nombre').in('client_id', ids).eq('activo', true),
+    traerTodas<Record<string, unknown>>('almacen_id', () => db.from('almacenes')
+      .select('almacen_id, client_id, nombre').in('client_id', ids).eq('activo', true)),
   ])
 
   const ctxDe        = new Map(tenants.map(t => [t.clientId, t]))
-  const nombreAlmacen = new Map((almacenes ?? []).map(a => [a.almacen_id as string, a.nombre as string]))
-  const cantidadDe    = new Map((stock ?? []).map(s => [`${s.producto_id}@${s.almacen_id}`, Number(s.cantidad ?? 0)]))
-  const conConfig     = new Set((config ?? []).map(c => c.producto_id as string))
+  // Las claves llevan el CLIENTE delante: `producto_id` (PRD-0001…) es único por cliente,
+  // no global (`uq_products_client_producto`), y este escáner recorre todos los tenants a
+  // la vez. Sin el prefijo, el aviso de un negocio salía con el nombre y la cantidad del
+  // producto homónimo de otro. `almacen_id` sí es global (es su clave primaria).
+  const nombreAlmacen = new Map(almacenes.map(a => [a.almacen_id as string, a.nombre as string]))
+  const cantidadDe    = new Map(stock.map(s => [`${s.client_id}:${s.producto_id}@${s.almacen_id}`, Number(s.cantidad ?? 0)]))
+  const conConfig     = new Set(config.map(c => `${c.client_id}:${c.producto_id}`))
 
   const vivasProducto = new Vivas()   // avisos consolidados (entidadTipo 'producto')
   const vivasAlmacen  = new Vivas()   // avisos por almacén  (entidadTipo 'producto_almacen')
   let creadas = 0
 
-  const nombreDe = new Map((productos ?? []).map(p => [p.producto_id as string, p]))
+  const nombreDe = new Map(productos.map(p => [`${p.client_id}:${p.producto_id}`, p]))
 
   // 1) Los que tienen mínimo por almacén: uno por (producto, almacén) configurado.
-  for (const c of config ?? []) {
-    const p = nombreDe.get(c.producto_id as string)
+  for (const c of config) {
+    const p = nombreDe.get(`${c.client_id}:${c.producto_id}`)
     if (!p) continue                                   // archivado o servicio
+    // `clave` identifica el aviso DENTRO del tenant, así que no lleva el cliente.
     const clave  = `${c.producto_id}@${c.almacen_id}`
-    const actual = cantidadDe.get(clave) ?? 0
+    const actual = cantidadDe.get(`${c.client_id}:${clave}`) ?? 0
     const minimo = Number(c.stock_minimo)
     const estado = estadoStock(actual, minimo)
     if (!pideAtencion(estado)) continue                // 'ok' y 'negativo' no avisan
@@ -1001,8 +1041,8 @@ export async function escanearStock(db: Db, tenants: ContextoTenant[]): Promise<
   }
 
   // 2) Los que no tienen ninguna configuración: consolidado, como siempre.
-  for (const p of productos ?? []) {
-    if (conConfig.has(p.producto_id as string)) continue
+  for (const p of productos) {
+    if (conConfig.has(`${p.client_id}:${p.producto_id}`)) continue
     const actual = Number(p.stock_actual ?? 0)
     const estado = estadoStock(actual, Number(p.stock_minimo ?? 0))
     if (!pideAtencion(estado)) continue
@@ -1042,11 +1082,16 @@ export async function escanearRrhh(
   if (ids.length === 0) return 0
 
   const [conRes, empRes, nomRes] = await Promise.all([
-    db.from('contratos').select('contrato_id, client_id, empleado_id, fecha_fin')
-      .in('client_id', ids).not('fecha_fin', 'is', null),
-    db.from('empleados').select('empleado_id, client_id, empresa_id, nombre, apellidos, fecha_baja, fecha_nacimiento, documento_vencimiento')
-      .in('client_id', ids),
-    db.from('nominas').select('client_id, empresa_id, periodo').in('client_id', ids),
+    // ⚠️ `traerTodas` en las tres: barren todos los tenants sin rango, y el aviso que no
+    // se crea no se ve como un aviso truncado — se ve como que no había nada que avisar.
+    traerTodas<Record<string, unknown>>('contrato_id', () =>
+      db.from('contratos').select('contrato_id, client_id, empleado_id, fecha_fin')
+        .in('client_id', ids).not('fecha_fin', 'is', null)),
+    traerTodas<Record<string, unknown>>('empleado_id', () =>
+      db.from('empleados').select('empleado_id, client_id, empresa_id, nombre, apellidos, fecha_baja, fecha_nacimiento, documento_vencimiento')
+        .in('client_id', ids)),
+    traerTodas<Record<string, unknown>>('nomina_id', () =>
+      db.from('nominas').select('client_id, empresa_id, periodo').in('client_id', ids)),
   ])
 
   const empleado = new Map(
@@ -1209,22 +1254,29 @@ export async function escanearCredito(db: Db, tenants: ContextoTenant[]): Promis
   const ids = tenants.map(t => t.clientId)
   if (ids.length === 0) return 0
 
-  const { data: terceros } = await db.from('third_parties')
-    .select('tercero_id, client_id, nombre, limite_credito')
-    .in('client_id', ids).eq('activo', true).gt('limite_credito', 0)
-  if (!terceros || terceros.length === 0) return 0
+  const { data: terceros } = await traerTodas<Record<string, unknown>>('id', () =>
+    db.from('third_parties')
+      .select('tercero_id, client_id, nombre, limite_credito')
+      .in('client_id', ids).eq('activo', true).gt('limite_credito', 0))
+  if (terceros.length === 0) return 0
 
+  // ⚠️ `traerTodas`: mismo caso que el escáner de vencimientos —todos los tenants, sin
+  // rango—. Con las liquidaciones truncadas, el crédito consumido salía MÁS ALTO del real
+  // y se avisaba de un límite que el cliente no había pasado.
   const [movRes, facRes, regRes] = await Promise.all([
-    db.from('movimientos_tesoreria').select('client_id, monto, monto_ref, referencia_id')
-      .in('client_id', ids).in('origen', ['PAGO', 'COBRO']).not('referencia_id', 'is', null),
-    db.from('facturas').select('factura_id, client_id, cliente_id, total')
-      .in('client_id', ids).eq('estado', 'EMITIDA'),
-    db.from('gastos_cobros').select('registro_id, client_id, tercero_id, monto')
-      .in('client_id', ids).eq('tipo', 'COBRO').neq('naturaleza', 'COSTE'),
+    traerTodas<Record<string, unknown>>('movimiento_id', () =>
+      db.from('movimientos_tesoreria').select('client_id, monto, monto_ref, referencia_id')
+        .in('client_id', ids).in('origen', ['PAGO', 'COBRO']).not('referencia_id', 'is', null)),
+    traerTodas<Record<string, unknown>>('factura_id', () =>
+      db.from('facturas').select('factura_id, client_id, cliente_id, total')
+        .in('client_id', ids).eq('estado', 'EMITIDA')),
+    traerTodas<Record<string, unknown>>('registro_id', () =>
+      db.from('gastos_cobros').select('registro_id, client_id, tercero_id, monto')
+        .in('client_id', ids).eq('tipo', 'COBRO').neq('naturaleza', 'COSTE')),
   ])
 
   const liquidado = new Map<string, number>()
-  for (const m of movRes.data ?? []) {
+  for (const m of movRes.data) {
     const id = m.referencia_id as string
     liquidado.set(id, (liquidado.get(id) ?? 0) + Number(m.monto_ref ?? m.monto))
   }
@@ -1281,10 +1333,14 @@ export async function escanearReservas(
   if (ids.length === 0) return 0
 
   const [hoyRes, pendRes] = await Promise.all([
-    db.from('reservas').select('client_id, recurso_id')
-      .in('client_id', ids).eq('fecha', hoy).in('estado', ['PENDIENTE', 'CONFIRMADA']),
-    db.from('reservas').select('reserva_id, client_id, created_at, recurso_id')
-      .in('client_id', ids).eq('estado', 'PENDIENTE').gte('fecha', hoy),
+    // ⚠️ `traerTodas`: la agenda del día de todos los tenants juntos, y las pendientes sin
+    // techo por arriba. Truncadas, el resumen decía menos reservas de las que hay.
+    traerTodas<Record<string, unknown>>('reserva_id', () =>
+      db.from('reservas').select('client_id, recurso_id')
+        .in('client_id', ids).eq('fecha', hoy).in('estado', ['PENDIENTE', 'CONFIRMADA'])),
+    traerTodas<Record<string, unknown>>('reserva_id', () =>
+      db.from('reservas').select('reserva_id, client_id, created_at, recurso_id')
+        .in('client_id', ids).eq('estado', 'PENDIENTE').gte('fecha', hoy)),
   ])
 
   const ctxDe = new Map(tenants.map(t => [t.clientId, t]))

@@ -1,10 +1,12 @@
 // Formato de cifras del informe. Vive aparte porque lo comparten la vista, la
 // tarjeta del estado de resultados y el PDF: tres copias de `toLocaleString` con
 // distintos decimales es como un informe acaba diciendo dos números para lo mismo.
+//
+// El importe a secas —y el importe con signo— son los MISMOS de toda la plataforma
+// (`lib/formato`): se reexportan desde aquí para no partir en dos el sitio donde el
+// informe busca sus formatos.
 
-export function formatMonto(n: number): string {
-  return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
+export { formatMonto, formatSigno } from '@/lib/formato'
 
 /** «60,0%». Un decimal: en un margen, la segunda cifra es ruido. */
 export function formatPct(n: number): string {

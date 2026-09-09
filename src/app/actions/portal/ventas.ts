@@ -38,6 +38,7 @@ import {
 // las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
 // día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
 import { anioDeFecha, hoyEnTz } from '@/lib/fecha-tz'
+import { traerTodas } from '@/lib/supabase/paginar'
 
 // El tipo se re-declara (no `export type { … } from`, que rompe el loader de
 // 'use server'): las vistas necesitan nombrarlo para pasar los filtros.
@@ -347,12 +348,16 @@ export async function obtenerVentasResumen(
   const facturasRaw = (faRes.data ?? []) as Factura[]
   const liquidado = new Map<string, number>()
   if (facturasRaw.length) {
-    const { data: liqs } = await db.from('movimientos_tesoreria')
-      .select('referencia_id, monto, monto_ref')
-      .eq('client_id', session.client_id)
-      .eq('origen', 'COBRO')
-      .in('referencia_id', facturasRaw.map(f => f.factura_id))
-    for (const m of ((liqs ?? []) as { referencia_id: string; monto: number; monto_ref: number | null }[])) {
+    // ⚠️ `traerTodas`: el techo de 500 es de los DOCUMENTOS, y cada uno puede tener varios
+    // cobros, así que estas filas pasan de las 1.000 que devuelve PostgREST sin avisar
+    // (ver `lib/supabase/paginar.ts`). Truncadas, una factura ya cobrada salía con saldo.
+    const { data: liqs } = await traerTodas<{ referencia_id: string; monto: number; monto_ref: number | null }>(
+      'movimiento_id', () => db.from('movimientos_tesoreria')
+        .select('referencia_id, monto, monto_ref')
+        .eq('client_id', session.client_id)
+        .eq('origen', 'COBRO')
+        .in('referencia_id', facturasRaw.map(f => f.factura_id)))
+    for (const m of liqs) {
       liquidado.set(m.referencia_id, (liquidado.get(m.referencia_id) ?? 0) + Number(m.monto_ref ?? m.monto))
     }
   }

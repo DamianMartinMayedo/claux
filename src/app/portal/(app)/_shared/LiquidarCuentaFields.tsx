@@ -9,6 +9,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { obtenerTasaTransferencia } from '@/app/actions/portal/tesoreria'
+import { formatMonto } from '@/lib/formato'
 
 export interface CuentaOpcion {
   cuenta_id: string
@@ -34,9 +35,6 @@ export interface LiquidarState {
 
 function truncar4(n: number): string {
   return String(Math.trunc(n * 10000) / 10000)
-}
-function formatMonto(n: number): string {
-  return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 export default function LiquidarCuentaFields({

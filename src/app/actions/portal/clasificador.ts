@@ -12,6 +12,7 @@
 
 import { revalidatePath }    from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { traerTodas }        from '@/lib/supabase/paginar'
 import { getPortalSession, puedeEditarModulo } from './auth'
 import { packDe, filasDelPack, PREGUNTA_SERVICIOS, PREGUNTA_C1, FASE_SEMBRABLE } from '@/lib/catalogo/packs'
 import { ESTADOS_FACTURA_INGRESO } from '@/lib/contabilidad'
@@ -299,13 +300,18 @@ export async function previsualizarImpacto(
   const [facRes, gcRes, catRes, cliRes] = await Promise.all([
     // `factura_id` va aunque este aviso no clasifique el ingreso: es la identidad
     // que `apuntesDeFilas` usa para buscar las líneas, y sin ella el tipo mentiría.
-    db.from('facturas').select('factura_id, moneda, total, fecha_emision')
-      .eq('client_id', session.client_id)
-      .in('estado', ESTADOS_FACTURA_INGRESO)
-      .gte('fecha_emision', desde).lte('fecha_emision', hasta),
-    db.from('gastos_cobros').select('tipo, moneda, monto, categoria, categoria_id, fecha, origen_tipo, naturaleza')
-      .eq('client_id', session.client_id)
-      .gte('fecha', desde).lte('fecha', hasta),
+    // ⚠️ `traerTodas`: esta previsualización es la única marcha atrás que hay antes de
+    // mover el catálogo de categorías. Con el techo de 1.000 filas enseñaba un impacto
+    // más pequeño que el real —menos ingresos y menos gastos— y sobre eso se decidía.
+    traerTodas<FilaFacturaPL>('factura_id', () =>
+      db.from('facturas').select('factura_id, moneda, total, fecha_emision')
+        .eq('client_id', session.client_id)
+        .in('estado', ESTADOS_FACTURA_INGRESO)
+        .gte('fecha_emision', desde).lte('fecha_emision', hasta)),
+    traerTodas<FilaGastoCobroPL>('registro_id', () =>
+      db.from('gastos_cobros').select('tipo, moneda, monto, categoria, categoria_id, fecha, origen_tipo, naturaleza')
+        .eq('client_id', session.client_id)
+        .gte('fecha', desde).lte('fecha', hasta)),
     db.from('categorias_gastos').select('categoria_id, nombre, parent_id, rol_pl')
       .eq('client_id', session.client_id),
     db.from('clients').select('modulos_activos').eq('client_id', session.client_id).maybeSingle(),
@@ -321,8 +327,8 @@ export async function previsualizarImpacto(
   }))
 
   const { ingresos, gastos } = apuntesDeFilas(
-    (facRes.data ?? []) as FilaFacturaPL[],
-    (gcRes.data  ?? []) as FilaGastoCobroPL[],
+    facRes.data,
+    gcRes.data,
     desde, hasta,
   )
 
@@ -496,24 +502,27 @@ async function depreciacionQueGeneraDeuda(
     .filter(id => idx.raizDe.get(id)?.rol_pl === 'DEPRECIACION')
   if (!ids.length) return { apuntes: [], conPagos: 0, saldadosEnMigracion: 0 }
 
-  const { data } = await db.from('gastos_cobros')
-    .select('registro_id, fecha, monto, moneda, categoria, descripcion, naturaleza')
-    .eq('client_id', client_id).eq('tipo', 'GASTO')
-    .in('categoria_id', ids)
-    .order('fecha', { ascending: false })
-
-  const candidatos = ((data ?? []) as {
+  // ⚠️ `traerTodas`: de aquí sale la lista de activos a depreciar. Truncada, se dejaban
+  // fuera compras de inmovilizado sin decirlo. Se pide en orden ascendente (el paginado
+  // necesita un orden total) y se le da la vuelta después, que es como se enseña.
+  const { data } = await traerTodas<{
     registro_id: string; fecha: string; monto: number; moneda: string
     categoria: string | null; descripcion: string | null; naturaleza: string | null
-  }[]).filter(r => r.naturaleza !== 'COSTE')
+  }>(['fecha', 'registro_id'], () => db.from('gastos_cobros')
+    .select('registro_id, fecha, monto, moneda, categoria, descripcion, naturaleza')
+    .eq('client_id', client_id).eq('tipo', 'GASTO')
+    .in('categoria_id', ids))
+
+  const candidatos = data.reverse().filter(r => r.naturaleza !== 'COSTE')
   if (!candidatos.length) return { apuntes: [], conPagos: 0, saldadosEnMigracion: 0 }
 
   const [{ data: movs }, { data: cuentas }] = await Promise.all([
-    db.from('movimientos_tesoreria')
-      .select('referencia_id, cuenta_id')
-      .eq('client_id', client_id)
-      .in('origen', ['PAGO', 'COBRO'])
-      .in('referencia_id', candidatos.map(c => c.registro_id)),
+    traerTodas<{ referencia_id: string; cuenta_id: string }>('movimiento_id', () =>
+      db.from('movimientos_tesoreria')
+        .select('referencia_id, cuenta_id')
+        .eq('client_id', client_id)
+        .in('origen', ['PAGO', 'COBRO'])
+        .in('referencia_id', candidatos.map(c => c.registro_id))),
     db.from('cuentas').select('cuenta_id, es_apertura').eq('client_id', client_id),
   ])
   const tecnicas = new Set(((cuentas ?? []) as { cuenta_id: string; es_apertura: boolean | null }[])
@@ -521,7 +530,7 @@ async function depreciacionQueGeneraDeuda(
 
   const pagados   = new Set<string>()
   const deVerdad  = new Set<string>()
-  for (const m of (movs ?? []) as { referencia_id: string; cuenta_id: string }[]) {
+  for (const m of movs) {
     pagados.add(m.referencia_id)
     if (!tecnicas.has(m.cuenta_id)) deVerdad.add(m.referencia_id)
   }

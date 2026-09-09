@@ -3,6 +3,7 @@
 import { revalidatePath }    from 'next/cache'
 import { revalidarFinanzas } from './_finanzas-revalidar'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { saldosAFecha, saldoSinMovimientos } from '@/lib/tesoreria/saldos'
 import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { type CategoriaGasto } from './gastos'
@@ -18,6 +19,7 @@ import {
 // día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
 import { hoyEnTz } from '@/lib/fecha-tz'
 import { comprobarLimite } from '@/lib/limites'
+import { formatTasa } from '@/lib/formato'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -60,26 +62,50 @@ export interface Movimiento {
   transfer_grupo: string | null
   notas:          string | null
   created_at:     string
+  /**
+   * Saldo de la cuenta DESPUÉS de este movimiento. Solo viene con una cuenta
+   * seleccionada (`filtro.cuenta_id`): mezclando cuentas —y monedas— un acumulado no
+   * es un número que se pueda cuadrar con nada. Lo calcula `tes_saldo_tras`
+   * (mig. 242) sobre la historia completa de la cuenta, no sobre las filas de la
+   * pantalla; ver la nota en `obtenerTesoreria`.
+   */
+  saldo_tras?:    number | null
 }
 
-// Cuenta con su saldo calculado (saldo_inicial + Σingresos − Σegresos)
+/**
+ * La cuenta con su EXTRACTO del rango: de dónde parte, qué entró, qué salió y dónde
+ * acaba. Lo calcula `tes_saldos_a_fecha` (mig. 243), no un bucle aquí arriba.
+ */
 export interface CuentaConSaldo extends Cuenta {
-  saldo:          number
-  total_ingresos: number
-  total_egresos:  number
-  num_movimientos: number
+  /** Saldo a la FECHA DE CORTE (`rango.hasta`), que no siempre es el de hoy. */
+  saldo:         number
+  /** Saldo al día ANTERIOR a `rango.desde`: de dónde parte el extracto. */
+  saldo_previo:  number
+  /** Del RANGO. Eran `total_*` de toda la historia y por eso dejaron de llamarse así. */
+  ingresos:      number
+  egresos:       number
+  movimientos:   number
+  /** Fecha del primer movimiento de la cuenta; `null` si no tiene ninguno. */
+  primera_fecha: string | null
 }
 
 export interface TesoreriaPageData {
   cuentas:           CuentaConSaldo[]
   movimientos:       Movimiento[]
-  saldos_por_moneda: { moneda: string; saldo: number }[]
   empresa_nombres:   Record<string, string>
   empresas:          { empresa_id: string; nombre: string }[]
   monedas:           string[]   // códigos de monedas activas
   categorias_gastos: CategoriaGasto[]  // Para selects de categoría
-  /** Rango y búsqueda aplicados al LISTADO (los saldos son de toda la historia). */
+  /**
+   * Rango y búsqueda del listado. `hasta` es además la FECHA DE CORTE de los saldos:
+   * la pantalla se lee como un extracto —saldo previo + lo del rango = saldo al corte—.
+   */
   rango:             { desde: string; hasta: string }
+  /**
+   * La fecha de corte cuando es PASADA; `null` cuando el saldo es el de hoy (sin `hasta`,
+   * o `hasta` de hoy en adelante). Solo entonces hay algo que matizar en pantalla.
+   */
+  corte:             string | null
   q:                 string
   hay_mas:           boolean
   /** Cuántos movimientos hay DE VERDAD en el rango (sin techo). */
@@ -117,10 +143,10 @@ export async function obtenerTesoreria(
   const patron  = patronBusqueda(q)
   const importe = importeBuscado(q)
 
-  // El LISTADO va acotado por rango; los SALDOS no pueden estarlo —un saldo es la suma de
-  // toda la historia de la cuenta— así que van en su propia consulta, con tres columnas en
-  // vez de `select('*')`. Antes esto era una sola query que se traía todas las columnas de
-  // todos los movimientos de siempre para pintar una tabla y calcular tres números.
+  // El LISTADO va acotado por los DOS extremos del rango; el SALDO solo por `hasta`, y de
+  // eso se encarga la función SQL. La diferencia es el plan entero: acotar los dos daría
+  // `saldo_inicial + los movimientos de la ventana`, ni el saldo de hoy ni el del día
+  // pedido —un número que no existe—; acotar solo el superior da el saldo de ese día.
   // `count: 'exact'` en la MISMA consulta: devuelve las filas del techo y, aparte, el
   // total que cumple el filtro. Sin él el aviso no podía decir cuántas faltan, y el
   // contador de la tabla decía «N de N» sobre el conjunto ya recortado.
@@ -156,15 +182,17 @@ export async function obtenerTesoreria(
     .order('created_at', { ascending: false })
     .limit(limite)
 
-  const [cuRes, movRes, sumRes, monRes, catRes] = await Promise.all([
+  const [cuRes, movRes, saldos, monRes, catRes] = await Promise.all([
     db.from('cuentas').select('*')
       .eq('client_id', session.client_id)
       .in('empresa_id', idsFiltro)
       .order('nombre'),
     listaQuery,
-    db.from('movimientos_tesoreria').select('cuenta_id, tipo, monto')
-      .eq('client_id', session.client_id)
-      .in('empresa_id', idsFiltro),
+    // La suma la hace POSTGRES. Antes subían por la API todos los movimientos de la
+    // historia —1.410 filas en CLI-0008, paginadas para esquivar el techo de las 1.000—
+    // para calcular tres números por cuenta; ahora baja una fila por cuenta. Y como la
+    // función acota por `hasta`, el saldo que devuelve es el de la fecha de corte.
+    saldosAFecha(db, session.client_id, idsFiltro, { desde, hasta }),
     db.from('monedas').select('codigo')
       .eq('client_id', session.client_id)
       .eq('activa', true)
@@ -184,51 +212,61 @@ export async function obtenerTesoreria(
   const listaCruda   = (movRes.data ?? []) as Movimiento[]
   const movimientos  = listaCruda.filter(m => !idsApertura.has(m.cuenta_id))
 
-  // Saldos por cuenta: sobre TODOS los movimientos, no sobre los del rango.
-  const agregados = new Map<string, { ingresos: number; egresos: number; num: number }>()
-  for (const m of ((sumRes.data ?? []) as { cuenta_id: string; tipo: string; monto: number }[])) {
-    if (idsApertura.has(m.cuenta_id)) continue
-    const a = agregados.get(m.cuenta_id) ?? { ingresos: 0, egresos: 0, num: 0 }
-    if (m.tipo === 'INGRESO') a.ingresos += Number(m.monto)
-    else                      a.egresos  += Number(m.monto)
-    a.num += 1
-    agregados.set(m.cuenta_id, a)
+  // ── Saldo tras cada movimiento (solo con UNA cuenta elegida) ─────────────────
+  // No se acumula aquí arriba a propósito. El saldo tras un apunte se apoya en toda la
+  // historia ANTERIOR de la cuenta, y esta lista no la tiene: va acotada por rango, con
+  // techo de 500, y los filtros de la barra son `escalado` —en cuanto el listado se corta,
+  // arriba llegan solo los ingresos, o solo una categoría—. Sumar sobre lo que llegó daría
+  // un saldo desplazado por las filas que no llegaron: creíble y falso, el mismo fallo que
+  // el techo de las 1.000 filas. Así que lo calcula Postgres sobre la cuenta entera
+  // (`tes_saldo_tras`, mig. 242) y solo devuelve los ids que se le pasan.
+  //
+  // Si la función falla, la columna NO aparece: mejor sin saldo que con un saldo inventado.
+  let movsConSaldo = movimientos
+  if (filtro?.cuenta_id && movimientos.length) {
+    const { data: sal } = await db.rpc('tes_saldo_tras', {
+      p_client_id:      session.client_id,
+      p_cuenta_id:      filtro.cuenta_id,
+      p_movimiento_ids: movimientos.map(m => m.movimiento_id),
+    })
+    if (sal) {
+      const porId = new Map(
+        (sal as { movimiento_id: string; saldo_tras: number }[])
+          .map(f => [f.movimiento_id, Number(f.saldo_tras)]),
+      )
+      movsConSaldo = movimientos.map(m => ({ ...m, saldo_tras: porId.get(m.movimiento_id) ?? null }))
+    }
   }
 
   const cuentasConSaldo: CuentaConSaldo[] = cuentas.map(c => {
-    const a = agregados.get(c.cuenta_id) ?? { ingresos: 0, egresos: 0, num: 0 }
-    return {
-      ...c,
-      saldo_inicial:   Number(c.saldo_inicial),
-      total_ingresos:  a.ingresos,
-      total_egresos:   a.egresos,
-      num_movimientos: a.num,
-      saldo:           Number(c.saldo_inicial) + a.ingresos - a.egresos,
-    }
+    const inicial = Number(c.saldo_inicial)
+    // El respaldo no debería entrar nunca —la función devuelve todas las cuentas que no
+    // son de «Apertura», y esas ya están fuera de `cuentas`—, pero si entrara, la cuenta
+    // se queda en su saldo inicial: un cero de relleno sería un saldo falso.
+    const s = saldos.get(c.cuenta_id) ?? saldoSinMovimientos(inicial)
+    return { ...c, saldo_inicial: inicial, ...s }
   })
 
-  // Totales por moneda (solo cuentas activas)
-  const porMoneda = new Map<string, number>()
-  for (const c of cuentasConSaldo) {
-    if (!c.activa) continue
-    porMoneda.set(c.moneda, (porMoneda.get(c.moneda) ?? 0) + c.saldo)
-  }
-  const saldos_por_moneda = Array.from(porMoneda.entries())
-    .map(([moneda, saldo]) => ({ moneda, saldo }))
-    .sort((a, b) => a.moneda.localeCompare(b.moneda))
+  // El corte solo se anuncia cuando es PASADO: sin `hasta`, o con un `hasta` de hoy en
+  // adelante, el saldo a esa fecha ES el saldo de hoy y no hay nada que matizar. Por eso
+  // la pantalla no cambia para quien no toca el rango.
+  const corte = hasta && hasta < hoyEnTz() ? hasta : null
+
+  // Los totales por moneda no se suman aquí: los hace la vista sobre estas mismas cuentas,
+  // que es donde se sabe qué empresa está elegida y si se están enseñando las archivadas.
 
   const empresa_nombres: Record<string, string> = {}
   for (const e of empresas) empresa_nombres[e.empresa_id] = e.nombre
 
   return {
     cuentas:           cuentasConSaldo,
-    movimientos,
-    saldos_por_moneda,
+    movimientos:       movsConSaldo,
     empresa_nombres,
     empresas:          empresas.map(e => ({ empresa_id: e.empresa_id, nombre: e.nombre })),
     monedas:           ((monRes.data ?? []) as { codigo: string }[]).map(m => m.codigo),
     categorias_gastos: (catRes.data ?? []) as CategoriaGasto[],
     rango:             { desde, hasta },
+    corte,
     q,
     hay_mas:           listaCruda.length >= limite,
     total:             movRes.count ?? listaCruda.length,
@@ -625,7 +663,7 @@ export async function registrarTransferencia(
       monto:         montoRaw,
       moneda:        origen.moneda,
       concepto:      monedasDiferentes
-        ? `${concepto} → ${destino.nombre} (${tasa} ${destino.moneda}/${origen.moneda})`
+        ? `${concepto} → ${destino.nombre} (${formatTasa(tasa)} ${destino.moneda}/${origen.moneda})`
         : `${concepto} → ${destino.nombre}`,
       origen:        'TRANSFERENCIA',
       transfer_grupo: grupo,
@@ -641,7 +679,7 @@ export async function registrarTransferencia(
       monto:         montoDestino,
       moneda:        destino.moneda,
       concepto:      monedasDiferentes
-        ? `${concepto} ← ${origen.nombre} (${tasa} ${destino.moneda}/${origen.moneda})`
+        ? `${concepto} ← ${origen.nombre} (${formatTasa(tasa)} ${destino.moneda}/${origen.moneda})`
         : `${concepto} ← ${origen.nombre}`,
       origen:        'TRANSFERENCIA',
       transfer_grupo: grupo,

@@ -1473,13 +1473,56 @@
 
 .tes-header-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 
-/* Saldos por moneda */
-.tes-saldos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-5); }
-.tes-saldo-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--space-4); }
-.tes-saldo-moneda { font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted); }
-.tes-saldo-monto { font-size: var(--text-xl); font-weight: 700; color: var(--color-text); margin-top: var(--space-1); font-variant-numeric: tabular-nums; }
+/* ── Saldos por moneda: CIFRAS, no tarjetas ──────────────────────────────
+   Eran tres tarjetas con borde, fondo y relleno para enseñar un número de 20 px.
+   La caja no aportaba nada —no se puede pulsar, no agrupa nada que no agrupe ya el
+   espacio en blanco— y le robaba tamaño justo a lo único que se mira de un vistazo.
+   Ahora el número manda y no hay marco NI regla de color: lo que separa una moneda
+   de otra es el hueco, y lo que ordena cada cifra es la tipografía —etiqueta pequeña
+   arriba, magnitud grande, céntimos a media altura—. Se probó una regla teal encima
+   de cada cifra y el propietario la rechazó; no volver a meterla.
+
+   Y el rótulo va UNA vez, encima de la fila, no repetido debajo de cada cifra:
+   «saldo total / saldo total / saldo total» era la misma palabra tres veces
+   compitiendo con las cifras. Arriba, además, dice de qué son ANTES de leerlas. */
+/* Va dentro de una `.card` —UNA, alrededor del bloque entero; lo que se quitó fueron
+   las tres, una por número—. Le da el peso de tarjeta que ya tiene la tabla de abajo y
+   lo despega del aviso de la gaveta, que suele ir justo encima. El padding lo pone la
+   propia `.card`; aquí solo van los márgenes de fuera. */
+.tes-saldos { margin: var(--space-6) 0 var(--space-5); }
+.tes-saldos-rotulo { font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted); margin-bottom: var(--space-4); }
+/* El hueco ENTRE monedas (--space-10) tiene que ser bastante mayor que el de dentro de
+   una cifra, o las tres se leen como un solo número largo. */
+.tes-saldos-cifras { display: flex; flex-wrap: wrap; gap: var(--space-5) var(--space-10); }
+.tes-saldo { display: flex; flex-direction: column; gap: var(--space-1); min-width: 150px; }
+.tes-saldo-moneda { font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.08em; color: var(--color-text-faint); }
+/* `-0.02em`: a este cuerpo la fuente de display abre demasiado entre cifras y el número
+   se desparrama. Los millares siguen separándose solos por el punto. */
+.tes-saldo-monto { font-family: var(--font-display); font-size: var(--text-4xl); font-weight: 800; line-height: 1; letter-spacing: -0.02em; color: var(--color-text); font-variant-numeric: tabular-nums; }
+/* Los céntimos, a media altura y en gris: en «787.764,00» lo que se compara de un
+   vistazo son los millares, y a 36 px dos decimales a tamaño completo pesan igual que
+   ellos. El texto no cambia —sigue siendo el importe entero—, solo su peso visual. */
+.tes-saldo-dec { font-size: 0.5em; font-weight: 700; letter-spacing: 0; color: var(--color-text-muted); }
+/* Lo que se movió en el rango, y CONTRA QUÉ. La fecha va pegada al número y no en una
+   nota aparte: un ± suelto debajo de una cifra se lee como una comparación contra algo
+   que no está escrito —el propietario preguntó exactamente eso— y entonces el dato,
+   que es bueno, se queda en adorno. */
+.tes-saldo-var { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-1); font-size: var(--text-xs); color: var(--color-text-faint); }
+/* Píldora teñida con flecha, igual que el Δ del estado de resultados (`.rep-delta`): el
+   color y el icono dicen el sentido antes de leer el número, y el fondo la separa de la
+   fecha que va al lado sin necesidad de más espacio. */
+.tes-saldo-delta {
+  display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0;
+  font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap;
+  padding: 1px var(--space-1); border-radius: var(--radius-sm);
+}
+.tes-saldo-delta.is-pos { color: var(--color-success); background: var(--color-success-bg); }
+.tes-saldo-delta.is-neg { color: var(--color-error);   background: var(--color-error-bg); }
+/* También suelta: la columna «Saldo» de la tabla tiñe la celda con ella. */
 .tes-saldo-neg { color: var(--color-error); }
-.tes-saldo-label { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px; }
+/* La cuenta cuyo corte cae antes de su primer movimiento: lo que se enseña es el saldo
+   inicial de la ficha, no uno medido ese día (`tes_saldos_a_fecha`, mig. 243). */
+.tes-saldo-nota { display: block; font-size: var(--text-xs); font-weight: 400; color: var(--color-text-muted); }
 
 /* Cabeceras de sección */
 .tes-section-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); flex-wrap: wrap; }
@@ -1508,8 +1551,12 @@
 
 /* ── Desplegable de detalle de un movimiento ──────────────────────────────────
    El resto de datos de la operación, bajo su fila, sin una página de detalle: mismo
-   patrón que el desglose de la nómina o el histórico de un acuerdo. */
-.tes-chevron-abierto { transform: rotate(180deg); }
+   patrón que el desglose de la nómina o el histórico de un acuerdo.
+
+   El chevron que gira lo pinta `<BotonDetalle>` y lo comparten los cuatro listados que
+   despliegan detalle (Tesorería, Gastos y cobros, CxC/CxP, Movimientos), así que la clase
+   deja de llevar el prefijo de Tesorería: era `.tes-chevron-abierto`. */
+.fila-detalle-abierta { transform: rotate(180deg); }
 .tes-mov-detalle-fila > td { background: var(--color-surface-2); padding: var(--space-3) var(--space-4); }
 .tes-mov-detalle {
   display: grid;

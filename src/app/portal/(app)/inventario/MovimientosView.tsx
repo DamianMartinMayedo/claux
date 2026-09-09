@@ -11,7 +11,7 @@ import { Fragment, useState, useMemo, useTransition } from 'react'
 import { useRouter, useSearchParams }       from 'next/navigation'
 import {
   Plus, X, Package, RefreshCw, RotateCcw, ClipboardList,
-  ArrowDownToLine, ArrowUpFromLine, Settings2, ArrowRightLeft, ChevronDown,
+  ArrowDownToLine, ArrowUpFromLine, Settings2, ArrowRightLeft,
 } from 'lucide-react'
 import {
   registrarMovimiento,
@@ -28,6 +28,7 @@ import {
 import { fmtFechaEs } from '@/lib/date-utils'
 import Tabs from '@/components/Tabs'
 import { RowActions } from '@/components/portal/RowActions'
+import BotonDetalle from '@/components/portal/BotonDetalle'
 import { ConfirmDialog } from '@/components/portal/Dialog'
 import Filtros from '@/components/portal/Filtros'
 import AvisoTope from '@/components/portal/AvisoTope'
@@ -654,9 +655,13 @@ export default function MovimientosView({
                   const costeTotal = m.costo_unitario != null ? Math.abs(m.cantidad) * m.costo_unitario : null
                   return (
                     <Fragment key={m.movimiento_id}>
+                    {/* La fila entera despliega su detalle: el chevron es un objetivo de 15 px
+                        y con el dedo se falla. El botón se queda como afordancia y como vía de
+                        teclado (`<BotonDetalle>`); las acciones no suben el clic. */}
                     <tr
-                      className={multiempresa ? 'row-empresa-accent' : undefined}
-                      style={multiempresa ? empresaColorVar(colorOf(m.empresa_id)) : undefined}>
+                      className={`table-row-clickable${multiempresa ? ' row-empresa-accent' : ''}`}
+                      style={multiempresa ? empresaColorVar(colorOf(m.empresa_id)) : undefined}
+                      onClick={() => setDetalle(abierto ? null : m.movimiento_id)}>
                       <td data-label="Fecha" className="text-sm-muted">{fmtDate(m.fecha)}</td>
                       <td data-label="Tipo">
                         <span className={`badge ${TIPO_BADGE[m.tipo]}`}>
@@ -692,13 +697,10 @@ export default function MovimientosView({
                           ? <span className="text-xs-muted">Manual</span>
                           : <span className="badge badge-neutral">{m.origen === 'COMPRA' ? 'Compra' : 'Venta'}</span>}
                       </td>
-                      <td className="col-actions">
+                      <td className="col-actions" onClick={e => e.stopPropagation()}>
                         <div className="table-actions">
-                          <button type="button" className="icon-btn" title="Ver detalle"
-                            aria-label="Ver detalle del movimiento" aria-expanded={abierto}
-                            onClick={() => setDetalle(abierto ? null : m.movimiento_id)}>
-                            <ChevronDown size={15} strokeWidth={2} className={abierto ? 'tes-chevron-abierto' : undefined} />
-                          </button>
+                          <BotonDetalle abierto={abierto} rotulo={data.producto_nombres[m.producto_id] ?? 'el movimiento'}
+                            onAlternar={() => setDetalle(abierto ? null : m.movimiento_id)} />
                           {/* Solo los manuales: compras y ventas se deshacen anulando su
                               documento, no compensando el movimiento a mano. */}
                           {puedeEditar && m.origen === 'MANUAL' && (

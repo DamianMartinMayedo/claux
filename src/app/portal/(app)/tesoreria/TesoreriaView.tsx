@@ -10,6 +10,7 @@ import { ConfirmDialog } from '@/components/portal/Dialog'
 import BulkBar from '@/components/portal/BulkBar'
 import HeaderCheck from '@/components/portal/HeaderCheck'
 import { RowActions } from '@/components/portal/RowActions'
+import BotonDetalle from '@/components/portal/BotonDetalle'
 import FormHelp from '@/components/portal/FormHelp'
 import { useRowSelection } from '@/components/portal/useRowSelection'
 import Tabs from '@/components/Tabs'
@@ -17,7 +18,7 @@ import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { useEmpresas } from '@/components/portal/EmpresaColorContext'
 import { Fragment, useState, useTransition, useMemo, useEffect } from 'react'
 import { useRouter, useSearchParams }       from 'next/navigation'
-import { Archive, ArrowDown, ArrowRightLeft, ArrowUp, ChevronDown, List, Pencil, Plus, RotateCcw, Trash2, Wallet, X } from 'lucide-react'
+import { Archive, ArrowDown, ArrowRightLeft, ArrowUp, List, Pencil, Plus, RotateCcw, Trash2, TrendingDown, TrendingUp, Wallet, X } from 'lucide-react'
 import {
   guardarCuenta,
   archivarCuenta,
@@ -49,6 +50,7 @@ import ExportarMenu  from '@/components/portal/ExportarMenu'
 import { filtroExport, resumenDe, type Filtro } from '@/lib/filtros'
 import { SIN_CATEGORIA }             from '@/lib/listados'
 import { hoyEnTz } from '@/lib/fecha-tz'
+import { formatMonto, partirMonto, formatSigno } from '@/lib/formato'
 
 // Pendientes por saldar (CxC / CxP) que se pueden liquidar desde un movimiento
 interface Pendientes {
@@ -92,9 +94,6 @@ const TIPO_CUENTA_BADGE: Record<TipoCuenta, string> = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatMonto(n: number): string {
-  return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
 // «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: a partir de las 20:00
 // `toISOString()` ya da la fecha de mañana, así que el defecto de un `type=date` se
 // adelantaba un día cada noche. Una sola fuente: `lib/fecha-tz.ts`.
@@ -102,6 +101,12 @@ function hoyISO(): string { return hoyEnTz() }
 function formatFecha(f: string): string {
   const [y, m, d] = f.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+// «01 jun» — la fecha de arranque del rango, que va pegada a cada variación. Sin año
+// mientras el rango no cruce de uno a otro: repetido bajo tres monedas, el año es ruido.
+function formatFechaCorta(f: string): string {
+  const [y, m, d] = f.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })
 }
 function truncar4(n: number): string {
   return String(Math.trunc(n * 10000) / 10000)
@@ -1027,25 +1032,80 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
   const params = useSearchParams()
   const filtroCuenta      = params.get('cuenta')  ?? ''
   const filtroTipo        = params.get('tipo')    ?? ''
-  const filtroEmpresaMov  = params.get('empresa') ?? ''
+  const filtroEmpresa  = params.get('empresa') ?? ''
   const filtroCatMov      = params.get('cat')     ?? ''
 
+  // De TODAS las empresas a propósito: alimenta los modales de movimiento y transferencia,
+  // y una transferencia puede cruzar empresas. El filtro de empresa manda en lo que se
+  // ENSEÑA, que es `cuentasEmpresa`.
   const cuentasActivas = useMemo(() => data.cuentas.filter(c => c.activa), [data.cuentas])
-  const cuentasVista   = useMemo(
-    () => data.cuentas.filter(c => c.activa === !verArchivadas),
-    [data.cuentas, verArchivadas],
+  const cuentasEmpresa = useMemo(
+    () => data.cuentas.filter(c => !filtroEmpresa || c.empresa_id === filtroEmpresa),
+    [data.cuentas, filtroEmpresa],
   )
-  const archivadas = data.cuentas.filter(c => !c.activa).length
+  const cuentasVista   = useMemo(
+    () => cuentasEmpresa.filter(c => c.activa === !verArchivadas),
+    [cuentasEmpresa, verArchivadas],
+  )
+  const activasEmpresa = cuentasEmpresa.filter(c => c.activa).length
+  const archivadas     = cuentasEmpresa.length - activasEmpresa
+
+  /**
+   * Los totales de las tarjetas de arriba, por moneda y a la fecha de corte.
+   *
+   * Se suman AQUÍ y no en el servidor porque aquí se sabe qué empresa está elegida: antes
+   * las tarjetas sumaban todas las empresas juntas y no se movían con ningún filtro.
+   *
+   * Las ARCHIVADAS también entran. Archivar no exige saldo cero, así que sumar solo las
+   * activas era omitir dinero sin decirlo — y a una fecha pasada, una cuenta archivada hoy
+   * pudo tener saldo. Si alguna lo tiene, el interruptor de «Archivadas» dice dónde está.
+   *
+   * `variacion` es lo que entró menos lo que salió DENTRO del rango, o sea `saldo −
+   * saldo_previo` por la otra vía: la misma resta que cuadra la tabla de abajo columna a
+   * columna. Es lo que le da contexto a la cifra —un saldo alto y uno que acaba de caer a
+   * la mitad se ven idénticos sin ella—.
+   */
+  const saldosPorMoneda = useMemo(() => {
+    const m = new Map<string, { saldo: number; variacion: number }>()
+    for (const c of cuentasEmpresa) {
+      const acc = m.get(c.moneda) ?? { saldo: 0, variacion: 0 }
+      acc.saldo     += c.saldo
+      acc.variacion += c.ingresos - c.egresos
+      m.set(c.moneda, acc)
+    }
+    return [...m.entries()]
+      // El redondeo no es cosmético: sin él, la resta de dos importes deja polvo de coma
+      // flotante y una moneda que no se movió en el rango imprime «+0,00».
+      .map(([moneda, v]) => ({ moneda, saldo: v.saldo, variacion: Math.round(v.variacion * 100) / 100 }))
+      .sort((a, b) => a.moneda.localeCompare(b.moneda))
+  }, [cuentasEmpresa])
+
+  const desdeEtiqueta = data.rango.desde.slice(0, 4) === data.rango.hasta.slice(0, 4)
+    ? formatFechaCorta(data.rango.desde)
+    : formatFecha(data.rango.desde)
+
+  /**
+   * El corte cae ANTES del primer movimiento de la cuenta, así que lo que se enseña es el
+   * saldo inicial de la ficha y no un saldo medido ese día: el importador escribe
+   * `saldo_inicial` sin pedir fecha de corte, o sea el saldo del día de la migración
+   * guardado como si fuera el del principio de los tiempos.
+   */
+  function sinHistoria(c: CuentaConSaldo): boolean {
+    return !!data.corte && (c.primera_fecha == null || c.primera_fecha > data.corte)
+  }
 
   // ── Selección múltiple de cuentas (archivar/restaurar en lote) ──
   const ordCuentas = useOrden(cuentasVista, {
     cuenta:   { label: 'Cuenta',   valor: c => c.nombre },
     tipo:     { label: 'Tipo',     valor: c => TIPO_CUENTA_LABEL[c.tipo] ?? c.tipo },
     empresa:  { label: 'Empresa',  valor: c => data.empresa_nombres[c.empresa_id] },
+    // La fila se lee como un extracto —parto de X, entró esto, salió esto, quedo en Y—,
+    // así que las tres del medio son las del RANGO y el saldo va al final.
+    previo:   { label: 'Saldo anterior', valor: c => Number(c.saldo_previo) },
+    ingresos: { label: 'Ingresos', valor: c => Number(c.ingresos) },
+    egresos:  { label: 'Egresos',  valor: c => Number(c.egresos) },
+    movs:     { label: 'Mov.',     valor: c => c.movimientos },
     saldo:    { label: 'Saldo',    valor: c => Number(c.saldo) },
-    ingresos: { label: 'Ingresos', valor: c => Number(c.total_ingresos) },
-    egresos:  { label: 'Egresos',  valor: c => Number(c.total_egresos) },
-    movs:     { label: 'Mov.',     valor: c => c.num_movimientos },
   })
 
   const cuentaIds = useMemo(() => cuentasVista.map(c => c.cuenta_id), [cuentasVista])
@@ -1098,14 +1158,18 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
     {
       clave: 'empresa_id', param: 'empresa', label: 'Todas',
       rotulo: 'Empresa',
-      valor: filtroEmpresaMov, widget: 'pastillas', donde: 'escalado',
+      valor: filtroEmpresa, widget: 'pastillas', donde: 'escalado',
       ocultarSi: !multiempresa,
       opciones: data.empresas.map(e => ({ valor: e.empresa_id, label: e.nombre, color: colorOf(e.empresa_id) })),
     },
     {
+      // `servidor` y no `escalado`: elegir una cuenta no es esconder filas, es pedir OTRA
+      // cosa —el listado pasa a traer el saldo que dejó cada movimiento, que solo se puede
+      // calcular sobre la historia completa de esa cuenta (`tes_saldo_tras`, mig. 242)—. Es
+      // literalmente la definición de `servidor`: cambia QUÉ se trae.
       clave: 'cuenta_id', param: 'cuenta', label: 'Todas las cuentas',
       rotulo: 'Cuenta',
-      valor: filtroCuenta, widget: 'select', donde: 'escalado',
+      valor: filtroCuenta, widget: 'select', donde: 'servidor',
       opciones: data.cuentas.map(c => ({ valor: c.cuenta_id, label: c.nombre })),
     },
     {
@@ -1129,7 +1193,7 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
           .map(c => ({ valor: c.categoria_id, label: c.nombre })),
       ],
     },
-  ], [filtroEmpresaMov, filtroCuenta, filtroTipo, filtroCatMov, multiempresa, data.empresas, data.cuentas, data.categorias_gastos, colorOf])
+  ], [filtroEmpresa, filtroCuenta, filtroTipo, filtroCatMov, multiempresa, data.empresas, data.cuentas, data.categorias_gastos, colorOf])
 
   const movimientosFiltrados = useMemo(() => {
     const catsOk = filtroCatMov && filtroCatMov !== SIN_CATEGORIA
@@ -1138,12 +1202,12 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
     return data.movimientos.filter(m => {
       if (filtroCuenta && m.cuenta_id !== filtroCuenta) return false
       if (filtroTipo   && m.tipo      !== filtroTipo)   return false
-      if (filtroEmpresaMov && m.empresa_id !== filtroEmpresaMov) return false
+      if (filtroEmpresa && m.empresa_id !== filtroEmpresa) return false
       if (filtroCatMov === SIN_CATEGORIA && m.categoria_id) return false
       if (catsOk && !(m.categoria_id && catsOk.has(m.categoria_id))) return false
       return true
     })
-  }, [data.movimientos, filtroCuenta, filtroTipo, filtroEmpresaMov, filtroCatMov, hijasDeCat])
+  }, [data.movimientos, filtroCuenta, filtroTipo, filtroEmpresa, filtroCatMov, hijasDeCat])
 
   const ordMovs = useOrden(movimientosFiltrados, {
     fecha:    { label: 'Fecha',    valor: m => m.fecha },
@@ -1156,6 +1220,11 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
   const { pageItems, ...pag } = usePagination(ordMovs.filas)
   const [cargando, setCargando] = useState(false)
 
+  // La columna de saldo sale cuando el servidor lo ha calculado, o sea con UNA cuenta
+  // elegida. Se deriva del DATO y no del filtro de la URL: si `tes_saldo_tras` fallara,
+  // la columna no aparece en vez de aparecer llena de rayas.
+  const conSaldo = useMemo(() => data.movimientos.some(m => m.saldo_tras != null), [data.movimientos])
+
   // ── Selección múltiple de movimientos (eliminar en lote) ──
   // Sobre los movimientos VISIBLES filtrados (persiste entre páginas; se limpia al
   // cambiar de filtro o de pestaña). Solo se eliminan los manuales: los que vienen
@@ -1163,7 +1232,7 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
   const movIds = useMemo(() => movimientosFiltrados.map(m => m.movimiento_id), [movimientosFiltrados])
   const selMov = useRowSelection(movIds)
   const [confirmLoteMov, setConfirmLoteMov] = useState(false)
-  useEffect(() => { selMov.clear() }, [filtroCuenta, filtroTipo, filtroEmpresaMov, filtroCatMov, tab]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { selMov.clear() }, [filtroCuenta, filtroTipo, filtroEmpresa, filtroCatMov, tab]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function doEliminarLoteMov() {
     setConfirmLoteMov(false)
@@ -1232,7 +1301,10 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
             <h1 className="page-title">Tesorería</h1>
             <IaTouchpoint tipo="tesoreria" descripcion="un análisis de la liquidez" />
           </div>
-          <p className="page-subtitle">Cajas, cuentas de banco y movimientos. Saldos en tiempo real por moneda.</p>
+          {/* Sin «Saldos en tiempo real por moneda»: desde que el rango tiene fecha de
+              corte, el saldo puede ser el del 20 de julio y la frase sería falsa. Lo que
+              son las cifras lo dice su propio rótulo, que es donde se lee. */}
+          <p className="page-subtitle">Cajas, cuentas de banco y movimientos.</p>
         </div>
         <div className="tes-header-actions">
           {/* Una descarga por pestaña: lo que se lleva es la tabla que se está mirando. */}
@@ -1248,8 +1320,23 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
           ) : (
             <ExportarMenu
               clave="cuentas"
-              filtro={{ archivadas: verArchivadas }}
-              resumen={[verArchivadas ? 'archivadas' : 'activas']}
+              /* La empresa también aquí: desde que la pestaña de cuentas obedece a la
+                 barra, sin pasarla el fichero se bajaba las cuentas de las OTRAS
+                 empresas — más de lo que enseña la pantalla, que es la otra forma de
+                 que la descarga no se parezca a lo que se está mirando. */
+              /* Y el RANGO, desde que el fichero lleva el extracto: `hasta` es la fecha de
+                 corte del saldo y `desde` parte el período de ingresos y egresos. Sin
+                 pasarlo, el Excel contaría un período que no es el de la pantalla. */
+              filtro={{
+                archivadas: verArchivadas,
+                desde: data.rango.desde,
+                hasta: data.rango.hasta,
+                ...(filtroEmpresa ? { empresa_id: filtroEmpresa } : {}),
+              }}
+              resumen={[
+                verArchivadas ? 'archivadas' : 'activas',
+                ...(filtroEmpresa ? [data.empresa_nombres[filtroEmpresa] ?? filtroEmpresa] : []),
+              ]}
             />
           )}
           {puedeEditar && (<>
@@ -1287,20 +1374,65 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
         </PrerequisitoAviso>
       )}
 
-      {/* Saldos por moneda */}
-      {data.saldos_por_moneda.length > 0 && (
-        <div className="tes-saldos-grid">
-          {data.saldos_por_moneda.map(s => (
-            <div key={s.moneda} className="tes-saldo-card">
-              <div className="tes-saldo-moneda">{s.moneda}</div>
-              <div className={`tes-saldo-monto${s.saldo < 0 ? ' tes-saldo-neg' : ''}`}>
-                {formatMonto(s.saldo)}
-              </div>
-              <div className="tes-saldo-label">saldo total</div>
-            </div>
-          ))}
+      {/* Los saldos por moneda, a la fecha de corte. Van los PRIMEROS, delante de la barra
+          y de las pestañas: es la cifra que se mira de un vistazo y lo demás está para
+          moverla. El rótulo dice de qué son ANTES de leerlas —y con corte, a qué día—,
+          que es justo lo que antes no decía ninguna de las tres tarjetas. Debajo de cada
+          una, lo que se movió DESDE el arranque del rango —con la fecha escrita al lado, o
+          el ± se lee como una comparación contra algo que no está en pantalla—: el saldo
+          dice dónde está el dinero y la variación, de dónde viene. */}
+      {saldosPorMoneda.length > 0 && (
+        <div className="card tes-saldos">
+          {/* Con el corte en hoy sigue diciendo «saldo total»: para quien no toca el
+              rango, la pantalla no cambia. */}
+          <div className="tes-saldos-rotulo">
+            {data.corte ? `Saldo al ${formatFecha(data.corte)}` : 'Saldo total'}
+          </div>
+          <div className="tes-saldos-cifras">
+            {saldosPorMoneda.map(s => {
+              const [entero, decimales] = partirMonto(s.saldo)
+              return (
+                <div key={s.moneda} className="tes-saldo">
+                  <span className="tes-saldo-moneda">{s.moneda}</span>
+                  <span className={`tes-saldo-monto${s.saldo < 0 ? ' tes-saldo-neg' : ''}`}>
+                    {entero}<span className="tes-saldo-dec">{decimales}</span>
+                  </span>
+                  {/* «desde el 01 jun» al lado del ±: dice contra qué se compara, que es
+                      justo lo que un signo suelto no dice. */}
+                  {s.variacion !== 0 && (
+                    <span className="tes-saldo-var">
+                      <span className={`tes-saldo-delta ${s.variacion > 0 ? 'is-pos' : 'is-neg'}`}>
+                        {/* `Trending*` y no `Arrow*` a propósito: en esta misma pantalla la
+                            flecha abajo ya significa «Ingreso» y la de arriba «Egreso». */}
+                        {s.variacion > 0
+                          ? <TrendingUp   size={12} strokeWidth={2.5} aria-hidden="true" />
+                          : <TrendingDown size={12} strokeWidth={2.5} aria-hidden="true" />}
+                        {formatSigno(s.variacion)}
+                      </span>
+                      desde el {desdeEtiqueta}
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
+
+      {/* La barra va aquí, DEBAJO de las cifras y fuera de las pestañas. Desde que `hasta`
+          es la fecha de corte del saldo, el rango manda en las dos pestañas y en las cifras
+          de arriba, así que dentro de «Movimientos» se quedaba corto. Debajo y no encima:
+          delante van los números, que es a lo que se entra; el control que los mueve viene
+          después. El buscador solo sale con los movimientos delante: busca en sus
+          conceptos, no en las cuentas. */}
+      <Filtros
+        filtros={declaracion}
+        rango={data.rango}
+        q={tab === 'movimientos' ? data.q : undefined}
+        placeholder="Buscar por concepto, código o importe…"
+        hayMas={data.hay_mas}
+        onCargando={setCargando}
+      />
 
       {/* Pestañas: Cuentas | Movimientos (evita el scroll infinito de la tabla) */}
       <Tabs
@@ -1308,8 +1440,8 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
         active={tab}
         onChange={setTab}
         tabs={[
-          { id: 'cuentas', label: 'Cuentas', count: cuentasActivas.length },
-          { id: 'movimientos', label: 'Movimientos', count: data.movimientos.length },
+          { id: 'cuentas', label: 'Cuentas', count: activasEmpresa },
+          { id: 'movimientos', label: 'Movimientos', count: movimientosFiltrados.length },
         ]}
       />
 
@@ -1346,10 +1478,14 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
                   <ThOrden orden={ordCuentas} clave="cuenta" />
                   <ThOrden orden={ordCuentas} clave="tipo" className="col-center" />
                   {multiempresa && <ThOrden orden={ordCuentas} clave="empresa" />}
-                  <ThOrden orden={ordCuentas} clave="saldo" className="col-num" />
+                  {/* Extracto: de dónde parte, qué entró, qué salió y dónde acaba. Las tres
+                      del medio son las del RANGO —antes eran de toda la historia, al lado de
+                      un saldo que también lo era, y la fila no se podía cuadrar con nada—. */}
+                  <ThOrden orden={ordCuentas} clave="previo" className="col-num" />
                   <ThOrden orden={ordCuentas} clave="ingresos" className="col-num" />
                   <ThOrden orden={ordCuentas} clave="egresos" className="col-num" />
                   <ThOrden orden={ordCuentas} clave="movs" className="col-num" />
+                  <ThOrden orden={ordCuentas} clave="saldo" className="col-num" />
                   <th className="col-actions"></th>
                 </tr>
               </thead>
@@ -1375,12 +1511,14 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
                         <EmpresaTag color={colorOf(c.empresa_id)} nombre={data.empresa_nombres[c.empresa_id]} />
                       </td>
                     )}
+                    <td data-label="Saldo anterior" className="col-num text-sm-muted">{formatMonto(c.saldo_previo)}</td>
+                    <td data-label="Ingresos" className="col-num tes-monto-in">{formatMonto(c.ingresos)}</td>
+                    <td data-label="Egresos" className="col-num tes-monto-out">{formatMonto(c.egresos)}</td>
+                    <td data-label="Mov." className="col-num">{c.movimientos}</td>
                     <td data-label="Saldo" className={`col-num${c.saldo < 0 ? ' tes-saldo-neg' : ''}`}>
                       <strong>{formatMonto(c.saldo)} {c.moneda}</strong>
+                      {sinHistoria(c) && <span className="tes-saldo-nota">saldo inicial</span>}
                     </td>
-                    <td data-label="Ingresos" className="col-num tes-monto-in">{formatMonto(c.total_ingresos)}</td>
-                    <td data-label="Egresos" className="col-num tes-monto-out">{formatMonto(c.total_egresos)}</td>
-                    <td data-label="Mov." className="col-num">{c.num_movimientos}</td>
                     <td className="col-actions">
                       {puedeEditar && (
                         <RowActions>
@@ -1414,20 +1552,11 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
       </>)}
 
       {tab === 'movimientos' && (<>
-      <Filtros
-        filtros={declaracion}
-        rango={data.rango}
-        q={data.q}
-        placeholder="Buscar por concepto, código o importe…"
-        hayMas={data.hay_mas}
-        onCargando={setCargando}
-      />
-
+      {/* Sin la coletilla de «los saldos de arriba son de toda la historia»: ya no hay nada
+          que desmentir — el techo recorta el listado y el saldo lo suma Postgres. */}
       {data.hay_mas && (
         <AvisoTope mostrados={data.movimientos.length} total={data.total}
-          limite={data.limite} sustantivo="movimientos">
-          Los saldos de arriba son de toda la historia, no del rango.
-        </AvisoTope>
+          limite={data.limite} sustantivo="movimientos" />
       )}
 
       <TablaCargando activo={cargando}>
@@ -1449,8 +1578,15 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
                   )}
                   <ThOrden orden={ordMovs} clave="fecha" />
                   <ThOrden orden={ordMovs} clave="concepto" />
-                  <ThOrden orden={ordMovs} clave="cuenta" />
+                  {/* Con UNA cuenta elegida, «Cuenta» repite el mismo nombre en todas las
+                      filas, así que ese hueco desaparece y en su lugar, DETRÁS del monto,
+                      va el saldo que dejó cada movimiento: se lee «entró esto, quedó esto».
+                      No es ordenable a propósito —la columna solo se lee como cadena en
+                      orden de fecha; ordenar por ella daría una lista de saldos sin
+                      relación con la columna de al lado—. */}
+                  {!conSaldo && <ThOrden orden={ordMovs} clave="cuenta" />}
                   <ThOrden orden={ordMovs} clave="monto" className="col-num" />
+                  {conSaldo && <th className="col-num" title="Saldo de la cuenta después de cada movimiento.">Saldo</th>}
                   <th className="col-actions"></th>
                 </tr>
               </thead>
@@ -1459,9 +1595,13 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
                   const abierto = movDetalle === m.movimiento_id
                   return (
                   <Fragment key={m.movimiento_id}>
-                  <tr>
+                  {/* La fila entera despliega su detalle: el chevron es un objetivo de 15 px y
+                      con el dedo se falla. El botón se queda como afordancia y como vía de
+                      teclado (`<BotonDetalle>`); la selección y las acciones no suben el clic. */}
+                  <tr className="table-row-clickable"
+                    onClick={() => setMovDetalle(abierto ? null : m.movimiento_id)}>
                     {puedeEditar && (
-                      <td className="col-check">
+                      <td className="col-check" onClick={e => e.stopPropagation()}>
                         <input type="checkbox" className="row-check"
                           checked={selMov.isSelected(m.movimiento_id)}
                           onChange={() => selMov.toggle(m.movimiento_id)}
@@ -1479,19 +1619,25 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
                         {m.origen !== 'MANUAL' && <span className="badge badge-neutral tes-origen-badge">{m.origen}</span>}
                       </div>
                     </td>
-                    <td data-label="Cuenta" className="text-sm-muted"><span className="cell-clamp">{cuentaNombre[m.cuenta_id] ?? m.cuenta_id}</span></td>
+                    {!conSaldo && (
+                      <td data-label="Cuenta" className="text-sm-muted"><span className="cell-clamp">{cuentaNombre[m.cuenta_id] ?? m.cuenta_id}</span></td>
+                    )}
                     <td data-label="Monto" className={`col-num tes-monto-cell ${m.tipo === 'INGRESO' ? 'tes-monto-in' : 'tes-monto-out'}`}>
                       {m.tipo === 'INGRESO' ? '+' : '−'}{formatMonto(Number(m.monto))} {m.moneda}
                     </td>
-                    <td className="col-actions">
+                    {/* Sin repetir el código de moneda: lo acaba de decir la celda de al lado
+                        y las dos son de la misma cuenta. */}
+                    {conSaldo && (
+                      <td data-label="Saldo" className="col-num text-sm-muted">{m.saldo_tras == null ? '—' : formatMonto(m.saldo_tras)}</td>
+                    )}
+                    {/* Los botones sueltos de esta celda no pueden desplegar además el
+                        detalle: el clic se queda aquí. */}
+                    <td className="col-actions" onClick={e => e.stopPropagation()}>
                       <div className="table-actions">
                         {/* Ver el resto de datos de la operación, sin salir de la lista. Disponible
                             también en solo-lectura: desplegar no escribe nada. */}
-                        <button type="button" className="icon-btn" title="Ver detalle"
-                          aria-label={`Ver detalle de ${m.concepto}`} aria-expanded={abierto}
-                          onClick={() => setMovDetalle(abierto ? null : m.movimiento_id)}>
-                          <ChevronDown size={15} strokeWidth={2} className={abierto ? 'tes-chevron-abierto' : undefined} />
-                        </button>
+                        <BotonDetalle abierto={abierto} rotulo={m.concepto}
+                          onAlternar={() => setMovDetalle(abierto ? null : m.movimiento_id)} />
                         {puedeEditar && (<>
                           {/* Editar solo los MANUALES sin transferencia: mismas guardas que
                               el borrado, y por lo mismo — un movimiento de cobro/pago es el

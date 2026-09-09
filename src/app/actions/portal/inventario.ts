@@ -18,6 +18,7 @@ import { limiteDelFiltro, rangoUltimosMeses, type FiltroListado } from '@/lib/li
 // las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
 // día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
 import { hoyEnTz } from '@/lib/fecha-tz'
+import { traerTodas } from '@/lib/supabase/paginar'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -454,16 +455,21 @@ export async function obtenerRevision(): Promise<AvisoRevision[]> {
   const db = createAdminClient()
   const desdeConsumo = new Date(Date.now() - DIAS_VENTANA * 86_400_000).toISOString().split('T')[0]
   const [{ data: stock }, { data: prods }, { data: alms }, { data: movsConsumo }] = await Promise.all([
-    db.from('stock_almacenes').select('producto_id, almacen_id, cantidad').eq('client_id', session.client_id),
-    db.from('products').select('producto_id, nombre, unidad, estado, tipo, costos').eq('client_id', session.client_id),
+    // ⚠️ `traerTodas`: PostgREST corta a 1.000 filas sin avisar (ver `lib/supabase/paginar.ts`).
+    // Esta pantalla es la que dice qué revisar: un producto que no llega en el lote no se
+    // revisa nunca, y un consumo truncado alarga la cobertura y calla el aviso.
+    traerTodas<Record<string, unknown>>(['producto_id', 'almacen_id'], () =>
+      db.from('stock_almacenes').select('producto_id, almacen_id, cantidad').eq('client_id', session.client_id)),
+    traerTodas<Record<string, unknown>>('id', () =>
+      db.from('products').select('producto_id, nombre, unidad, estado, tipo, costos').eq('client_id', session.client_id)),
     db.from('almacenes').select('almacen_id, nombre, activo').eq('client_id', session.client_id),
-    db.from('movimientos_inventario')
+    traerTodas<MovimientoConsumo>('movimiento_id', () => db.from('movimientos_inventario')
       .select('producto_id, almacen_id, almacen_destino_id, tipo, origen, cantidad, fecha')
       .eq('client_id', session.client_id)
       .in('tipo', ['SALIDA', 'TRANSFERENCIA'])
-      .gte('fecha', desdeConsumo),
+      .gte('fecha', desdeConsumo)),
   ])
-  const consumo = consumoDiario((movsConsumo ?? []) as MovimientoConsumo[])
+  const consumo = consumoDiario(movsConsumo)
 
   type Stk = { producto_id: string; almacen_id: string; cantidad: number }
   type Prd = { producto_id: string; nombre: string; unidad: string; estado: string; tipo: string; costos: Record<string, number> | null }

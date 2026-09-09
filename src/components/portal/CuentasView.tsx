@@ -5,7 +5,7 @@ import { toastError, toastLoading } from '@/app/contexts/ToastContext'
 import { Fragment, useState, useTransition, useMemo } from 'react'
 import { useRouter, useSearchParams }       from 'next/navigation'
 import Link                                 from 'next/link'
-import { Check, ChevronDown, DollarSign, ExternalLink, Trash2, X } from 'lucide-react'
+import { Check, DollarSign, ExternalLink, Trash2, X } from 'lucide-react'
 import {
   registrarPagoDoc,
   anularPagoDoc,
@@ -16,6 +16,7 @@ import {
 import LiquidarCuentaFields, { type LiquidarState } from '@/app/portal/(app)/_shared/LiquidarCuentaFields'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import { RowActions }                  from '@/components/portal/RowActions'
+import BotonDetalle                    from '@/components/portal/BotonDetalle'
 import { ConfirmDialog }                from '@/components/portal/Dialog'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import { useOrden, ThOrden } from '@/components/TableSort'
@@ -29,6 +30,7 @@ import { SIN_TERCERO }                 from '@/lib/listados'
 // las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
 // día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
 import { hoyEnTz } from '@/lib/fecha-tz'
+import { formatMonto, partirMonto } from '@/lib/formato'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -42,9 +44,6 @@ const TRAMOS: Tramo[] = ['AL_DIA', 'V_1_30', 'V_31_60', 'V_60']
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatMonto(n: number): string {
-  return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
 function hoyISO(): string { return hoyEnTz() }
 function formatFecha(f: string | null): string {
   if (!f) return '—'
@@ -351,16 +350,26 @@ export default function CuentasView({ data, puedeEditar }: { data: CuentasPageDa
         </div>
       </div>
 
-      {/* Totales por moneda */}
+      {/* Totales por moneda. Mismas cifras sin marco que Tesorería —y por lo mismo: el
+          número es lo que se mira, la tarjeta alrededor no aportaba nada—. El rótulo va
+          una vez arriba y no repetido debajo de cada cifra. Sin línea de variación: aquí
+          no hay rango de fechas contra el que medirla (ver la nota de abajo). */}
       {porMoneda.length > 0 && (
-        <div className="tes-saldos-grid">
-          {porMoneda.map(s => (
-            <div key={s.moneda} className="tes-saldo-card">
-              <div className="tes-saldo-moneda">{s.moneda}</div>
-              <div className="tes-saldo-monto">{formatMonto(s.saldo)}</div>
-              <div className="tes-saldo-label">{esCobro ? 'por cobrar' : 'por pagar'}</div>
-            </div>
-          ))}
+        <div className="card tes-saldos">
+          <div className="tes-saldos-rotulo">{esCobro ? 'Total por cobrar' : 'Total por pagar'}</div>
+          <div className="tes-saldos-cifras">
+            {porMoneda.map(s => {
+              const [entero, decimales] = partirMonto(s.saldo)
+              return (
+                <div key={s.moneda} className="tes-saldo">
+                  <span className="tes-saldo-moneda">{s.moneda}</span>
+                  <span className="tes-saldo-monto">
+                    {entero}<span className="tes-saldo-dec">{decimales}</span>
+                  </span>
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
 
@@ -371,6 +380,9 @@ export default function CuentasView({ data, puedeEditar }: { data: CuentasPageDa
         <Filtros
           filtros={declaracion}
           q={busca}
+          /* La deuda se trae entera, así que el texto se filtra en memoria como los demás
+             filtros de esta pantalla: escribir no puede recargar la página. */
+          qDonde="cliente"
           placeholder="Buscar por documento, tercero o importe…"
           visibles={3}
           onCargando={setCargando}
@@ -405,9 +417,14 @@ export default function CuentasView({ data, puedeEditar }: { data: CuentasPageDa
                   const abierto = detalle === d.doc_id
                   return (
                   <Fragment key={d.doc_id}>
+                  {/* La fila entera despliega su detalle: el chevron es un objetivo de 15 px
+                      y con el dedo se falla, así que había que apuntar a la flechita para ver
+                      los datos de una deuda. El botón se queda como afordancia y como vía de
+                      teclado (`<BotonDetalle>`). */}
                   <tr
-                    className={multiempresa ? 'row-empresa-accent' : undefined}
+                    className={`table-row-clickable${multiempresa ? ' row-empresa-accent' : ''}`}
                     style={multiempresa ? empresaColorVar(colorOf(d.empresa_id)) : undefined}
+                    onClick={() => setDetalle(abierto ? null : d.doc_id)}
                   >
                     <td data-label="Documento">
                       <strong>{d.numero}</strong>
@@ -430,11 +447,8 @@ export default function CuentasView({ data, puedeEditar }: { data: CuentasPageDa
                     <td data-label="Pendiente" className="col-num tes-monto-cell">{formatMonto(d.saldo)} {d.moneda}</td>
                     <td className="col-actions">
                       <div className="table-actions">
-                        <button type="button" className="icon-btn" title="Ver detalle"
-                          aria-label={`Ver detalle de ${d.numero}`} aria-expanded={abierto}
-                          onClick={() => setDetalle(abierto ? null : d.doc_id)}>
-                          <ChevronDown size={15} strokeWidth={2} className={abierto ? 'tes-chevron-abierto' : undefined} />
-                        </button>
+                        <BotonDetalle abierto={abierto} rotulo={d.numero}
+                          onAlternar={() => setDetalle(abierto ? null : d.doc_id)} />
                         {(puedeEditar || (d.ref_url && d.doc_tipo === 'FACTURA')) && (
                           <RowActions>
                             {puedeEditar && (

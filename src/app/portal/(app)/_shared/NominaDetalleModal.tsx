@@ -13,9 +13,10 @@ import { X } from 'lucide-react'
 import IaSparkle from '@/components/ia/IaSparkle'
 import { hoyEnTz } from '@/lib/fecha-tz'
 
-export function formatMonto(n: number): string {
-  return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
+// Se reexporta porque media docena de vistas de nómina lo importan de aquí; el formato
+// es el de toda la plataforma (`lib/formato`).
+export { formatMonto } from '@/lib/formato'
+import { formatMonto } from '@/lib/formato'
 // «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: a partir de las 20:00
 // `toISOString()` ya da la fecha de mañana, así que el defecto de un `type=date` se
 // adelantaba un día cada noche. Una sola fuente: `lib/fecha-tz.ts`.

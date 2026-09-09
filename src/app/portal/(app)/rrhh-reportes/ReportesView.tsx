@@ -18,6 +18,7 @@ import { crearDoc, cabeceraReporte, sellarPie } from '@/lib/pdf/documento'
 import { crearCursor } from '@/lib/pdf/reporte'
 import { formatMesRrhh } from '@/lib/rrhh/reportes'
 import { useOrden, ThOrden } from '@/components/TableSort'
+import { formatMonto } from '@/lib/formato'
 
 // Recharts (~100 KB gzip) baja aparte: el gráfico solo existe cuando hay UNA
 // moneda en juego, así que en el resto de casos ni se descarga.
@@ -28,9 +29,6 @@ const CosteMensualChart = dynamic(() => import('./CosteMensualChart'), {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatMonto(n: number): string {
-  return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
 /** «120.000,00 CUP · 900,00 USD» — dos monedas NO se suman en un número. */
 function lineaMoneda(ms: { moneda: string; monto: number }[]): string {
   return ms.length ? ms.map(m => `${formatMonto(m.monto)} ${m.moneda}`).join(' · ') : '—'

@@ -36,6 +36,9 @@ import {
 import { MOTIVO_LABEL, type MotivoTipo } from '@/app/actions/portal/_inventario-helpers'
 import { obtenerCuentasPorCobrar, obtenerCuentasPorPagar } from '@/app/actions/portal/cobranza'
 import { SIN_CATEGORIA, SIN_TERCERO, importeBuscado } from '@/lib/listados'
+import { traerTodas } from '@/lib/supabase/paginar'
+import { saldosAFecha, saldoSinMovimientos } from '@/lib/tesoreria/saldos'
+import { fmtFechaEs } from '@/lib/date-utils'
 // «Hoy» en la zona del NEGOCIO (America/Havana). Con `toISOString()` (UTC), a partir de las
 // 20:00 la fecha ya es la de mañana: el tramo de antigüedad de una deuda y el estado
 // efectivo de un acuerdo salían distintos en el fichero y en la pantalla.
@@ -153,6 +156,50 @@ const TABLAS_CON_EMPRESA = new Set([
 ])
 
 /**
+ * Clave primaria de cada tabla exportable, para PAGINAR sin duplicar ni saltarse filas.
+ *
+ * PostgREST corta a 1.000 filas en silencio (ver `lib/supabase/paginar.ts`), así que
+ * `leer()` pide las filas por páginas; y un paginado necesita un orden TOTAL. El orden
+ * visible del fichero (`fecha`, `nombre`…) tiene empates, y con empates la página 2 puede
+ * repetir filas de la 1 y perder otras. Por eso cada tabla dice cuál es su columna única,
+ * que se añade detrás del orden visible como criterio de desempate.
+ *
+ * Ojo con las dos herencias del esquema:
+ *  · `products`, `third_parties` y `product_categories` tienen la PK en `id` (uuid) y el
+ *    código de negocio en `producto_id`/`tercero_id`/`categoria_id` — ese código es único
+ *    por cliente, pero la PK de verdad es `id`;
+ *  · `stock_almacenes` tiene clave compuesta, y las dos columnas juntas son las que
+ *    identifican la fila.
+ *
+ * Es una lista a mano, como `TABLAS_CON_EMPRESA`: si se añade una tabla exportable sin
+ * registrarla aquí, `leer()` lanza en vez de paginar a ciegas.
+ */
+const PK_POR_TABLA: Record<string, string[]> = {
+  almacenes:              ['almacen_id'],
+  caja_sesiones:          ['sesion_uuid'],
+  caja_tickets:           ['ticket_uuid'],
+  catalogo_items:         ['item_id'],
+  categorias_gastos:      ['categoria_id'],
+  compras:                ['compra_id'],
+  conteos:                ['conteo_id'],
+  cuentas:                ['cuenta_id'],
+  empleados:              ['empleado_id'],
+  facturas:               ['factura_id'],
+  gastos_cobros:          ['registro_id'],
+  movimientos_inventario: ['movimiento_id'],
+  movimientos_tesoreria:  ['movimiento_id'],
+  nominas:                ['nomina_id'],
+  ofertas:                ['oferta_id'],
+  product_categories:     ['id'],
+  products:               ['id'],
+  reservas:               ['reserva_id'],
+  stock_almacenes:        ['producto_id', 'almacen_id'],
+  suscripciones:          ['suscripcion_id'],
+  third_parties:          ['id'],
+  turnos:                 ['turno_id'],
+}
+
+/**
  * El alcance, listo para un `.in()`.
  *
  * Sin empresas visibles se devuelve el centinela `__none__` y no un array vacío: un
@@ -217,45 +264,54 @@ async function leer(
    */
   campoImporte?: string,
 ): Promise<Record<string, unknown>[]> {
-  let query = db.from(tabla)
-    .select(columnas)
-    .eq('client_id', client_id)
-  // El ALCANCE antes que cualquier filtro de pantalla: `client_id` dice de qué negocio son
-  // las filas, pero no cuáles de sus empresas puede ver ESTE usuario. Va por nombre de
-  // tabla para que no dependa de que cada entrada se acuerde (ver `empresas_visibles`).
-  if (TABLAS_CON_EMPRESA.has(tabla)) query = query.in('empresa_id', alcance(filtro))
-  for (const [campo, valor] of Object.entries(iguales ?? {})) {
-    if (valor === undefined || valor === '') continue
-    query = query.eq(campo, valor)
+  const pk = PK_POR_TABLA[tabla]
+  if (!pk) throw new Error(`exportar: falta la clave primaria de «${tabla}» en PK_POR_TABLA`)
+  // La consulta se CONSTRUYE en una función porque `traerTodas` la pide una vez por
+  // página: un builder de PostgREST ya ejecutado no se puede reusar.
+  const construir = () => {
+    let query = db.from(tabla)
+      .select(columnas)
+      .eq('client_id', client_id)
+    // El ALCANCE antes que cualquier filtro de pantalla: `client_id` dice de qué negocio son
+    // las filas, pero no cuáles de sus empresas puede ver ESTE usuario. Va por nombre de
+    // tabla para que no dependa de que cada entrada se acuerde (ver `empresas_visibles`).
+    if (TABLAS_CON_EMPRESA.has(tabla)) query = query.in('empresa_id', alcance(filtro))
+    for (const [campo, valor] of Object.entries(iguales ?? {})) {
+      if (valor === undefined || valor === '') continue
+      query = query.eq(campo, valor)
+    }
+    for (const [campo, valores] of Object.entries(enLista ?? {})) {
+      if (!valores?.length) continue
+      query = query.in(campo, valores)
+    }
+    for (const campo of esNulo ?? []) query = query.is(campo, null)
+    // Un `.or()` por bloque: PostgREST los combina con AND entre sí, que es lo que se
+    // quiere (este OR acota, no ensancha lo que ya filtran los demás).
+    const alguno = Object.entries(algunoIgual ?? {}).filter(([, v]) => v !== undefined && v !== '')
+    if (alguno.length) {
+      query = query.or(alguno.map(([campo, valor]) => `${campo}.eq.${valor}`).join(','))
+    }
+    // El rango se aplica EN LA CONSULTA, igual que en los listados: exportar «las facturas
+    // de este período» no puede significar traerse el histórico y recortarlo en memoria.
+    if (campoFecha && filtro?.desde) query = query.gte(campoFecha, filtro.desde)
+    if (campoFecha && filtro?.hasta) query = query.lte(campoFecha, filtro.hasta)
+    const t = (filtro?.q ?? '').trim()
+    if (t && camposTexto?.length) {
+      // Se escapan los comodines del patrón: buscar «50%» no puede devolver media tabla.
+      const patron = `%${t.replace(/[\\%_]/g, c => `\\${c}`)}%`
+      const partes = camposTexto.map(c => `${c}.ilike.${patron}`)
+      // Y por importe exacto si lo buscado es un número, igual que el listado.
+      const importe = importeBuscado(t)
+      if (campoImporte && importe != null) partes.push(`${campoImporte}.eq.${importe}`)
+      query = query.or(partes.join(','))
+    }
+    return query
   }
-  for (const [campo, valores] of Object.entries(enLista ?? {})) {
-    if (!valores?.length) continue
-    query = query.in(campo, valores)
-  }
-  for (const campo of esNulo ?? []) query = query.is(campo, null)
-  // Un `.or()` por bloque: PostgREST los combina con AND entre sí, que es lo que se
-  // quiere (este OR acota, no ensancha lo que ya filtran los demás).
-  const alguno = Object.entries(algunoIgual ?? {}).filter(([, v]) => v !== undefined && v !== '')
-  if (alguno.length) {
-    query = query.or(alguno.map(([campo, valor]) => `${campo}.eq.${valor}`).join(','))
-  }
-  // El rango se aplica EN LA CONSULTA, igual que en los listados: exportar «las facturas
-  // de este período» no puede significar traerse el histórico y recortarlo en memoria.
-  if (campoFecha && filtro?.desde) query = query.gte(campoFecha, filtro.desde)
-  if (campoFecha && filtro?.hasta) query = query.lte(campoFecha, filtro.hasta)
-  const t = (filtro?.q ?? '').trim()
-  if (t && camposTexto?.length) {
-    // Se escapan los comodines del patrón: buscar «50%» no puede devolver media tabla.
-    const patron = `%${t.replace(/[\\%_]/g, c => `\\${c}`)}%`
-    const partes = camposTexto.map(c => `${c}.ilike.${patron}`)
-    // Y por importe exacto si lo buscado es un número, igual que el listado.
-    const importe = importeBuscado(t)
-    if (campoImporte && importe != null) partes.push(`${campoImporte}.eq.${importe}`)
-    query = query.or(partes.join(','))
-  }
-  const { data, error } = await query.order(orden, { ascending: true })
-  if (error) throw new Error(error.message)
-  return (data ?? []) as Record<string, unknown>[]
+  // ⚠️ `traerTodas`: sin paginar, la descarga se quedaba en 1.000 filas SIN avisar. Y un
+  // fichero truncado no sale «incompleto»: sale como el listado entero del período que se
+  // pidió, con menos facturas, menos gastos y menos movimientos de los que hubo.
+  const { data } = await traerTodas<Record<string, unknown>>([orden, ...pk], construir)
+  return data
 }
 
 /** Una categoría y todas las que cuelgan de ella (un nivel, que es lo que hay). */
@@ -294,9 +350,12 @@ async function almacenesVisibles(
 async function diccionario(
   db: Db, tabla: string, client_id: string, clave: string, valor: string,
 ): Promise<Map<string, string>> {
-  const { data } = await db.from(tabla).select(`${clave}, ${valor}`).eq('client_id', client_id)
+  // Paginado: con más de 1.000 clientes o productos, el mapa se quedaba corto y las
+  // filas de más salían con la columna del nombre VACÍA (ver `lib/supabase/paginar.ts`).
+  const { data } = await traerTodas<Record<string, string>>(clave, () =>
+    db.from(tabla).select(`${clave}, ${valor}`).eq('client_id', client_id))
   const m = new Map<string, string>()
-  for (const f of (data ?? []) as Record<string, string>[]) m.set(f[clave], f[valor])
+  for (const f of data) m.set(f[clave], f[valor])
   return m
 }
 
@@ -406,12 +465,16 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
       // la moneda del registro (`monto_ref`), igual que `obtenerGastosCobros`.
       const liquidado = new Map<string, number>()
       if (filas.length) {
-        const { data: movs } = await db.from('movimientos_tesoreria')
-          .select('referencia_id, monto, monto_ref')
-          .eq('client_id', cid)
-          .in('origen', ['PAGO', 'COBRO'])
-          .in('referencia_id', filas.map(f => f.registro_id as string))
-        for (const m of (movs ?? []) as { referencia_id: string; monto: number; monto_ref: number | null }[]) {
+        // ⚠️ `traerTodas`: son 1..n liquidaciones POR registro, así que pasan del techo de
+        // 1.000 mucho antes que los registros. Truncada, la descarga daba PENDIENTE a
+        // gastos pagados hace meses — el mismo fallo que se vio en Cuentas por pagar.
+        const { data: movs } = await traerTodas<{ referencia_id: string; monto: number; monto_ref: number | null }>(
+          'movimiento_id', () => db.from('movimientos_tesoreria')
+            .select('referencia_id, monto, monto_ref')
+            .eq('client_id', cid)
+            .in('origen', ['PAGO', 'COBRO'])
+            .in('referencia_id', filas.map(f => f.registro_id as string)))
+        for (const m of movs) {
           liquidado.set(m.referencia_id, (liquidado.get(m.referencia_id) ?? 0) + Number(m.monto_ref ?? m.monto))
         }
       }
@@ -475,12 +538,15 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
       // agosto ya no se debe. Mismo criterio que el listado (`obtenerVentas`).
       const cobrado = new Map<string, number>()
       if (filas.length) {
-        const { data: liqs } = await db.from('movimientos_tesoreria')
-          .select('referencia_id, monto, monto_ref')
-          .eq('client_id', cid)
-          .eq('origen', 'COBRO')
-          .in('referencia_id', filas.map(f => f.factura_id as string))
-        for (const m of ((liqs ?? []) as { referencia_id: string; monto: number; monto_ref: number | null }[])) {
+        // ⚠️ `traerTodas`: idem — sin paginar, las columnas COBRADO y SALDO del fichero
+        // salían con menos cobros de los que hubo, o sea con deuda que no existe.
+        const { data: liqs } = await traerTodas<{ referencia_id: string; monto: number; monto_ref: number | null }>(
+          'movimiento_id', () => db.from('movimientos_tesoreria')
+            .select('referencia_id, monto, monto_ref')
+            .eq('client_id', cid)
+            .eq('origen', 'COBRO')
+            .in('referencia_id', filas.map(f => f.factura_id as string)))
+        for (const m of liqs) {
           cobrado.set(m.referencia_id, (cobrado.get(m.referencia_id) ?? 0) + Number(m.monto_ref ?? m.monto))
         }
       }
@@ -748,12 +814,15 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
         leer(db, 'stock_almacenes', cid, 'producto_id, almacen_id, cantidad', 'producto_id',
           filtro, undefined, undefined, undefined,
           { almacen_id: almOk }),
-        db.from('products')
+        // ⚠️ `traerTodas` en los productos y su configuración: un catálogo de más de 1.000
+        // referencias dejaba las existencias del resto sin nombre, sin unidad y sin coste.
+        traerTodas<Record<string, unknown>>('id', () => db.from('products')
           .select('producto_id, codigo, nombre, unidad, stock_minimo, costos, tipo, estado')
-          .eq('client_id', cid),
+          .eq('client_id', cid)),
         db.from('almacenes').select('almacen_id, nombre, empresa_id').eq('client_id', cid),
-        db.from('producto_almacen_config').select('producto_id, almacen_id, stock_minimo')
-          .eq('client_id', cid),
+        traerTodas<Record<string, unknown>>(['producto_id', 'almacen_id'], () =>
+          db.from('producto_almacen_config').select('producto_id, almacen_id, stock_minimo')
+            .eq('client_id', cid)),
         diccionario(db, 'empresas', cid, 'empresa_id', 'nombre'),
         db.from('monedas').select('codigo').eq('client_id', cid).eq('activa', true).order('codigo'),
       ])
@@ -810,7 +879,10 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
         leer(db, 'stock_almacenes', cid, 'producto_id, almacen_id, cantidad', 'producto_id',
           filtro, undefined, undefined, undefined,
           { almacen_id: almOk }),
-        db.from('products').select('producto_id, codigo, nombre, unidad, tipo, estado').eq('client_id', cid),
+        // ⚠️ `traerTodas`: la hoja de conteo la usa quien va a contar el almacén; si le
+        // faltan productos, cuenta menos de los que hay.
+        traerTodas<Record<string, unknown>>('id', () => db.from('products')
+          .select('producto_id, codigo, nombre, unidad, tipo, estado').eq('client_id', cid)),
         db.from('almacenes').select('almacen_id, nombre').eq('client_id', cid),
       ])
       type Prd = { producto_id: string; codigo: string; nombre: string; unidad: string; tipo: string; estado: string }
@@ -869,13 +941,20 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
       if (!cab) return []
 
       const [lineasRes, prodRes, stockRes, movRes, monRes] = await Promise.all([
-        db.from('conteo_lineas').select('producto_id, contado, motivo_tipo, nota')
-          .eq('client_id', cid).eq('conteo_id', conteo_id),
-        db.from('products').select('producto_id, codigo, nombre, unidad, costos').eq('client_id', cid),
-        db.from('stock_almacenes').select('producto_id, cantidad')
-          .eq('client_id', cid).eq('almacen_id', cab.almacen_id as string),
-        db.from('movimientos_inventario').select('producto_id, cantidad')
-          .eq('client_id', cid).eq('referencia_id', conteo_id).eq('tipo', 'AJUSTE'),
+        // ⚠️ `traerTodas`: un conteo tiene una línea por producto del almacén, así que un
+        // almacén grande pasa del techo de 1.000 él solo y el acta del conteo salía a
+        // medias — con menos diferencias y menos valor ajustado de los que hubo.
+        traerTodas<Record<string, unknown>>(['conteo_id', 'producto_id'], () =>
+          db.from('conteo_lineas').select('producto_id, contado, motivo_tipo, nota')
+            .eq('client_id', cid).eq('conteo_id', conteo_id)),
+        traerTodas<Record<string, unknown>>('id', () => db.from('products')
+          .select('producto_id, codigo, nombre, unidad, costos').eq('client_id', cid)),
+        traerTodas<Record<string, unknown>>(['producto_id', 'almacen_id'], () =>
+          db.from('stock_almacenes').select('producto_id, cantidad')
+            .eq('client_id', cid).eq('almacen_id', cab.almacen_id as string)),
+        traerTodas<Record<string, unknown>>('movimiento_id', () =>
+          db.from('movimientos_inventario').select('producto_id, cantidad')
+            .eq('client_id', cid).eq('referencia_id', conteo_id).eq('tipo', 'AJUSTE')),
         db.from('monedas').select('codigo').eq('client_id', cid).eq('activa', true).order('codigo'),
       ])
 
@@ -959,12 +1038,15 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
       // que no hay que reconstruir el descuadre de cada conteo viejo contra el stock de
       // hoy — que además ya no es el de entonces.
       const ids = filas.map(f => f.conteo_id as string)
-      const { data: lineas } = await db.from('conteo_lineas')
-        .select('conteo_id, motivo_tipo')
-        .eq('client_id', cid).in('conteo_id', ids).not('contado', 'is', null)
+      // ⚠️ `traerTodas`: una línea por producto y por conteo — el techo de 1.000 se pasa
+      // con un puñado de conteos, y las columnas «contadas» y «diferencias» salían bajas.
+      const { data: lineas } = await traerTodas<{ conteo_id: string; motivo_tipo: string | null }>(
+        ['conteo_id', 'producto_id'], () => db.from('conteo_lineas')
+          .select('conteo_id, motivo_tipo')
+          .eq('client_id', cid).in('conteo_id', ids).not('contado', 'is', null))
       const contadas = new Map<string, number>()
       const difs     = new Map<string, number>()
-      for (const l of (lineas ?? []) as { conteo_id: string; motivo_tipo: string | null }[]) {
+      for (const l of lineas) {
         contadas.set(l.conteo_id, (contadas.get(l.conteo_id) ?? 0) + 1)
         if (l.motivo_tipo) difs.set(l.conteo_id, (difs.get(l.conteo_id) ?? 0) + 1)
       }
@@ -1270,9 +1352,11 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
         diccionario(db, 'third_parties', cid, 'tercero_id', 'nombre'),
         diccionario(db, 'empresas',      cid, 'empresa_id', 'nombre'),
         diccionario(db, 'products',      cid, 'producto_id', 'nombre'),
-        db.from('suscripcion_lineas')
+        // ⚠️ `traerTodas`: de estas líneas sale el importe de cada acuerdo. Truncadas, el
+        // fichero daba acuerdos de menos dinero del pactado (o de cero).
+        traerTodas<Record<string, unknown>>('linea_id', () => db.from('suscripcion_lineas')
           .select('suscripcion_id, producto_id, precio_mensual, descuento_modo, descuento_valor')
-          .eq('client_id', cid),
+          .eq('client_id', cid)),
       ])
       const porAcuerdo = new Map<string, {
         producto_id: string; precio_mensual: number
@@ -1315,19 +1399,43 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
     clave: 'cuentas',
     etiqueta: 'Cuentas y cajas',
     modulos: ['base'],
-    cabeceras: ['Nombre', 'Tipo', 'Moneda', 'Saldo inicial', 'Empresa', 'Activa', 'Notas'],
+    /* El fichero lleva el EXTRACTO, no la columna cruda. Llevaba `saldo_inicial`, que es
+       el saldo de partida de la ficha y no cambia nunca: dos descargas con rangos
+       distintos salían idénticas, y con la fecha de corte en pantalla eso ya no es una
+       simplificación sino un número que contradice lo que se está mirando.
+
+       Y el corte va ESCRITO en la cabecera de la columna («Saldo al 09 sep 2026»), no
+       solo en el nombre del fichero: un Excel se reenvía, se pega en otro y se lee tres
+       meses después, y ahí una columna llamada «Saldo» a secas no dice de qué día es. */
+    cabeceras: filtro => ['Nombre', 'Tipo', 'Moneda', 'Empresa', 'Saldo anterior',
+      'Ingresos', 'Egresos', 'Mov.',
+      filtro?.hasta ? `Saldo al ${fmtFechaEs(filtro.hasta)}` : 'Saldo', 'Activa', 'Notas'],
     cargar: async (db, cid, filtro) => {
-      const [filas, empresas] = await Promise.all([
+      const [filas, empresas, saldos] = await Promise.all([
         // La pestaña enseña activas O archivadas, nunca las dos: el fichero, igual.
-        leer(db, 'cuentas', cid, 'nombre, tipo, moneda, saldo_inicial, empresa_id, activa, notas', 'nombre',
+        leer(db, 'cuentas', cid, 'cuenta_id, nombre, tipo, moneda, saldo_inicial, empresa_id, activa, notas', 'nombre',
           filtro, undefined, ['nombre', 'notas'],
-          { empresa_id: filtro?.empresa_id, activa: !filtro?.archivadas }),
+          // Las cuentas de «Apertura» (mig. 130) no son dinero real y la pantalla no las
+          // enseña: el fichero tampoco, o el total del Excel no cuadra con el de arriba.
+          { empresa_id: filtro?.empresa_id, activa: !filtro?.archivadas, es_apertura: false }),
         diccionario(db, 'empresas', cid, 'empresa_id', 'nombre'),
+        // La MISMA función que pinta la pantalla (`tes_saldos_a_fecha`, mig. 243), no una
+        // segunda cuenta hecha aquí: un fichero que dice otro saldo que la pantalla es el
+        // fallo que más caro se paga en un listado de dinero.
+        saldosAFecha(db, cid, filtro?.empresas_visibles ?? [],
+          { desde: filtro?.desde, hasta: filtro?.hasta }),
       ])
-      return filas.map(f => [
-        f.nombre as string, f.tipo as string, f.moneda as string, f.saldo_inicial as number,
-        empresas.get(f.empresa_id as string) ?? '', f.activa as boolean, f.notas as string,
-      ])
+      return filas.map(f => {
+        // El respaldo es el saldo de la ficha, como en la vista: ceros dejarían a cero
+        // una cuenta que sí tiene dinero.
+        const s = saldos.get(f.cuenta_id as string) ?? saldoSinMovimientos(Number(f.saldo_inicial))
+        return [
+          f.nombre as string, f.tipo as string, f.moneda as string,
+          empresas.get(f.empresa_id as string) ?? '',
+          s.saldo_previo, s.ingresos, s.egresos, s.movimientos, s.saldo,
+          f.activa as boolean, f.notas as string,
+        ]
+      })
     },
   },
   {
@@ -1386,9 +1494,12 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
       if (!vigentes.length) return []
 
       const tkDe = new Map(vigentes.map(t => [t.ticket_uuid as string, t]))
-      const { data: lineas } = await db.from('caja_ticket_lineas')
-        .select('ticket_uuid, descripcion, cantidad, precio_unitario')
-        .eq('client_id', cid).in('ticket_uuid', [...tkDe.keys()])
+      // ⚠️ `traerTodas`: varias líneas por ticket, o sea que el techo de 1.000 se pasa con
+      // unos cientos de tickets y el detalle de ventas salía sin la mayoría de las líneas.
+      const { data: lineas } = await traerTodas<Record<string, unknown>>('id', () =>
+        db.from('caja_ticket_lineas')
+          .select('ticket_uuid, descripcion, cantidad, precio_unitario')
+          .eq('client_id', cid).in('ticket_uuid', [...tkDe.keys()]))
 
       // La búsqueda se aplica AQUÍ y no en `leer`: en esta pantalla el texto busca en el
       // nombre del producto, que vive en la línea y no en el ticket.
@@ -1441,10 +1552,15 @@ export const TABLAS_EXPORTABLES: TablaExportable[] = [
       const salidasDe  = new Map<string, Record<string, number>>()
       if (uuids.length) {
         const [tkRes, mvRes] = await Promise.all([
-          db.from('caja_tickets').select('sesion_uuid, moneda, total, estado, medio_pago')
-            .eq('client_id', cid).in('sesion_uuid', uuids),
-          db.from('caja_turno_movimientos').select('sesion_uuid, moneda, importe, tipo')
-            .eq('client_id', cid).in('sesion_uuid', uuids),
+          // ⚠️ `traerTodas`: son los tickets de TODAS las sesiones del fichero. Sin paginar,
+          // el efectivo esperado de cada cierre salía por debajo del real y el cuadre del
+          // fichero no coincidía con el de la pantalla.
+          traerTodas<Record<string, unknown>>('ticket_uuid', () =>
+            db.from('caja_tickets').select('sesion_uuid, moneda, total, estado, medio_pago')
+              .eq('client_id', cid).in('sesion_uuid', uuids)),
+          traerTodas<Record<string, unknown>>('movimiento_uuid', () =>
+            db.from('caja_turno_movimientos').select('sesion_uuid, moneda, importe, tipo')
+              .eq('client_id', cid).in('sesion_uuid', uuids)),
         ])
         type Tk = { sesion_uuid: string; moneda: string; total: number; estado?: string; medio_pago?: string }
         for (const t of ((tkRes.data ?? []) as Tk[])) {

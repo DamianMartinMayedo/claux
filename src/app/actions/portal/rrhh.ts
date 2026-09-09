@@ -39,6 +39,7 @@ import { tieneModulo }         from '@/lib/modulos'
 // día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
 import { hoyEnTz } from '@/lib/fecha-tz'
 import { comprobarLimite } from '@/lib/limites'
+import { traerTodas } from '@/lib/supabase/paginar'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -567,12 +568,13 @@ function normIncidencia(r: IncidenciaMes & { empleado_id: string }): IncidenciaM
 async function leerIncidencias(
   db: DbAdmin, client_id: string, periodo: string,
 ): Promise<Map<string, IncidenciaMes>> {
-  const { data } = await db.from('incidencias_nomina')
-    .select(SELECT_INCIDENCIAS)
-    .eq('client_id', client_id)
-    .eq('periodo', periodo)
+  const { data } = await traerTodas<IncidenciaMes & { empleado_id: string }>(
+    'incidencia_id', () => db.from('incidencias_nomina')
+      .select(SELECT_INCIDENCIAS)
+      .eq('client_id', client_id)
+      .eq('periodo', periodo))
   const m = new Map<string, IncidenciaMes>()
-  for (const r of (data ?? []) as (IncidenciaMes & { empleado_id: string })[]) {
+  for (const r of data) {
     m.set(r.empleado_id, normIncidencia(r))
   }
   return m
@@ -588,11 +590,16 @@ async function leerIncidenciasDeVarios(
 ): Promise<Map<string, IncidenciaMes>> {
   const m = new Map<string, IncidenciaMes>()
   if (!periodos.length) return m
-  const { data } = await db.from('incidencias_nomina')
-    .select(SELECT_INCIDENCIAS)
-    .eq('client_id', client_id)
-    .in('periodo', periodos)
-  for (const r of (data ?? []) as (IncidenciaMes & { empleado_id: string })[]) {
+  // ⚠️ `traerTodas`: una fila por trabajador y por período, así que doce meses de una
+  // plantilla mediana pasan del techo de 1.000 de PostgREST sin avisar (ver
+  // `lib/supabase/paginar.ts`). Las que faltaran serían días de baja o vacaciones que no
+  // se descuentan, o sea una nómina mal calculada.
+  const { data } = await traerTodas<IncidenciaMes & { empleado_id: string; periodo: string }>(
+    'incidencia_id', () => db.from('incidencias_nomina')
+      .select(SELECT_INCIDENCIAS)
+      .eq('client_id', client_id)
+      .in('periodo', periodos))
+  for (const r of data) {
     m.set(`${r.periodo}|${r.empleado_id}`, normIncidencia(r))
   }
   return m

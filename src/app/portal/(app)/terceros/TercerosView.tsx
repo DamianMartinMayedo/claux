@@ -277,6 +277,7 @@ export default function TercerosView({ data, puedeEditar }: { data: TercerosPage
       <Filtros
         filtros={declaracion}
         q={search}
+        qDonde="cliente"
         placeholder="Buscar por nombre, NIT, email, moneda, vía de pago…"
         onCargando={setCargando}
       />

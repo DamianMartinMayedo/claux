@@ -616,6 +616,7 @@ export default function ProductosView({ data, puedeEditar, children }: { data: P
           <Filtros
             filtros={declaracion}
             q={search}
+            qDonde="cliente"
             placeholder="Buscar por nombre, código, categoría…"
             onCargando={setCargando}
           />

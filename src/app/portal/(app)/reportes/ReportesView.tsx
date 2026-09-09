@@ -14,7 +14,7 @@ import EnviarAsesorModal           from './EnviarAsesorModal'
 import EstadoResultadosCard        from './EstadoResultadosCard'
 import GavetaLanzador                 from '@/components/portal/GavetaLanzador'
 import type { ResumenGaveta }      from '@/lib/caja/pendientes'
-import { formatMonto, formatPct, formatDelta, formatFechaCorta } from './_formato'
+import { formatMonto, formatSigno, formatPct, formatDelta, formatFechaCorta } from './_formato'
 import { construirFilasPL } from '@/lib/pl/comparar'
 import { descargarBase64, XLSX_MIME } from '@/lib/exportar/descargar'
 import { toastError, toastLoading } from '@/app/contexts/ToastContext'
@@ -230,13 +230,20 @@ export default function ReportesView({ data, asesores, gaveta }: {
       cur.salto(2)
       cur.titulo('Flujo de caja')
       if (data.flujo.length === 0) cur.fila('Sin movimientos de efectivo en el período.', '', { color: GRAY })
+      // Las mismas dos puntas que la pantalla, y en el mismo orden: el PDF es lo que se
+      // le enseña al contador, así que tiene que poder cuadrarse renglón a renglón.
       for (const f of data.flujo) {
         cur.cabeceraTabla(f.moneda, 'Importe')
+        cur.fila('Saldo inicial', formatMonto(f.saldo_inicial))
         cur.fila('Entradas', formatMonto(f.entradas), { bold: true })
         for (const e of f.detalle_entradas) cur.fila(ORIGEN_LABEL[e.origen] ?? e.origen, formatMonto(e.monto), { indent: true })
         cur.fila('Salidas', formatMonto(f.salidas), { bold: true })
         for (const s of f.detalle_salidas) cur.fila(ORIGEN_LABEL[s.origen] ?? s.origen, formatMonto(s.monto), { indent: true })
-        cur.filaTotal('Flujo neto', formatMonto(f.neto))
+        cur.fila('Flujo neto', formatMonto(f.neto), { bold: true })
+        if (f.transferencias !== 0) {
+          cur.fila('Transferencias entre cuentas', formatSigno(f.transferencias))
+        }
+        cur.filaTotal('Saldo final', formatMonto(f.saldo_final))
       }
 
       // ── Consolidado de referencia ──
@@ -733,6 +740,13 @@ export default function ReportesView({ data, asesores, gaveta }: {
                     </div>
                     <div className="rep-card-label">Flujo neto</div>
 
+                    {/* De dónde parte. Con las dos puntas, la tarjeta se comprueba sola
+                        —inicial + entradas − salidas ± transferencias = final— en vez de
+                        dar un neto suelto que no se puede cuadrar con nada. */}
+                    <div className="rep-block">
+                      <div className="rep-line"><span>Saldo inicial</span><span>{formatMonto(f.saldo_inicial)}</span></div>
+                    </div>
+
                     <div className="rep-block">
                       <div className="rep-line rep-line-head rep-in"><span>Entradas</span><strong>{formatMonto(f.entradas)}</strong></div>
                       {f.detalle_entradas.map(e => (
@@ -745,6 +759,20 @@ export default function ReportesView({ data, asesores, gaveta }: {
                       {f.detalle_salidas.map(s => (
                         <div key={s.origen} className="rep-line rep-sub"><span>{ORIGEN_LABEL[s.origen] ?? s.origen}</span><span>{formatMonto(s.monto)}</span></div>
                       ))}
+                    </div>
+
+                    <div className="rep-block">
+                      {/* Las transferencias solo salen cuando mueven algo. Entre cuentas de
+                          la misma moneda se anulan y la línea sería un cero explicando una
+                          resta que nadie ha hecho; entre monedas distintas no, y entonces es
+                          justo lo que explica por qué el saldo final no es inicial + neto. */}
+                      {f.transferencias !== 0 && (
+                        <div className="rep-line rep-sub">
+                          <span>Transferencias entre cuentas</span>
+                          <span>{formatSigno(f.transferencias)}</span>
+                        </div>
+                      )}
+                      <div className="rep-line rep-line-head"><span>Saldo final</span><strong>{formatMonto(f.saldo_final)}</strong></div>
                     </div>
                   </div>
                 ))}

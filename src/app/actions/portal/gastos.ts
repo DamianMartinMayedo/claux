@@ -3,6 +3,7 @@
 import { revalidatePath }    from 'next/cache'
 import { revalidarFinanzas } from './_finanzas-revalidar'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { traerTodas }        from '@/lib/supabase/paginar'
 import { getPortalSession, puedeEditarModulo }  from './auth'
 import { obtenerEmpresas }   from './empresas'
 import { monedaValida }      from '@/lib/tasas'
@@ -23,6 +24,7 @@ import {
 // las 20:00 la fecha ya es la de mañana, así que un documento registrado de noche el último
 // día del mes caía en el mes siguiente. Una sola fuente: `lib/fecha-tz.ts`.
 import { hoyEnTz } from '@/lib/fecha-tz'
+import { formatMonto, formatTasa } from '@/lib/formato'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -89,6 +91,17 @@ export interface Liquidacion {
   monto:         number
   cuenta_id:     string
   cuenta_nombre: string
+}
+
+/** La FILA cruda de Tesorería de la que sale una `Liquidacion`. `monto` es lo que salió
+ *  de la caja y `monto_ref` lo aplicado al documento en su moneda (mig. 076). */
+type FilaLiquidacion = {
+  movimiento_id: string
+  fecha:         string
+  monto:         number
+  monto_ref:     number | null
+  cuenta_id:     string
+  referencia_id: string
 }
 
 export interface GastoCobroConSaldo extends GastoCobro {
@@ -194,11 +207,14 @@ export async function obtenerGastosCobros(
 
   const [regRes, movRes, cuRes, terRes, monRes, catRes] = await Promise.all([
     regQuery,
-    db.from('movimientos_tesoreria')
-      .select('movimiento_id, fecha, monto, monto_ref, cuenta_id, referencia_id, origen')
+    // ⚠️ `traerTodas`: PostgREST corta a 1.000 filas sin avisar y de esta lectura sale el
+    // estado de CADA registro. Truncada, un gasto pagado hace meses vuelve a PENDIENTE.
+    // Ver la cabecera de `lib/supabase/paginar.ts`.
+    traerTodas<FilaLiquidacion>('movimiento_id', () => db.from('movimientos_tesoreria')
+      .select('movimiento_id, fecha, monto, monto_ref, cuenta_id, referencia_id')
       .eq('client_id', session.client_id)
       .in('origen', ['PAGO', 'COBRO'])
-      .not('referencia_id', 'is', null),
+      .not('referencia_id', 'is', null)),
     // Se traen TODAS (incluida la de «Apertura») porque también resuelven el
     // nombre de cada liquidación; el selector de cuenta sí las filtra abajo.
     db.from('cuentas').select('cuenta_id, nombre, empresa_id, moneda, activa, es_apertura')
@@ -221,7 +237,7 @@ export async function obtenerGastosCobros(
   ])
 
   const registros = (regRes.data ?? []) as GastoCobro[]
-  const movs      = (movRes.data ?? []) as { movimiento_id: string; fecha: string; monto: number; monto_ref: number | null; cuenta_id: string; referencia_id: string }[]
+  const movs      = movRes.data
   const cuentas   = (cuRes.data  ?? []) as { cuenta_id: string; nombre: string; empresa_id: string; moneda: string; activa: boolean; es_apertura: boolean }[]
 
   const cuentaNombre: Record<string, string> = {}
@@ -707,7 +723,11 @@ export async function registrarLiquidacion(
     monto:         montoCaja,             // en la moneda de la caja
     moneda:        cuenta.moneda,
     monto_ref:     montoRaw,              // en la moneda del registro (reduce su saldo)
-    concepto:      cambiaMoneda ? `${conceptoBase} (${montoRaw.toFixed(2)} ${registro.moneda} a ${tasa} ${cuenta.moneda}/${registro.moneda})` : conceptoBase,
+    // Se GUARDA, así que se escribe legible: `toFixed(2)` da punto decimal inglés y sin
+    // millares, y la tasa en crudo imprime los diecisiete decimales del `double`.
+    concepto:      cambiaMoneda
+      ? `${conceptoBase} (${formatMonto(montoRaw)} ${registro.moneda} a ${formatTasa(tasa)} ${cuenta.moneda}/${registro.moneda})`
+      : conceptoBase,
     categoria:     categoriaNombre,  // Nombre de la categoría para display
     categoria_id:  registro.categoria_id,  // FK para referencia
     origen:        esGasto ? 'PAGO' : 'COBRO',

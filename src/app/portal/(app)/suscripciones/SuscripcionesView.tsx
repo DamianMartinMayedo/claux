@@ -1475,10 +1475,14 @@ export default function SuscripcionesView({ data, empresaInicial = '', etiqueta 
       {/* Una sola fila. Presets de FUTURO: el rango se aplica a `fecha_proximo_cobro`, o sea
           a lo que viene. Ofrecía los de un listado histórico («Mes pasado», «Últimos 3
           meses»), que sobre cobros futuros no significan nada. */}
+      {/* `qDonde="cliente"` con techo: igual que en Operaciones de caja, la consulta no
+          busca por texto —nunca recibió `q`—, así que recargar no traía filas nuevas y sí
+          deshacía el «Traer más». */}
       <Filtros
         filtros={declaracion}
         rango={data.rango}
         q={search}
+        qDonde="cliente"
         placeholder="Buscar por cliente o servicio…"
         presets={PRESETS_FUTURO}
         hayMas={data.hay_mas}

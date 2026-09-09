@@ -59,9 +59,9 @@ export default function AvisoGaveta({
     <div className={`alert alert-warning alert-cta${className ? ` ${className}` : ''}`}>
       <div className="alert-cta-texto">
         <strong className="alert-titulo">
-          Tu punto de venta registró {textoAvisoGaveta(resumen)}
+          El punto de venta registró {textoAvisoGaveta(resumen)}
         </strong>
-        {nota ?? 'Hasta que digas qué fue cada una, ese dinero no aparece en el estado de resultados.'}
+        {nota ?? 'Hasta indicar qué fue cada una, ese dinero no aparece en el estado de resultados.'}
         {antiguo}
       </div>
       <button type="button" className="btn btn-aviso btn-sm" onClick={onAbrir} disabled={cargando}>

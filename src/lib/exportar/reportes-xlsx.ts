@@ -213,12 +213,22 @@ export async function construirXlsxReportes(
       nombre: 'Flujo de caja',
       filas: [
         ['Moneda', 'Movimiento', 'Origen', 'Importe'].map(t => texto(t, cabecera)),
+        // Abre por el saldo inicial y cierra por el final, como la pantalla y el PDF: en
+        // una hoja de cálculo, además, las dos puntas son lo que deja comprobar la
+        // columna con una suma.
         ...data.flujo.flatMap(f => [
+          [texto(f.moneda, fuerte), texto('Saldo inicial', fuerte), texto(''), imp(f.saldo_inicial, fuerte)],
           ...f.detalle_entradas.map(e => [texto(f.moneda), texto('Entrada'), texto(ORIGEN_LABEL[e.origen] ?? e.origen), imp(e.monto)]),
           [texto(f.moneda, fuerte), texto('Total entradas', fuerte), texto(''), imp(f.entradas, fuerte)],
           ...f.detalle_salidas.map(s => [texto(f.moneda), texto('Salida'), texto(ORIGEN_LABEL[s.origen] ?? s.origen), imp(s.monto)]),
           [texto(f.moneda, fuerte), texto('Total salidas', fuerte), texto(''), imp(f.salidas, fuerte)],
           [texto(f.moneda, fuerte), texto('Flujo neto', fuerte), texto(''), imp(f.neto, fuerte)],
+          // La línea de transferencias solo cuando mueve algo (entre monedas distintas):
+          // en la misma moneda se anulan y sería un cero explicando una resta que no hay.
+          ...(f.transferencias !== 0
+            ? [[texto(f.moneda), texto('Transferencias entre cuentas'), texto(''), imp(f.transferencias)]]
+            : []),
+          [texto(f.moneda, fuerte), texto('Saldo final', fuerte), texto(''), imp(f.saldo_final, fuerte)],
         ]),
       ],
       columnas: [{ width: 10 }, { width: 18 }, { width: 20 }, { width: 16 }],

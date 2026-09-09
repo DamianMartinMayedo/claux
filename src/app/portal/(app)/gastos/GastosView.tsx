@@ -33,11 +33,12 @@ import { claveCat } from '@/lib/catalogo/emparejar'
 import { PERMITIR_RAIZ_MANUAL } from '@/lib/catalogo/politica'
 import LiquidarCuentaFields, { type LiquidarState } from '@/app/portal/(app)/_shared/LiquidarCuentaFields'
 import CrearTerceroInline from '@/components/portal/CrearTerceroInline'
-import { Archive, ChevronDown, ChevronRight, DollarSign, Pencil, Plus, Receipt, RotateCcw, Sprout, Tag, TrendingDown, TrendingUp, Trash2, X } from 'lucide-react'
+import { Archive, ChevronRight, DollarSign, Pencil, Plus, Receipt, RotateCcw, Sprout, Tag, TrendingDown, TrendingUp, Trash2, X } from 'lucide-react'
 import { EmpresaTag, empresaColorVar } from '@/components/portal/EmpresaTag'
 import type { Filtro } from '@/lib/filtros'
 import { filtroExport, resumenDe, opcionesTercero } from '@/lib/filtros'
 import { RowActions }                  from '@/components/portal/RowActions'
+import BotonDetalle                    from '@/components/portal/BotonDetalle'
 import FormHelp                        from '@/components/portal/FormHelp'
 import { usePagination, TablePagination } from '@/components/TablePagination'
 import { useOrden, ThOrden } from '@/components/TableSort'
@@ -58,6 +59,7 @@ import AvisoTope                      from '@/components/portal/AvisoTope'
 import ExportarMenu                   from '@/components/portal/ExportarMenu'
 import { ConfirmDialog }               from '@/components/portal/Dialog'
 import { hoyEnTz } from '@/lib/fecha-tz'
+import { formatMonto } from '@/lib/formato'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -86,9 +88,6 @@ const NATURALEZA_LABEL: Record<string, string> = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatMonto(n: number): string {
-  return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
 // «Hoy» en la zona del NEGOCIO (America/Havana), no en UTC: a partir de las 20:00
 // `toISOString()` ya da la fecha de mañana, así que el defecto de un `type=date` se
 // adelantaba un día cada noche. Una sola fuente: `lib/fecha-tz.ts`.
@@ -1330,9 +1329,13 @@ export default function GastosView({ data, puedeEditar, gaveta, iaCuentas, child
                   const colDet = 6 + (puedeEditar ? 1 : 0) + (tab === 'gastos' ? 2 : 0) + (multiempresa ? 1 : 0)
                   return (
                   <Fragment key={r.registro_id}>
+                  {/* La fila entera despliega su detalle: el chevron es un objetivo de 15 px y
+                      con el dedo se falla. El botón se queda como afordancia y como vía de
+                      teclado (`<BotonDetalle>`); la selección y las acciones no suben el clic. */}
                   <tr
-                    className={multiempresa ? 'row-empresa-accent' : undefined}
-                    style={multiempresa ? empresaColorVar(colorOf(r.empresa_id)) : undefined}>
+                    className={`table-row-clickable${multiempresa ? ' row-empresa-accent' : ''}`}
+                    style={multiempresa ? empresaColorVar(colorOf(r.empresa_id)) : undefined}
+                    onClick={() => setDetalle(abierto ? null : r.registro_id)}>
                     {puedeEditar && (
                       <td className="col-check" onClick={e => e.stopPropagation()}>
                         <input type="checkbox" className="row-check"
@@ -1367,15 +1370,12 @@ export default function GastosView({ data, puedeEditar, gaveta, iaCuentas, child
                     <td data-label="Monto" className="col-num tes-monto-cell">{formatMonto(r.monto)} {r.moneda}</td>
                     <td data-label="Pendiente" className="col-num tes-monto-cell">{r.saldo_pendiente > 0.005 ? `${formatMonto(r.saldo_pendiente)} ${r.moneda}` : '—'}</td>
                     <td data-label="Estado"><span className={`badge ${ESTADO_BADGE[r.estado]}`}>{ESTADO_LABEL[r.estado]}</span></td>
-                    <td className="col-actions">
+                    <td className="col-actions" onClick={e => e.stopPropagation()}>
                       <div className="table-actions">
                         {/* Ver el resto de datos del registro sin salir de la lista.
                             Disponible también en solo-lectura: desplegar no escribe. */}
-                        <button type="button" className="icon-btn" title="Ver detalle"
-                          aria-label={`Ver detalle de ${r.concepto || r.descripcion}`} aria-expanded={abierto}
-                          onClick={() => setDetalle(abierto ? null : r.registro_id)}>
-                          <ChevronDown size={15} strokeWidth={2} className={abierto ? 'tes-chevron-abierto' : undefined} />
-                        </button>
+                        <BotonDetalle abierto={abierto} rotulo={r.concepto || r.descripcion}
+                          onAlternar={() => setDetalle(abierto ? null : r.registro_id)} />
                         {puedeEditar && (
                           <RowActions>
                             <button className="row-actions-item" onClick={() => setLiquidar(r)}>

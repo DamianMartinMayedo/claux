@@ -20,6 +20,7 @@ import { esModoEstado, type ModoEstado as _ModoEstado } from '@/lib/dossier/esta
 import { conceptosDe, CONCEPTOS_DEFAULT, type ConceptosSector } from '@/lib/sector'
 import { packDe, conceptosDelPack } from '@/lib/catalogo/packs'
 import { resumenGavetaPendiente, RESUMEN_GAVETA_VACIO, type ResumenGaveta } from '@/lib/caja/pendientes'
+import { traerTodas } from '@/lib/supabase/paginar'
 
 // ── Funcionalidad "Dossier del negocio" (clave `dossier`) ──
 // Independiente: funciona a mano sin la base. Con `base`, puede TRAER los números
@@ -500,10 +501,14 @@ async function categoriasDelAlcanceDossier(
   if (!desde || !hasta) return []
   const todas = await categoriasPL(db, clientId)
   const idsEmpresa = await empresaIdsDe(empresaId)
-  const { data: gastos } = await db.from('gastos_cobros')
-    .select('categoria_id, categoria')
-    .eq('client_id', clientId).eq('tipo', 'GASTO').in('empresa_id', idsEmpresa)
-    .gte('fecha', desde).lte('fecha', hasta)
+  // ⚠️ `traerTodas`: PostgREST corta a 1.000 filas sin avisar (ver `lib/supabase/paginar.ts`).
+  // Aquí eso dejaba fuera del dossier categorías de gasto que sí se usaron en el período,
+  // así que su coste no se podía marcar como coste de ventas y caía todo a operativo.
+  const { data: gastos } = await traerTodas<{ categoria_id: string | null; categoria: string | null }>(
+    'registro_id', () => db.from('gastos_cobros')
+      .select('categoria_id, categoria')
+      .eq('client_id', clientId).eq('tipo', 'GASTO').in('empresa_id', idsEmpresa)
+      .gte('fecha', desde).lte('fecha', hasta))
 
   const porNombre = new Map(todas.map(c => [c.nombre.trim().toLowerCase(), c]))
   const porId = new Map(todas.map(c => [c.categoria_id, c]))
@@ -519,7 +524,7 @@ async function categoriasDelAlcanceDossier(
   }
 
   const usadas = new Set<string>()
-  for (const g of gastos ?? []) {
+  for (const g of gastos) {
     const categoria = (g.categoria_id ? porId.get(g.categoria_id) : undefined)
       ?? (g.categoria ? porNombre.get(g.categoria.trim().toLowerCase()) : undefined)
     if (categoria) usadas.add(raizDe.get(categoria.categoria_id) ?? categoria.categoria_id)

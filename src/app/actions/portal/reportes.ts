@@ -1,6 +1,8 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { saldosAFecha }      from '@/lib/tesoreria/saldos'
+import { traerTodas }        from '@/lib/supabase/paginar'
 import { ESTADOS_FACTURA_INGRESO } from '@/lib/contabilidad'
 import {
   cobroEsIngreso, cobroNaceLiquidado, generaSaldo,
@@ -65,9 +67,20 @@ export interface PuenteMoneda {
 
 export interface FlujoMoneda {
   moneda:           string
+  /** Saldo de las cuentas de esta moneda la víspera de `desde`: de dónde parte el período. */
+  saldo_inicial:    number
   entradas:         number   // movimientos INGRESO (origen MANUAL/COBRO)
   salidas:          number   // movimientos EGRESO (origen MANUAL/PAGO)
+  /**
+   * Lo que mueven las TRANSFERENCIAS entre cuentas, que no son entrada ni salida de
+   * efectivo del negocio y por eso el flujo las descarta. Entre cuentas de la misma moneda
+   * se anulan solas y esto queda en cero; entre monedas distintas no, y sin la línea el
+   * saldo final no cuadraría con el inicial más lo del período.
+   */
+  transferencias:   number
   neto:             number
+  /** Saldo al cerrar: `saldo_inicial + entradas − salidas + transferencias`. */
+  saldo_final:      number
   detalle_entradas: { origen: string; monto: number }[]
   detalle_salidas:  { origen: string; monto: number }[]
 }
@@ -168,28 +181,39 @@ export async function obtenerReportes(
   const desdeQ = comp && comp.desde < desde ? comp.desde : desde
   const hastaQ = comp && comp.hasta > hasta ? comp.hasta : hasta
 
-  const [facRes, gcRes, movRes, monRes, tasasRes, aperRes, catRes, cliRes] = await Promise.all([
-    db.from('facturas').select('factura_id, moneda, total, fecha_emision, estado')
-      .eq('client_id', session.client_id).in('empresa_id', ids)
-      .in('estado', ESTADOS_FACTURA_INGRESO)
-      .gte('fecha_emision', desdeQ).lte('fecha_emision', hastaQ),
-    db.from('gastos_cobros').select('registro_id, tipo, moneda, monto, categoria, categoria_id, fecha, origen_tipo, naturaleza, tasa_consolidacion')
-      .eq('client_id', session.client_id).in('empresa_id', ids)
-      .gte('fecha', desdeQ).lte('fecha', hastaQ),
-    db.from('movimientos_tesoreria').select('tipo, moneda, monto, origen, fecha, cuenta_id')
-      .eq('client_id', session.client_id).in('empresa_id', ids)
-      .neq('origen', 'TRANSFERENCIA')
-      .gte('fecha', desde).lte('fecha', hasta),
+  const [facRes, gcRes, movRes, monRes, tasasRes, cuentasRes, catRes, cliRes, saldos] = await Promise.all([
+    // ⚠️ Las tres con `traerTodas`: el rango acota, pero un año de un negocio activo pasa
+    // de las 1.000 filas que devuelve PostgREST sin avisar, y un informe truncado no sale
+    // «incompleto»: sale con menos ingresos y menos gastos de los que hubo.
+    traerTodas<FilaFactura>('factura_id', () =>
+      db.from('facturas').select('factura_id, moneda, total, fecha_emision, estado')
+        .eq('client_id', session.client_id).in('empresa_id', ids)
+        .in('estado', ESTADOS_FACTURA_INGRESO)
+        .gte('fecha_emision', desdeQ).lte('fecha_emision', hastaQ)),
+    traerTodas<FilaGC>('registro_id', () =>
+      db.from('gastos_cobros').select('registro_id, tipo, moneda, monto, categoria, categoria_id, fecha, origen_tipo, naturaleza, tasa_consolidacion')
+        .eq('client_id', session.client_id).in('empresa_id', ids)
+        .gte('fecha', desdeQ).lte('fecha', hastaQ)),
+    traerTodas<{ tipo: string; moneda: string; monto: number; origen: string; fecha: string; cuenta_id: string }>('movimiento_id', () =>
+      db.from('movimientos_tesoreria').select('tipo, moneda, monto, origen, fecha, cuenta_id')
+        .eq('client_id', session.client_id).in('empresa_id', ids)
+        .neq('origen', 'TRANSFERENCIA')
+        .gte('fecha', desde).lte('fecha', hasta)),
     db.from('monedas').select('codigo, es_consolidacion').eq('client_id', session.client_id),
     db.from('tasas_cambio').select('moneda_origen, moneda_destino, tasa, fecha')
       .eq('client_id', session.client_id).order('fecha', { ascending: false }),
-    db.from('cuentas').select('cuenta_id')
-      .eq('client_id', session.client_id).eq('es_apertura', true),
+    // Todas, no solo las de «Apertura»: hacen falta sus monedas para repartir los saldos
+    // del período. El filtro por empresa no cambia lo de siempre —los movimientos ya van
+    // acotados por empresa, así que una cuenta de otra no podía aparecer en el flujo—.
+    db.from('cuentas').select('cuenta_id, moneda, es_apertura')
+      .eq('client_id', session.client_id).in('empresa_id', ids),
     // El catálogo de categorías es lo que da ESTRUCTURA al informe: sin él los
     // gastos vuelven a ser una lista plana (ver `@/lib/pl/estado`).
     db.from('categorias_gastos').select('categoria_id, nombre, parent_id, rol_pl')
       .eq('client_id', session.client_id),
     db.from('clients').select('modulos_activos').eq('client_id', session.client_id).maybeSingle(),
+    // Los saldos de las dos puntas del período (mig. 243), la misma función que Tesorería.
+    saldosAFecha(db, session.client_id, ids, { desde, hasta }),
   ])
 
   const hay_inventario = tieneModulo(cliRes.data?.modulos_activos, 'inventario')
@@ -206,8 +230,8 @@ export async function obtenerReportes(
   type FilaFactura = { factura_id: string; moneda: string; total: number; fecha_emision: string }
   type FilaGC = { registro_id: string; tipo: string; moneda: string; monto: number; categoria: string | null; categoria_id: string | null; fecha: string; origen_tipo: string | null; naturaleza: string | null; tasa_consolidacion: number | null }
 
-  const facturas = (facRes.data ?? []) as FilaFactura[]
-  const gastosCobros = (gcRes.data ?? []) as FilaGC[]
+  const facturas = facRes.data
+  const gastosCobros = gcRes.data
 
   const enRango = (f: string, d: string, h: string) => !!f && f >= d && f <= h
 
@@ -315,7 +339,10 @@ export async function obtenerReportes(
   const salidasMap  = new Map<string, Map<string, number>>()
   const getFlujo = (moneda: string) => {
     let f = flujoMap.get(moneda)
-    if (!f) { f = { moneda, entradas: 0, salidas: 0, neto: 0, detalle_entradas: [], detalle_salidas: [] }; flujoMap.set(moneda, f) }
+    if (!f) {
+      f = { moneda, saldo_inicial: 0, entradas: 0, salidas: 0, transferencias: 0, neto: 0, saldo_final: 0, detalle_entradas: [], detalle_salidas: [] }
+      flujoMap.set(moneda, f)
+    }
     return f
   }
 
@@ -324,9 +351,10 @@ export async function obtenerReportes(
   // haya entrado o salido de verdad. En el estado de resultados, en cambio, esos
   // gastos SÍ cuentan (están en `gastos_cobros`, por su fecha) — que es justo lo
   // que se busca: resultado devengado completo, caja intacta.
-  const cuentasApertura = new Set(((aperRes.data ?? []) as { cuenta_id: string }[]).map(c => c.cuenta_id))
+  const cuentasTodas    = (cuentasRes.data ?? []) as { cuenta_id: string; moneda: string; es_apertura: boolean | null }[]
+  const cuentasApertura = new Set(cuentasTodas.filter(c => c.es_apertura).map(c => c.cuenta_id))
 
-  for (const m of (movRes.data ?? []) as { tipo: string; moneda: string; monto: number; origen: string; cuenta_id: string }[]) {
+  for (const m of movRes.data) {
     if (cuentasApertura.has(m.cuenta_id)) continue
     const f = getFlujo(m.moneda)
     const monto = Number(m.monto)
@@ -346,7 +374,36 @@ export async function obtenerReportes(
   for (const [moneda, s] of salidasMap) {
     getFlujo(moneda).detalle_salidas = Array.from(s.entries()).map(([origen, monto]) => ({ origen, monto })).sort((a, b) => b.monto - a.monto)
   }
-  for (const f of flujoMap.values()) f.neto = f.entradas - f.salidas
+  // ── Las dos puntas del período ──
+  // Con saldo inicial y final, el informe se verifica solo —parto de X, entró esto, salió
+  // esto, quedo en Y— en vez de dar un neto que no se puede cuadrar con nada. Los saldos
+  // salen de `tes_saldos_a_fecha` (mig. 243), la misma función que Tesorería, y se reparten
+  // por la moneda de la CUENTA (que es siempre la del movimiento).
+  //
+  // Las de «Apertura» no están en el mapa: la función las descarta, igual que el bucle de
+  // arriba descarta sus movimientos. Así las dos mitades hablan del mismo dinero.
+  for (const c of cuentasTodas) {
+    const s = saldos.get(c.cuenta_id)
+    if (!s) continue
+    // Una moneda sin movimientos y a cero por las dos puntas no abre una tarjeta vacía.
+    if (!flujoMap.has(c.moneda) && s.saldo_previo === 0 && s.saldo === 0) continue
+    const f = getFlujo(c.moneda)
+    f.saldo_inicial += s.saldo_previo
+    f.saldo_final   += s.saldo
+  }
+  for (const f of flujoMap.values()) {
+    // Redondear ANTES de derivar, y en este orden, es lo que hace que la columna cuadre a
+    // la vista: `inicial + neto + transferencias = final` sale exacto porque el último se
+    // calcula ya sobre céntimos, no sobre la suma en coma flotante.
+    f.saldo_inicial = round2(f.saldo_inicial)
+    f.saldo_final   = round2(f.saldo_final)
+    f.entradas      = round2(f.entradas)
+    f.salidas       = round2(f.salidas)
+    f.neto          = round2(f.entradas - f.salidas)
+    // Lo que queda entre las dos puntas sin ser entrada ni salida solo puede ser una cosa:
+    // las transferencias, lo único que el flujo descarta y el saldo no.
+    f.transferencias = round2(f.saldo_final - f.saldo_inicial - f.neto)
+  }
 
   const ordenar = <T extends { moneda: string }>(arr: T[]) => arr.sort((a, b) => a.moneda.localeCompare(b.moneda))
   const resultado = ordenar(Array.from(resMap.values()))
@@ -415,12 +472,13 @@ export async function obtenerReportes(
 
     const liquidado = new Map<string, number>()
     if (refs.length) {
-      const { data: liqs } = await db.from('movimientos_tesoreria')
-        .select('referencia_id, monto, monto_ref')
-        .eq('client_id', session.client_id)
-        .in('origen', ['PAGO', 'COBRO'])
-        .in('referencia_id', refs)
-      for (const m of (liqs ?? []) as { referencia_id: string; monto: number; monto_ref: number | null }[]) {
+      const { data: liqs } = await traerTodas<{ referencia_id: string; monto: number; monto_ref: number | null }>(
+        'movimiento_id', () => db.from('movimientos_tesoreria')
+          .select('referencia_id, monto, monto_ref')
+          .eq('client_id', session.client_id)
+          .in('origen', ['PAGO', 'COBRO'])
+          .in('referencia_id', refs))
+      for (const m of liqs) {
         // `monto_ref` es el importe en la moneda del documento (el que reduce su
         // saldo); `monto` es lo que salió de la caja, que puede ser otra moneda.
         liquidado.set(m.referencia_id, (liquidado.get(m.referencia_id) ?? 0) + Number(m.monto_ref ?? m.monto))
@@ -583,18 +641,23 @@ export async function obtenerReportes(
     // Flujo: fusiona las monedas convertidas en una sola (X), con su detalle por origen.
     {
       const detE = new Map<string, number>(), detS = new Map<string, number>()
-      let entradas = 0, salidas = 0, hay = false
+      let entradas = 0, salidas = 0, ini = 0, fin = 0, hay = false
       for (const f of flujo) {
         const k = f.moneda === X ? 1 : factorEntre(f.moneda, X)
         if (k == null) { excl.add(f.moneda); continue }
         if (f.moneda !== X) convd.add(f.moneda)
         hay = true
         entradas += f.entradas * k; salidas += f.salidas * k
+        ini += f.saldo_inicial * k; fin += f.saldo_final * k
         for (const e of f.detalle_entradas) detE.set(e.origen, (detE.get(e.origen) ?? 0) + e.monto * k)
         for (const s of f.detalle_salidas)  detS.set(s.origen, (detS.get(s.origen) ?? 0) + s.monto * k)
       }
       flujoFinal = hay ? [{
-        moneda: X, entradas: round2(entradas), salidas: round2(salidas), neto: round2(entradas - salidas),
+        moneda: X, saldo_inicial: round2(ini), saldo_final: round2(fin),
+        entradas: round2(entradas), salidas: round2(salidas), neto: round2(entradas - salidas),
+        // Sobre los valores SIN redondear, para que la línea no aparezca por el polvo de
+        // los decimales de la conversión.
+        transferencias: round2(fin - ini - (entradas - salidas)),
         detalle_entradas: [...detE].map(([origen, monto]) => ({ origen, monto: round2(monto) })).sort((a, b) => b.monto - a.monto),
         detalle_salidas:  [...detS].map(([origen, monto]) => ({ origen, monto: round2(monto) })).sort((a, b) => b.monto - a.monto),
       }] : []

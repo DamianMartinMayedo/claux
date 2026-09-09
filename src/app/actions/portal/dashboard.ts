@@ -1,6 +1,8 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { traerTodas }        from '@/lib/supabase/paginar'
+import { saldosAFecha }      from '@/lib/tesoreria/saldos'
 import { ESTADOS_FACTURA_INGRESO } from '@/lib/contabilidad'
 import { cobroEsIngreso, computaEnResultados } from '@/lib/gastos-core'
 import { indexarCategorias, esFueraDelResultado, esRolPL, type CategoriaPL } from '@/lib/pl/estado'
@@ -495,16 +497,24 @@ async function resumenContabilidad(db: Db, cid: string, hoy: string, empresaIds:
   const desde6 = `${meses[0].mes}-01`
   const mesActual = hoy.slice(0, 7)
 
-  const [facturas6, registros6, movimientos, cuentasCaja, ultimas, consolRow, tasas, categoriasGasto] = await Promise.all([
-    db.from('facturas').select('fecha_emision, total, moneda')
-      .eq('client_id', cid).in('empresa_id', empresaIds).in('estado', ESTADOS_FACTURA_INGRESO).gte('fecha_emision', desde6),
+  const [facturas6, registros6, saldosCaja, cuentasCaja, ultimas, consolRow, tasas, categoriasGasto] = await Promise.all([
+    // ⚠️ Las dos lecturas de abajo van con `traerTodas`: PostgREST corta a 1.000 filas
+    // sin avisar, y de aquí salen las cifras de la portada (ventas y gastos del mes) que
+    // además lee la IA. Ver `lib/supabase/paginar.ts`.
+    traerTodas<{ fecha_emision: string; total: number; moneda: string }>('factura_id', () =>
+      db.from('facturas').select('fecha_emision, total, moneda')
+        .eq('client_id', cid).in('empresa_id', empresaIds).in('estado', ESTADOS_FACTURA_INGRESO).gte('fecha_emision', desde6)),
     // Los DOS tipos, no solo los gastos. Este widget contaba como ventas únicamente las
     // facturas, así que un negocio que cobra sin facturar —mostrador, TPV— veía «Ventas
     // del mes: 0» y un neto igual a sus gastos en negativo, mientras Reportes le decía
     // otra cosa. Y la IA lee este mismo resumen: le llegaba el cero como un hecho.
-    db.from('gastos_cobros').select('tipo, fecha, monto, moneda, categoria_id, origen_tipo, naturaleza')
-      .eq('client_id', cid).in('empresa_id', empresaIds).gte('fecha', desde6),
-    db.from('movimientos_tesoreria').select('cuenta_id, monto, tipo').eq('client_id', cid).in('empresa_id', empresaIds),
+    traerTodas<{ tipo: string; fecha: string; monto: number; moneda: string; categoria_id: string | null; origen_tipo: string | null; naturaleza: string | null }>('registro_id', () =>
+      db.from('gastos_cobros').select('tipo, fecha, monto, moneda, categoria_id, origen_tipo, naturaleza')
+        .eq('client_id', cid).in('empresa_id', empresaIds).gte('fecha', desde6)),
+    // La caja la suma Postgres (`tes_saldos_a_fecha`, mig. 243) y no un bucle aquí: sin
+    // rango, el saldo que devuelve es el de hoy. Antes subían todos los movimientos de la
+    // historia por la API para acabar en una cifra por moneda.
+    saldosAFecha(db, cid, empresaIds),
     db.from('cuentas').select('cuenta_id, moneda, saldo_inicial').eq('client_id', cid).in('empresa_id', empresaIds).eq('activa', true).eq('es_apertura', false),
     db.from('facturas').select('factura_id, numero, cliente_id, fecha_emision, total, moneda, estado')
       .eq('client_id', cid).in('empresa_id', empresaIds).order('fecha_emision', { ascending: false }).limit(5),
@@ -611,21 +621,14 @@ async function resumenContabilidad(db: Db, cid: string, hoy: string, empresaIds:
     }
   }
 
-  // Caja por moneda (igual que Tesorería: saldo_inicial de cuentas activas + Σ INGRESO − Σ EGRESO;
-  // cuentas archivadas quedan fuera, junto con sus movimientos — y también las de
-  // «Apertura» de la migración, que no son caja: el `continue` de abajo las descarta
-  // porque no están en `cuentaMoneda`)
-  const cuentaMoneda = new Map<string, string>()
+  // Caja por moneda: el saldo de hoy de cada cuenta ACTIVA. Las archivadas quedan fuera
+  // —la portada enseña el dinero con el que se cuenta— y las de «Apertura» ni siquiera
+  // llegan: las descarta la propia función, porque no son caja sino el contrapeso técnico
+  // de la migración. La consulta de cuentas ya filtra las dos cosas.
   const cajaMap = new Map<string, number>()
   for (const c of (cuentasCaja.data ?? [])) {
-    cuentaMoneda.set(c.cuenta_id, c.moneda)
-    cajaMap.set(c.moneda, (cajaMap.get(c.moneda) ?? 0) + Number(c.saldo_inicial))
-  }
-  for (const m of (movimientos.data ?? [])) {
-    const moneda = cuentaMoneda.get(m.cuenta_id)
-    if (!moneda) continue
-    const delta = m.tipo === 'INGRESO' ? Number(m.monto) : -Number(m.monto)
-    cajaMap.set(moneda, (cajaMap.get(moneda) ?? 0) + (delta || 0))
+    const saldo = saldosCaja.get(c.cuenta_id)?.saldo ?? Number(c.saldo_inicial)
+    cajaMap.set(c.moneda, (cajaMap.get(c.moneda) ?? 0) + saldo)
   }
   const caja = [...cajaMap.entries()].filter(([, s]) => Math.abs(s) > 0.005).map(([moneda, saldo]) => ({ moneda, saldo }))
 
@@ -727,17 +730,22 @@ async function resumenCatalogo(db: Db, cid: string): Promise<CatalogoResumen> {
 async function resumenInventario(db: Db, cid: string): Promise<InventarioResumen> {
   const desdeConsumo = new Date(Date.now() - DIAS_VENTANA * 86_400_000).toISOString().split('T')[0]
   const [{ data: productos }, { data: config }, { data: stock }, { data: almacenes }, { data: movs }, { data: mon }] = await Promise.all([
-    db.from('products')
+    // ⚠️ `traerTodas`: PostgREST corta a 1.000 filas sin avisar (ver `lib/supabase/paginar.ts`).
+    // Aquí eso son productos que nunca salen en «bajo mínimo» y, en los movimientos, un
+    // consumo más bajo del real: la cobertura salía MÁS larga y el panel no avisaba.
+    traerTodas<Record<string, unknown>>('id', () => db.from('products')
       .select('producto_id, nombre, stock_actual, stock_minimo, unidad, tipo, estado, costos')
-      .eq('client_id', cid).eq('estado', 'ACTIVO').neq('tipo', 'SERVICIO'),
-    db.from('producto_almacen_config')
-      .select('producto_id, almacen_id, stock_minimo').eq('client_id', cid).not('stock_minimo', 'is', null),
-    db.from('stock_almacenes').select('producto_id, almacen_id, cantidad').eq('client_id', cid),
+      .eq('client_id', cid).eq('estado', 'ACTIVO').neq('tipo', 'SERVICIO')),
+    traerTodas<Record<string, unknown>>(['producto_id', 'almacen_id'], () =>
+      db.from('producto_almacen_config')
+        .select('producto_id, almacen_id, stock_minimo').eq('client_id', cid).not('stock_minimo', 'is', null)),
+    traerTodas<Record<string, unknown>>(['producto_id', 'almacen_id'], () =>
+      db.from('stock_almacenes').select('producto_id, almacen_id, cantidad').eq('client_id', cid)),
     // `almacenes` archiva con `activo` boolean; no tiene columna `estado`.
     db.from('almacenes').select('almacen_id, nombre').eq('client_id', cid).eq('activo', true),
-    db.from('movimientos_inventario')
+    traerTodas<MovimientoConsumo>('movimiento_id', () => db.from('movimientos_inventario')
       .select('producto_id, almacen_id, almacen_destino_id, tipo, origen, cantidad, fecha')
-      .eq('client_id', cid).in('tipo', ['SALIDA', 'TRANSFERENCIA']).gte('fecha', desdeConsumo),
+      .eq('client_id', cid).in('tipo', ['SALIDA', 'TRANSFERENCIA']).gte('fecha', desdeConsumo)),
     db.from('monedas').select('codigo').eq('client_id', cid).eq('activa', true).order('codigo'),
   ])
 
@@ -779,7 +787,7 @@ async function resumenInventario(db: Db, cid: string): Promise<InventarioResumen
   // ── Lo que la IA necesita y no tenía (Fase 9.1) ──
   // El consumo se calcula sobre el MISMO ledger, con la misma función que la pantalla:
   // así el modelo no puede decir un número distinto del que el dueño está viendo.
-  const consumo = consumoDiario((movs ?? []) as MovimientoConsumo[])
+  const consumo = consumoDiario(movs)
   const urgentes = bajo
     .map(b => {
       // La cobertura es por almacén; para una alerta consolidada se suma el consumo
@@ -851,9 +859,12 @@ async function resumenPuntoVenta(db: Db, cid: string, hoy: string, empresaIds: s
     // Ventas de hoy: los ANULADO (rectificados) fuera, igual que en los cierres. El día es
     // el del NEGOCIO — con la fecha desnuda, Postgres la lee en UTC y «hoy» empezaba a las
     // 20:00 de ayer hora de Cuba, así que el widget mezclaba dos jornadas.
-    db.from('caja_tickets').select('caja_id, moneda, total, estado')
-      .eq('client_id', cid).in('empresa_id', empresaIds)
-      .gte('fecha', diaDelNegocio(hoy).inicio).lte('fecha', diaDelNegocio(hoy).fin),
+    // ⚠️ `traerTodas`: son las ventas de HOY en la portada. Un día de mucho movimiento
+    // pasa de 1.000 tickets y la cifra salía por debajo de lo vendido.
+    traerTodas<Record<string, unknown>>('ticket_uuid', () =>
+      db.from('caja_tickets').select('caja_id, moneda, total, estado')
+        .eq('client_id', cid).in('empresa_id', empresaIds)
+        .gte('fecha', diaDelNegocio(hoy).inicio).lte('fecha', diaDelNegocio(hoy).fin)),
     // Turnos abiertos: solo importan los de un día ANTERIOR. Uno abierto hoy es que
     // están vendiendo ahora; uno de ayer es que se olvidaron de cerrar, y sin cierre
     // no hay ingreso en Tesorería ni salida de stock — la contabilidad se queda quieta.
@@ -972,15 +983,19 @@ async function resumenRrhh(db: Db, cid: string, hoy: string, empresaIds: string[
 
 async function resumenAgenda(db: Db, cid: string, hoy: string, tipo: 'reserva' | 'cita'): Promise<AgendaResumen> {
   const hasta = sumarDias(hoy, 6)
-  let q = db.from('reservas')
-    .select('fecha, hora, personas, estado, nombre_cliente')
-    .eq('client_id', cid)
-    .in('estado', ESTADOS_AGENDA_ACTIVOS)
-    .gte('fecha', hoy).lte('fecha', hasta)
-  q = tipo === 'cita' ? q.not('recurso_id', 'is', null) : q.is('recurso_id', null)
-  const { data } = await q
+  // ⚠️ `traerTodas`: una semana de un negocio con agenda llena pasa de 1.000 filas, y las
+  // que se quedaban fuera eran reservas que el dueño no veía venir.
+  const { data } = await traerTodas<{ fecha: string; hora: string | null; personas: number | null; estado: string; nombre_cliente: string | null }>(
+    ['fecha', 'reserva_id'], () => {
+      const q = db.from('reservas')
+        .select('fecha, hora, personas, estado, nombre_cliente')
+        .eq('client_id', cid)
+        .in('estado', ESTADOS_AGENDA_ACTIVOS)
+        .gte('fecha', hoy).lte('fecha', hasta)
+      return tipo === 'cita' ? q.not('recurso_id', 'is', null) : q.is('recurso_id', null)
+    })
 
-  const filas = ((data ?? []) as { fecha: string; hora: string | null; personas: number | null; estado: string; nombre_cliente: string | null }[])
+  const filas = data
     .map(r => ({ fecha: String(r.fecha), hora: r.hora ? String(r.hora).slice(0, 5) : null, personas: Number(r.personas) || (tipo === 'cita' ? 1 : 0), estado: r.estado, nombre: r.nombre_cliente ?? '—' }))
     .sort((a, b) => (a.fecha + (a.hora ?? '')).localeCompare(b.fecha + (b.hora ?? '')))
 

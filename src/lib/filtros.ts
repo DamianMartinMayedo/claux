@@ -269,13 +269,24 @@ export function resumenDe(filtros: Filtro[]): string[] {
 }
 
 /**
- * ¿Este filtro tiene que aplicarlo el SERVIDOR en esta consulta?
+ * ¿Esto tiene que aplicarlo el SERVIDOR en esta consulta?
  *
  * `servidor` siempre; `escalado` solo cuando el listado está recortado —mientras quepa
  * entero, el navegador da el mismo resultado sin gastar un viaje—.
+ *
+ * La respuesta decide algo más que dónde se filtra: **si el cambio viaja**. Un filtro que
+ * aplica el navegador no puede recargar la página —recargar era pedir de nuevo la consulta
+ * entera para pintar lo que ya estaba en memoria, y en Cuba eso es la tabla tapada por
+ * «Cargando…» durante segundos, o para siempre si la respuesta no llega—. Ver `navegar()`
+ * en `<Filtros>` y en `<RangoBusqueda>`.
  */
+export function dondeVaAlServidor(donde: DondeSeAplica, hayMas: boolean): boolean {
+  return donde === 'servidor' || (donde === 'escalado' && hayMas)
+}
+
+/** Lo mismo, para un filtro declarado. */
 export function vaAlServidor(f: Filtro, hayMas: boolean): boolean {
-  return f.donde === 'servidor' || (f.donde === 'escalado' && hayMas)
+  return dondeVaAlServidor(f.donde, hayMas)
 }
 
 /**

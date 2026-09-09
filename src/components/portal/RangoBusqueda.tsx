@@ -46,6 +46,9 @@ import { etiquetaRangoCorto } from '@/lib/fecha-tz'
 /** Espera antes de buscar mientras se teclea. Suficiente para no lanzar una consulta por
  *  letra, corta para que no parezca que el buscador no hace nada. */
 const ESPERA_BUSQUEDA = 600
+/** La misma espera cuando busca el NAVEGADOR: no hay consulta que ahorrar, solo se agrupan
+ *  las pulsaciones rápidas para no re-filtrar la tabla entera letra a letra. */
+const ESPERA_BUSQUEDA_CLIENTE = 120
 
 /**
  * El rango en la etiqueta del botón. Con un preset, su nombre; con fechas a mano, las fechas
@@ -78,13 +81,20 @@ interface Props {
    * no puede enseñar una caja de búsqueda que no hace nada.
    */
   sinBuscador?: boolean
+  /**
+   * La búsqueda la aplica el NAVEGADOR sobre lo que ya tiene (`qDonde` de `<Filtros>`).
+   * Entonces escribir no recarga la página: el texto se pone en la URL con la History API y
+   * `useSearchParams` lo reparte. Lo pone `<Filtros>`, que es quien sabe si el listado está
+   * recortado.
+   */
+  qCliente?: boolean
   /** Se llama con el pendiente de la navegación (buscar / cambiar rango) para que la
    *  lista pinte el velo de «cargando» sobre su tabla. */
   onPendiente?: (v: boolean) => void
 }
 
 export default function RangoBusqueda({
-  desde, hasta, q = '', placeholder = 'Buscar…', presets, sinBuscador, onPendiente,
+  desde, hasta, q = '', placeholder = 'Buscar…', presets, sinBuscador, qCliente, onPendiente,
 }: Props) {
   const router  = useRouter()
   const params  = useSearchParams()
@@ -136,15 +146,31 @@ export default function RangoBusqueda({
     .filter((p): p is { id: PresetRango; label: string } => !!p)
   const etiqueta = etiquetaRango(preset, borrador.desde, borrador.hasta)
 
-  function navegar(cambios: Record<string, string | null>) {
+  /**
+   * Pone el cambio en la URL. Con `enCliente`, SIN recargar.
+   *
+   * El buscador de una pantalla que filtra en el navegador no tiene nada que pedirle al
+   * servidor: la lista entera ya está en memoria. Recargar igualmente —lo que hacía— era
+   * repetir la consulta completa para pintar lo que ya estaba, con la tabla tapada por
+   * «Cargando…» mientras tanto; en una conexión que se cae, para siempre. La History API
+   * actualiza la URL y `useSearchParams` sin viajar (Next la engancha al router), así que el
+   * filtro es instantáneo y el estado sigue viviendo en la URL.
+   */
+  function navegar(cambios: Record<string, string | null>, enCliente = false) {
     const next = new URLSearchParams(params.toString())
     for (const [k, v] of Object.entries(cambios)) {
       if (v === null) next.delete(k)
       else            next.set(k, v)
     }
+    if (enCliente) {
+      const qs = next.toString()
+      window.history.replaceState(null, '', qs ? `${ruta}?${qs}` : ruta)
+      return
+    }
     // El techo vuelve al de su filtro. `limite` lo sube «Traer más» y se quedaba pegado en la
     // URL: después de usarlo una vez, «Todo» ya no traía hasta 5.000 filas sino las que
     // hubiera pedido «Traer más» — o sea que «Todo» dejaba de significar todo.
+    // Solo al recargar: sin consulta nueva no hay techo que reponer.
     next.delete('limite')
     startTransition(() => router.replace(`${ruta}?${next.toString()}`, { scroll: false }))
   }
@@ -172,7 +198,10 @@ export default function RangoBusqueda({
   useEffect(() => {
     if (sinBuscador) return
     if (texto.trim() === q.trim()) return
-    const t = setTimeout(() => navegar({ q: texto.trim() || null }), ESPERA_BUSQUEDA)
+    const t = setTimeout(
+      () => navegar({ q: texto.trim() || null }, qCliente),
+      qCliente ? ESPERA_BUSQUEDA_CLIENTE : ESPERA_BUSQUEDA,
+    )
     return () => clearTimeout(t)
   }, [texto])   // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -250,7 +279,7 @@ export default function RangoBusqueda({
       )}
 
       {!sinBuscador && (
-        <form className="filtro-search-wrap" onSubmit={e => { e.preventDefault(); navegar({ q: texto.trim() || null }) }}>
+        <form className="filtro-search-wrap" onSubmit={e => { e.preventDefault(); navegar({ q: texto.trim() || null }, qCliente) }}>
           <Search size={14} strokeWidth={2} />
           <input
             className="filtro-search"
@@ -264,7 +293,7 @@ export default function RangoBusqueda({
             <button
               type="button"
               className="rango-limpiar"
-              onClick={() => { setTexto(''); navegar({ q: null }) }}
+              onClick={() => { setTexto(''); navegar({ q: null }, qCliente) }}
               aria-label="Quitar la búsqueda"
             >
               <X size={13} strokeWidth={2.5} />

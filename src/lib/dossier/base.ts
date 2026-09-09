@@ -26,6 +26,7 @@ import { construirConversor, type DetalleTasa } from '@/lib/tasas'
 import { indexarCategorias, esFueraDelResultado, type CategoriaPL } from '@/lib/pl/estado'
 import { repartirFacturaPorLinea, type FilaLineaFacturaPL } from '@/lib/pl/apuntes'
 import type { FilaSerie } from './snapshot'
+import { traerTodas } from '@/lib/supabase/paginar'
 
 // Grupos del desglose = los `rol_pl` de gasto (más INGRESO). La SERIE mensual sigue
 // con dos cubos de gasto (coste vs. operativos); el DESGLOSE parte el operativo en
@@ -86,20 +87,25 @@ async function lineasDeVenta(
   const nombres = new Map<string, string>()
   if (!facturaIds.length) return { lineas, nombres }
 
-  const { data: lins } = await db.from('documento_lineas')
-    .select('documento_id, producto_id, total')
-    .eq('documento_tipo', 'FACTURA').in('documento_id', facturaIds)
-  const filas = (lins ?? []) as { documento_id: string; producto_id: string | null; total: number }[]
+  // ⚠️ `traerTodas`: son VARIAS líneas por factura, así que el techo de 1.000 de PostgREST
+  // (ver `lib/supabase/paginar.ts`) se pasa con unos cientos de facturas. Y de estas
+  // líneas sale el desglose «de qué vive el negocio» que se le enseña a un inversor: sin
+  // paginar, las facturas que se quedaban fuera caían enteras al renglón «Ventas».
+  const { data: filas } = await traerTodas<{ documento_id: string; producto_id: string | null; total: number }>(
+    'linea_id', () => db.from('documento_lineas')
+      .select('documento_id, producto_id, total')
+      .eq('documento_tipo', 'FACTURA').in('documento_id', facturaIds))
   if (!filas.length) return { lineas, nombres }
 
   const prodIds = [...new Set(filas.map(l => l.producto_id).filter((id): id is string => !!id))]
   const lineaDeProducto = new Map<string, string>()
   if (prodIds.length) {
-    const { data: prods } = await db.from('products')
-      .select('producto_id, categoria_id')
-      .eq('client_id', clientId).in('producto_id', prodIds)
-      .not('categoria_id', 'is', null)
-    for (const p of (prods ?? []) as { producto_id: string; categoria_id: string }[]) {
+    const { data: prods } = await traerTodas<{ producto_id: string; categoria_id: string }>(
+      'id', () => db.from('products')
+        .select('producto_id, categoria_id')
+        .eq('client_id', clientId).in('producto_id', prodIds)
+        .not('categoria_id', 'is', null))
+    for (const p of prods) {
       lineaDeProducto.set(p.producto_id, p.categoria_id)
     }
   }
@@ -153,13 +159,18 @@ export async function construirSnapshotDesdeBase(
 
   const [conversor, facRes, gcRes] = await Promise.all([
     construirConversor(db, clientId),
-    db.from('facturas').select('factura_id, moneda, total, fecha_emision')
-      .eq('client_id', clientId).in('empresa_id', ids)
-      .in('estado', ESTADOS_FACTURA_INGRESO)
-      .gte('fecha_emision', desde).lte('fecha_emision', hasta),
-    db.from('gastos_cobros').select('tipo, moneda, monto, categoria, categoria_id, fecha, origen_tipo, naturaleza')
-      .eq('client_id', clientId).in('empresa_id', ids)
-      .gte('fecha', desde).lte('fecha', hasta),
+    // ⚠️ `traerTodas`: el dossier son doce meses de un negocio en marcha, o sea muy por
+    // encima de las 1.000 filas. Truncado no sale «incompleto»: sale con menos ingresos y
+    // menos gastos de los que hubo, en el documento que se le da a un banco.
+    traerTodas<{ factura_id: string; moneda: string; total: number; fecha_emision: string }>(
+      'factura_id', () => db.from('facturas').select('factura_id, moneda, total, fecha_emision')
+        .eq('client_id', clientId).in('empresa_id', ids)
+        .in('estado', ESTADOS_FACTURA_INGRESO)
+        .gte('fecha_emision', desde).lte('fecha_emision', hasta)),
+    traerTodas<Record<string, unknown>>('registro_id', () =>
+      db.from('gastos_cobros').select('tipo, moneda, monto, categoria, categoria_id, fecha, origen_tipo, naturaleza')
+        .eq('client_id', clientId).in('empresa_id', ids)
+        .gte('fecha', desde).lte('fecha', hasta)),
   ])
 
   const meses = new Map<string, FilaMes>()
@@ -196,7 +207,7 @@ export async function construirSnapshotDesdeBase(
   // negocio. Lo que no se pueda clasificar se queda en «Ventas»: es la escalera
   // de degradación, y un cliente sin catálogo categorizado ve exactamente lo de
   // antes.
-  const facturas = (facRes.data ?? []) as { factura_id: string; moneda: string; total: number; fecha_emision: string }[]
+  const facturas = facRes.data
   const lineaPorFactura = await lineasDeVenta(db, clientId, facturas.map(f => f.factura_id))
 
   for (const f of facturas) {
@@ -216,7 +227,7 @@ export async function construirSnapshotDesdeBase(
   // raíz, que es la que tiene el `rol_pl` y la que da nombre a la línea del
   // desglose. Sin subir, «Suministros · Electricidad» saldría suelta al lado de
   // «Suministros» como si fueran dos gastos distintos del mismo nivel.
-  for (const g of (gcRes.data ?? []) as { tipo: string; moneda: string; monto: number; categoria: string | null; categoria_id: string | null; fecha: string; origen_tipo: string | null; naturaleza: string | null }[]) {
+  for (const g of gcRes.data as { tipo: string; moneda: string; monto: number; categoria: string | null; categoria_id: string | null; fecha: string; origen_tipo: string | null; naturaleza: string | null }[]) {
     const v = conv(g.monto, g.moneda)
     if (v == null || !g.fecha) continue
     // Una fila que es solo DEUDA (mig. 166) no entra en el documento por ninguno de

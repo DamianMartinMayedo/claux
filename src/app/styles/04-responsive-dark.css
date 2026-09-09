@@ -128,12 +128,13 @@
     grid-template-columns: 1fr;
   }
 
+  /* Un punto menos que en el escritorio: la tablet tiene el mismo número de columnas y
+     menos ancho. El PADDING ya no se toca: los tokens `--table-pad-*` valen lo que valía
+     esta regla, y repetirla aquí dejaba fuera al botón de la cabecera ordenable —que
+     lleva el padding de la celda— así que en tablet esa columna iba más suelta que las
+     demás. */
   .table {
     font-size: var(--text-xs);
-  }
-
-  .table th, .table td {
-    padding: var(--space-2) var(--space-3);
   }
 
   .filters-bar {
@@ -239,6 +240,12 @@
     padding: var(--space-2) 0 0; border-bottom: none;
   }
 
+  /* Saldos de tesorería: la cifra baja un peldaño y las monedas se reparten el ancho
+     de dos en dos, con su regla puesta cada una. */
+  .tes-saldos-cifras { gap: var(--space-4) var(--space-6); }
+  .tes-saldo { flex: 1 1 140px; min-width: 130px; }
+  .tes-saldo-monto { font-size: var(--text-3xl); }
+
   /* Pie de paginación: que no se apriete en móvil */
   .pagination { flex-wrap: wrap; gap: var(--space-3); }
 }
@@ -300,6 +307,11 @@
   .login-header {
     margin-bottom: var(--space-8);
   }
+
+  /* Una moneda por línea: a este ancho, dos columnas parten «787.764,00» en dos
+     renglones y la cifra deja de leerse de un vistazo, que es para lo que está. */
+  .tes-saldo { flex: 1 1 100%; }
+  .tes-saldo-monto { font-size: var(--text-2xl); }
 }
 
 /* ═══════════════════════════════════════════════════

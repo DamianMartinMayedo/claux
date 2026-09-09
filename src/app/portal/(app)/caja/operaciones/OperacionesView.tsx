@@ -190,10 +190,14 @@ export default function OperacionesView({ data, gaveta }: Props & { gaveta: Resu
           ventas viejas no estaban y nada lo decía. */}
       {/* `visibles={1}`: en la fila, el rango, el buscador y el punto de venta. El estado y
           el medio de pago, dentro de «Filtros» con su rótulo. */}
+      {/* La búsqueda es del NAVEGADOR aunque el listado tenga techo: la consulta nunca
+          recibió `q`, así que el viaje no cambiaba una fila y encima reponía el techo,
+          deshaciendo el «Traer más». Lo recortado lo dice el aviso, no el buscador. */}
       <Filtros
         filtros={declaracion}
         rango={data.rango}
         q={search}
+        qDonde="cliente"
         placeholder="Buscar por punto de venta, producto…"
         hayMas={data.hay_mas}
         visibles={1}
