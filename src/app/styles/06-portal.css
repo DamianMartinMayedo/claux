@@ -1485,11 +1485,20 @@
    Y el rótulo va UNA vez, encima de la fila, no repetido debajo de cada cifra:
    «saldo total / saldo total / saldo total» era la misma palabra tres veces
    compitiendo con las cifras. Arriba, además, dice de qué son ANTES de leerlas. */
-/* Va dentro de una `.card` —UNA, alrededor del bloque entero; lo que se quitó fueron
-   las tres, una por número—. Le da el peso de tarjeta que ya tiene la tabla de abajo y
-   lo despega del aviso de la gaveta, que suele ir justo encima. El padding lo pone la
-   propia `.card`; aquí solo van los márgenes de fuera. */
-.tes-saldos { margin: var(--space-6) 0 var(--space-5); }
+/* Un panel —UNO, alrededor del bloque entero; lo que se quitó fueron las tres cajas,
+   una por número—. Lo despega del aviso de la gaveta, que suele ir justo encima, y le
+   da el peso que la cifra sola no tenía.
+
+   NO usa `.card`: lleva su fondo y su radio, pero sin borde ni sombra. El cromo de la
+   tarjeta le ponía un marco a un bloque que no es una ficha ni se puede pulsar —es la
+   misma razón por la que se quitaron las tres tarjetas—, así que el fondo hace de
+   agrupador él solo. Escrito aquí y no como `.card` pisada para que se lea qué es. */
+.tes-saldos {
+  margin: var(--space-6) 0 var(--space-5);
+  padding: var(--space-6);
+  background: var(--color-surface);
+  border-radius: var(--radius-xl);
+}
 .tes-saldos-rotulo { font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted); margin-bottom: var(--space-4); }
 /* El hueco ENTRE monedas (--space-10) tiene que ser bastante mayor que el de dentro de
    una cifra, o las tres se leen como un solo número largo. */

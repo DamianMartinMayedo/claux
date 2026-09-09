@@ -355,7 +355,7 @@ export default function CuentasView({ data, puedeEditar }: { data: CuentasPageDa
           una vez arriba y no repetido debajo de cada cifra. Sin línea de variación: aquí
           no hay rango de fechas contra el que medirla (ver la nota de abajo). */}
       {porMoneda.length > 0 && (
-        <div className="card tes-saldos">
+        <div className="tes-saldos">
           <div className="tes-saldos-rotulo">{esCobro ? 'Total por cobrar' : 'Total por pagar'}</div>
           <div className="tes-saldos-cifras">
             {porMoneda.map(s => {

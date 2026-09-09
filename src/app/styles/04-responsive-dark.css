@@ -241,7 +241,9 @@
   }
 
   /* Saldos de tesorería: la cifra baja un peldaño y las monedas se reparten el ancho
-     de dos en dos, con su regla puesta cada una. */
+     de dos en dos. El panel también estrecha su relleno: 24 px de aire por lado en una
+     pantalla de 640 son 48 que no tiene la cifra. */
+  .tes-saldos { padding: var(--space-4); }
   .tes-saldos-cifras { gap: var(--space-4) var(--space-6); }
   .tes-saldo { flex: 1 1 140px; min-width: 130px; }
   .tes-saldo-monto { font-size: var(--text-3xl); }

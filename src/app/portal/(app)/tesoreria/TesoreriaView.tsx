@@ -1382,7 +1382,7 @@ export default function TesoreriaView({ data, puedeEditar, pendientes, gaveta, c
           el ± se lee como una comparación contra algo que no está en pantalla—: el saldo
           dice dónde está el dinero y la variación, de dónde viene. */}
       {saldosPorMoneda.length > 0 && (
-        <div className="card tes-saldos">
+        <div className="tes-saldos">
           {/* Con el corte en hoy sigue diciendo «saldo total»: para quien no toca el
               rango, la pantalla no cambia. */}
           <div className="tes-saldos-rotulo">
