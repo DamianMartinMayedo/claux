@@ -132,6 +132,27 @@ export default function Filtros({
   const dentro  = utiles.slice(visibles)
 
   /**
+   * ¿LO QUE HAY EN MEMORIA ES UN TROZO DEL LISTADO?
+   *
+   * Filtrar en el navegador solo vale si en memoria está TODO: entonces da el mismo
+   * resultado que la consulta. Hay dos formas de que no lo esté, y las dos obligan a subir
+   * el filtro al servidor:
+   *
+   *  · `hayMas` — el techo recortó la consulta y quedaron filas sin traer.
+   *  · `srv=1` — la consulta que pintó esta pantalla YA VENÍA FILTRADA, así que en memoria
+   *    está solo lo de esos filtros.
+   *
+   * El segundo faltaba, y de ahí salía un fallo que parecía de la conexión (visto en
+   * CLI-0014, con dos empresas): elegir una cuenta pone `srv=1` —`cuenta_id` es `servidor`—
+   * y desde ese momento la consulta filtra también por la EMPRESA que hubiera puesta. Si el
+   * resultado cabía entero (`hayMas` falso), cambiar de empresa se resolvía en el navegador
+   * contra las filas de la otra: la tabla salía **vacía** para una empresa que sí tenía
+   * movimientos. Al recargar se arreglaba solo —el servidor sí lee la URL entera—, que es lo
+   * que lo hacía imposible de reproducir a mano.
+   */
+  const memoriaParcial = hayMas || params.get(PARAM_ESCALADA) === '1'
+
+  /**
    * ¿Este cambio necesita al servidor?
    *
    * Lo decide por los PARÁMETROS que toca: si todos son de filtros que aplica el navegador, no
@@ -141,7 +162,7 @@ export default function Filtros({
   function soloNavegador(claves: string[]): boolean {
     return claves.every(k => {
       const f = filtros.find(x => paramDe(x) === k)
-      return !!f && !vaAlServidor(f, hayMas)
+      return !!f && !vaAlServidor(f, memoriaParcial)
     })
   }
 
@@ -183,7 +204,15 @@ export default function Filtros({
    */
   function cambiar(f: Filtro, valor: string) {
     const cambios: Record<string, string | null> = { [paramDe(f)]: valor || null }
-    if (vaAlServidor(f, hayMas)) cambios[PARAM_ESCALADA] = '1'
+    if (vaAlServidor(f, memoriaParcial)) {
+      // Y al quitar el ÚLTIMO filtro que aplicaba la consulta se APAGA la escalada: la
+      // respuesta de este mismo viaje ya trae el listado sin recortar por filtro, así que
+      // los siguientes cambios vuelven a ser instantáneos. Sin esto `srv` se quedaba pegado
+      // y, una vez puesto, cada filtro costaba un viaje hasta pulsar «Limpiar».
+      const queda = filtros.some(x => !x.ocultarSi && x.donde !== 'cliente'
+        && (paramDe(x) === paramDe(f) ? !!valor : !!x.valor))
+      cambios[PARAM_ESCALADA] = queda ? '1' : null
+    }
     navegar(cambios)
   }
 

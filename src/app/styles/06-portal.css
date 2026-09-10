@@ -1489,17 +1489,17 @@
    una por número—. Lo despega del aviso de la gaveta, que suele ir justo encima, y le
    da el peso que la cifra sola no tenía.
 
-   NO usa `.card`: sin borde y sin sombra. El cromo de la tarjeta le ponía un marco a un
-   bloque que no es una ficha ni se puede pulsar —la misma razón por la que se quitaron
-   las tres tarjetas—, así que agrupa el fondo él solo. Y el fondo es `--color-surface-2`,
-   no `--color-surface`: sin borde, la superficie de tarjeta (#F8F7F2) queda a tres tonos
-   del papel de la página (#F5F4EF) y el panel no se ve. Es el mismo panel tenue que usan
-   los KPI del dashboard (`.dash-kpis`). Escrito aquí y no como `.card` pisada para que se
-   lea qué es. */
+   NO usa `.card`: lleva su fondo, su radio y el borde, pero **sin sombra**. La sombra es
+   lo que hace que una tarjeta parezca que se levanta —una ficha, algo que se pulsa— y esto
+   ni se pulsa ni se abre; es la misma razón por la que antes se quitaron las tres cajas.
+   El borde sí se queda: sin él, la superficie clara (#F8F7F2) se distingue del papel de la
+   página (#F5F4EF) por tres tonos y el panel no se ve. Escrito aquí y no como `.card`
+   pisada para que se lea qué es. */
 .tes-saldos {
   margin: var(--space-6) 0 var(--space-5);
   padding: var(--space-6);
-  background: var(--color-surface-2);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
 }
 .tes-saldos-rotulo { font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted); margin-bottom: var(--space-4); }
